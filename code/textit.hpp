@@ -17,12 +17,33 @@
 #include "textit_buffer.hpp"
 #include "textit_view.hpp"
 
+struct StringMapNode
+{
+    StringMapNode *next;
+    uint64_t hash;
+    String string;
+    void *data;
+};
+
+struct StringMap
+{
+    Arena *arena;
+    size_t size;
+    StringMapNode **nodes;
+};
+
+static inline StringMap *PushStringMap(Arena *arena, size_t size);
+static inline void *StringMapFind(StringMap *map, String string);
+static inline void StringMapInsert(StringMap *map, String string, void *data);
+
 struct EditorState
 {
     GlobalState global_state;
 
     Arena permanent_arena;
     Arena transient_arena;
+
+    StringMap *theme;
 
     Font font;
 
@@ -37,6 +58,7 @@ struct EditorState
 };
 static EditorState *editor_state;
 
+static inline Color GetThemeColor(String name);
 static inline void SetDebugDelay(int milliseconds, int frame_count);
 
 #endif /* TEXTIT_HPP */

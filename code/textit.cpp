@@ -7,6 +7,66 @@
 #include "textit_buffer.cpp"
 #include "textit_view.cpp"
 
+static inline StringMap *
+PushStringMap(Arena *arena, size_t size)
+{
+    StringMap *result = PushStruct(arena, StringMap);
+    result->arena = arena;
+    result->size  = size;
+    result->nodes = PushArray(arena, result->size, StringMapNode *);
+    return result;
+}
+
+static inline void *
+StringMapFind(StringMap *map, String string)
+{
+    void *result = nullptr;
+    uint64_t hash = HashString(string).u64[0];
+    uint64_t slot = hash % map->size;
+    for (StringMapNode *test_node = map->nodes[slot]; test_node; test_node = test_node->next)
+    {
+        if (test_node->hash == hash)
+        {
+            if (AreEqual(test_node->string, string))
+            {
+                result = test_node->data;
+                break;
+            }
+        }
+    }
+    return result;
+}
+
+static inline void
+StringMapInsert(StringMap *map, String string, void *data)
+{
+    uint64_t hash = HashString(string).u64[0];
+    uint64_t slot = hash % map->size;
+    StringMapNode *node = nullptr;
+    for (StringMapNode *test_node = map->nodes[slot]; test_node; test_node = test_node->next)
+    {
+        if (test_node->hash == hash)
+        {
+            if (AreEqual(test_node->string, string))
+            {
+                node = test_node;
+                break;
+            }
+        }
+    }
+    if (!node)
+    {
+        node = PushStruct(map->arena, StringMapNode);
+
+        node->hash = hash;
+        node->string = PushString(map->arena, string);
+
+        node->next = map->nodes[slot];
+        map->nodes[slot] = node;
+    }
+    node->data = data;
+}
+
 // Ryan's text controls example: https://hatebin.com/ovcwtpsfmj
 
 static inline void
@@ -190,6 +250,18 @@ HandleViewInput(View *view)
             }
         }
     }
+
+    int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
+    int64_t top = view->scroll_at;
+    int64_t bot = view->scroll_at + viewport_height;
+    if (view->cursor.y < top)
+    {
+        view->scroll_at += view->cursor.y - top;
+    }
+    if (view->cursor.y > bot)
+    {
+        view->scroll_at += view->cursor.y - bot;
+    }
 }
 
 static inline void
@@ -205,13 +277,6 @@ DrawLine(V2i p, String line, Color foreground, Color background)
 }
 
 static inline void
-DrawFileBar(View *view, Rect2i bounds)
-{
-    Buffer *buffer = view->buffer;
-    DrawLine(bounds.min + MakeV2i(2, 0), buffer->name, COLOR_BLACK, MakeColor(192, 255, 127));
-}
-
-static inline void
 DrawTextArea(View *view, Rect2i bounds)
 {
     Buffer *buffer = view->buffer;
@@ -220,7 +285,30 @@ DrawTextArea(View *view, Rect2i bounds)
 
     int64_t left = bounds.min.x + 2;
     V2i at_p = MakeV2i(left, bounds.max.y - 2);
-    for (int64_t pos = 0; pos < ArrayCount(buffer->text);)
+
+    Color text_foreground = GetThemeColor("text_foreground"_str);
+    Color text_background = GetThemeColor("text_background"_str);
+    Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
+    Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
+
+    int64_t scan_line = 0;
+    int64_t pos = 0;
+    while ((scan_line < view->scroll_at) &&
+           (pos < buffer->count))
+    {
+        int64_t newline_length = PeekNewline(buffer, pos);
+        if (newline_length)
+        {
+            pos += newline_length;
+            scan_line += 1;
+        }
+        else
+        {
+            pos += 1;
+        }
+    }
+
+    while (pos < buffer->count)
     {
         if (at_p.y <= bounds.min.y)
         {
@@ -229,7 +317,7 @@ DrawTextArea(View *view, Rect2i bounds)
 
         if (pos == loc.pos)
         {
-            PushTile(Layer_Text, at_p, MakeSprite('\0', COLOR_BLACK, COLOR_WHITE));
+            PushTile(Layer_Text, at_p, MakeSprite('\0', text_background, text_foreground));
         }
 
         if (buffer->text[pos] == '\0')
@@ -247,16 +335,17 @@ DrawTextArea(View *view, Rect2i bounds)
         }
         else
         {
-            if (at_p.x >= bounds.max.x)
+            if (at_p.x >= (bounds.max.x - 2))
             {
-                at_p.x = left;
+                PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
+                at_p.x = left - 1;
                 at_p.y -= 1;
             }
 
             uint8_t b = buffer->text[pos];
             if (IsAsciiByte(b))
             {
-                Sprite sprite = MakeSprite(buffer->text[pos]);
+                Sprite sprite = MakeSprite(buffer->text[pos], text_foreground, text_background);
                 if (pos == loc.pos)
                 {
                     Swap(sprite.foreground, sprite.background);
@@ -266,8 +355,8 @@ DrawTextArea(View *view, Rect2i bounds)
             }
             else
             {
-                Color foreground = MakeColor(255, 0, 0);
-                Color background = MakeColor(0, 0, 0);
+                Color foreground = unrenderable_text_foreground;
+                Color background = unrenderable_text_background;
                 if (pos == loc.pos)
                 {
                     Swap(foreground, background);
@@ -282,15 +371,47 @@ DrawTextArea(View *view, Rect2i bounds)
 }
 
 static inline void
-DrawView(View *view, Rect2i bounds)
+DrawView(View *view)
 {
-    Rect2i top = MakeRect2iMinMax(MakeV2i(bounds.min.x, bounds.max.y - 1), bounds.max);
-    Rect2i bot = MakeRect2iMinMax(bounds.min, MakeV2i(bounds.max.x, bounds.max.y - 1));
+    Buffer *buffer = view->buffer;
+    Rect2i bounds = view->viewport;
 
-    PushRectOutline(Layer_Background, bounds, COLOR_WHITE, COLOR_BLACK);
+    Color text_foreground = GetThemeColor("text_foreground"_str);
+    Color text_background = GetThemeColor("text_background"_str);
+    Color filebar_text_foreground = GetThemeColor("filebar_text_foreground"_str);
+    Color filebar_text_background = GetThemeColor("filebar_text_background"_str);
 
-    DrawFileBar(view, top);
-    DrawTextArea(view, bot);
+    PushRectOutline(Layer_Background, bounds, text_foreground, text_background);
+    DrawLine(MakeV2i(bounds.min.x + 2, bounds.max.y - 1),
+             FormatTempString("%.*s - scroll: %d", StringExpand(buffer->name), view->scroll_at),
+             filebar_text_foreground, filebar_text_background);
+    DrawTextArea(view, bounds);
+}
+
+static inline void
+AddThemeColor(String name, Color color)
+{
+    StringMap *theme = editor_state->theme;
+
+    Color *color_persistent = PushStruct(theme->arena, Color);
+    CopyStruct(&color, color_persistent);
+
+    StringMapInsert(theme, name, color_persistent);
+}
+
+static inline Color
+GetThemeColor(String name)
+{
+    StringMap *theme = editor_state->theme;
+    Color *color = (Color *)StringMapFind(theme, name);
+
+    Color result = MakeColor(255, 0, 255);
+    if (color)
+    {
+        CopyStruct(color, &result);
+    }
+
+    return result;
 }
 
 void
@@ -318,6 +439,15 @@ AppUpdateAndRender(Platform *platform_)
         editor_state->open_buffer = OpenFileIntoNewBuffer(StringLiteral("test_file.cpp"));
         editor_state->open_view = NewView(editor_state->open_buffer);
 
+        editor_state->theme = PushStringMap(&editor_state->transient_arena, 128);
+
+        AddThemeColor("text_foreground"_str, MakeColor(192, 255, 255));
+        AddThemeColor("text_background"_str, MakeColor(192, 0, 0));
+        AddThemeColor("filebar_text_foreground"_str, MakeColor(0, 0, 0));
+        AddThemeColor("filebar_text_background"_str, MakeColor(192, 255, 128));
+        AddThemeColor("unrenderable_text_foreground"_str, MakeColor(255, 255, 255));
+        AddThemeColor("unrenderable_text_background"_str, MakeColor(192, 0, 0));
+
         platform->app_initialized = true;
     }
 
@@ -326,8 +456,11 @@ AppUpdateAndRender(Platform *platform_)
 
     BeginRender();
 
+    View *view = editor_state->open_view;
+    view->viewport = render_state->viewport;
+
     HandleViewInput(editor_state->open_view);
-    DrawView(editor_state->open_view, render_state->viewport);
+    DrawView(editor_state->open_view);
 
     EndRender();
 
