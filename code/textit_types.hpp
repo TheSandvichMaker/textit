@@ -63,6 +63,47 @@ struct Range
     int64_t start, end;
 };
 
+static inline Range
+MakeRange(int64_t start, int64_t end)
+{
+    Range result = {};
+    result.start = start;
+    result.end = end;
+    if (result.start > result.end)
+    {
+        Swap(result.start, result.end);
+    }
+    return result;
+}
+
+static inline Range
+MakeRange(int64_t pos)
+{
+    return MakeRange(pos, pos);
+}
+
+static inline Range
+MakeRangeStartLength(int64_t start, int64_t length)
+{
+    return MakeRange(start, start + length);
+}
+
+static inline int64_t
+ClampToRange(int64_t value, Range bounds)
+{
+    if (value < bounds.start) value = bounds.start;
+    if (value > bounds.end  ) value = bounds.end;
+    return value;
+}
+
+static inline Range
+ClampRange(Range range, Range bounds)
+{
+    if (range.start < bounds.start) range.start = bounds.start;
+    if (range.end   > bounds.end  ) range.end   = bounds.end;
+    return range;
+}
+
 // NOTE: These colors are in BGRA byte order
 struct Color
 {
