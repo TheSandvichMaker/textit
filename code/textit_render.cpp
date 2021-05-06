@@ -9,8 +9,8 @@ InitializeRenderState(Arena *arena, Bitmap *target, Font *font)
     render_state->cb_size = Megabytes(4); // random choice
     render_state->command_buffer = PushArrayNoClear(arena, render_state->cb_size, char);
 
-    int viewport_w = (target->w + font->glyph_w - 1) / font->glyph_w;
-    int viewport_h = (target->h + font->glyph_h - 1) / font->glyph_h;
+    int64_t viewport_w = (target->w + font->glyph_w - 1) / font->glyph_w;
+    int64_t viewport_h = (target->h + font->glyph_h - 1) / font->glyph_h;
     render_state->viewport = MakeRect2iMinDim(0, 0, viewport_w, viewport_h);
 
     render_state->wall_segment_lookup[Wall_Top|Wall_Bottom]                                          = 179;
@@ -103,10 +103,10 @@ static inline void
 ClearBitmap(Bitmap *bitmap, Color clear_color = MakeColor(0, 0, 0, 0))
 {
     Color *row = bitmap->data;
-    for (int y = 0; y < bitmap->h; ++y)
+    for (int64_t y = 0; y < bitmap->h; ++y)
     {
         Color *at = row;
-        for (int x = 0; x < bitmap->w; ++x)
+        for (int64_t x = 0; x < bitmap->w; ++x)
         {
             *at++ = clear_color;
         }
@@ -118,8 +118,8 @@ static inline void
 BlitRect(Bitmap *bitmap, Rect2i rect, Color color)
 {
     rect = Intersect(rect, MakeRect2iMinMax(MakeV2i(0, 0), MakeV2i(bitmap->w, bitmap->h)));
-    for (int y = rect.min.y; y < rect.max.y; ++y)
-    for (int x = rect.min.x; x < rect.max.x; ++x)
+    for (int64_t y = rect.min.y; y < rect.max.y; ++y)
+    for (int64_t x = rect.min.x; x < rect.max.x; ++x)
     {
         bitmap->data[y*bitmap->pitch + x] = color;
     }
@@ -128,22 +128,22 @@ BlitRect(Bitmap *bitmap, Rect2i rect, Color color)
 static inline void
 BlitBitmap(Bitmap *dest, Bitmap *source, V2i p)
 {
-    int source_min_x = Max(0, -p.x);
-    int source_min_y = Max(0, -p.y);
-    int source_max_x = Min(source->w, dest->w - p.x);
-    int source_max_y = Min(source->h, dest->h - p.y);
-    int source_adjusted_w = source_max_x - source_min_x;
-    int source_adjusted_h = source_max_y - source_min_y;
+    int64_t source_min_x = Max(0, -p.x);
+    int64_t source_min_y = Max(0, -p.y);
+    int64_t source_max_x = Min(source->w, dest->w - p.x);
+    int64_t source_max_y = Min(source->h, dest->h - p.y);
+    int64_t source_adjusted_w = source_max_x - source_min_x;
+    int64_t source_adjusted_h = source_max_y - source_min_y;
 
     p = Clamp(p, MakeV2i(0, 0), MakeV2i(dest->w, dest->h));
 
     Color *source_row = source->data + source_min_y*source->pitch + source_min_x;
     Color *dest_row = dest->data + p.y*dest->pitch + p.x;
-    for (int y = 0; y < source_adjusted_h; ++y)
+    for (int64_t y = 0; y < source_adjusted_h; ++y)
     {
         Color *source_pixel = source_row;
         Color *dest_pixel = dest_row;
-        for (int x = 0; x < source_adjusted_w; ++x)
+        for (int64_t x = 0; x < source_adjusted_w; ++x)
         {
             *dest_pixel++ = *source_pixel++;
         }
@@ -155,22 +155,22 @@ BlitBitmap(Bitmap *dest, Bitmap *source, V2i p)
 static inline void
 BlitBitmapMask(Bitmap *dest, Bitmap *source, V2i p, Color foreground, Color background)
 {
-    int source_min_x = Max(0, -p.x);
-    int source_min_y = Max(0, -p.y);
-    int source_max_x = Min(source->w, dest->w - p.x);
-    int source_max_y = Min(source->h, dest->h - p.y);
-    int source_adjusted_w = source_max_x - source_min_x;
-    int source_adjusted_h = source_max_y - source_min_y;
+    int64_t source_min_x = Max(0, -p.x);
+    int64_t source_min_y = Max(0, -p.y);
+    int64_t source_max_x = Min(source->w, dest->w - p.x);
+    int64_t source_max_y = Min(source->h, dest->h - p.y);
+    int64_t source_adjusted_w = source_max_x - source_min_x;
+    int64_t source_adjusted_h = source_max_y - source_min_y;
 
     p = Clamp(p, MakeV2i(0, 0), MakeV2i(dest->w, dest->h));
 
     Color *source_row = source->data + source_min_y*source->pitch + source_min_x;
     Color *dest_row = dest->data + p.y*dest->pitch + p.x;
-    for (int y = 0; y < source_adjusted_h; ++y)
+    for (int64_t y = 0; y < source_adjusted_h; ++y)
     {
         Color *source_pixel = source_row;
         Color *dest_pixel = dest_row;
-        for (int x = 0; x < source_adjusted_w; ++x)
+        for (int64_t x = 0; x < source_adjusted_w; ++x)
         {
             Color color = *source_pixel++;
             if (color.a)
@@ -194,8 +194,8 @@ MakeBitmapView(Bitmap *source, Rect2i rect)
     rect = Intersect(rect, 0, 0, source->w, source->h);
 
     Bitmap result = {};
-    result.w = GetWidth(rect);
-    result.h = GetHeight(rect);
+    result.w = SafeTruncateI64(GetWidth(rect));
+    result.h = SafeTruncateI64(GetHeight(rect));
     result.pitch = source->pitch;
     result.data = source->data + source->pitch*rect.min.y + rect.min.x;
     return result;
@@ -321,13 +321,13 @@ PushRectOutline(RenderLayer layer, const Rect2i &rect, Color foreground, Color b
     PushTile(layer, rect.max - MakeV2i(1, 1), MakeWall(left|bottom, foreground, background));
     PushTile(layer, MakeV2i(rect.min.x, rect.max.y - 1), MakeWall(right|bottom, foreground, background));
 
-    for (int32_t x = rect.min.x + 1; x < rect.max.x - 1; ++x)
+    for (int64_t x = rect.min.x + 1; x < rect.max.x - 1; ++x)
     {
         PushTile(layer, MakeV2i(x, rect.min.y), MakeWall(left|right, foreground, background));
         PushTile(layer, MakeV2i(x, rect.max.y - 1), MakeWall(left|right, foreground, background));
     }
 
-    for (int32_t y = rect.min.y + 1; y < rect.max.y - 1; ++y)
+    for (int64_t y = rect.min.y + 1; y < rect.max.y - 1; ++y)
     {
         PushTile(layer, MakeV2i(rect.min.x, y), MakeWall(top|bottom, foreground, background));
         PushTile(layer, MakeV2i(rect.max.x - 1, y), MakeWall(top|bottom, foreground, background));
@@ -339,6 +339,12 @@ BeginRender(void)
 {
     Arena *arena = GetTempArena();
     render_state->arena = arena;
+
+    Bitmap *target = render_state->target;
+    Font *font = render_state->fonts[Layer_Text];
+    int64_t viewport_w = (target->w + font->glyph_w - 1) / font->glyph_w;
+    int64_t viewport_h = (target->h + font->glyph_h - 1) / font->glyph_h;
+    render_state->viewport = MakeRect2iMinDim(0, 0, viewport_w, viewport_h);
 
     render_state->cb_command_at = 0;
     render_state->cb_sort_key_at = render_state->cb_size;

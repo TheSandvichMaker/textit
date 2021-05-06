@@ -60,7 +60,7 @@ struct StringContainer
 struct Range
 {
     // convention is [start .. end)
-    int32_t start, end;
+    int64_t start, end;
 };
 
 // NOTE: These colors are in BGRA byte order

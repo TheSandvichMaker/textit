@@ -68,13 +68,13 @@ struct V2i
     {
         struct
         {
-            int32_t x, y;
+            int64_t x, y;
         };
 
-        int32_t e[2];
+        int64_t e[2];
     };
 
-    int32_t &
+    int64_t &
     operator[](size_t index)
     {
         AssertSlow(index < 2);
@@ -88,13 +88,13 @@ struct V3i
     {
         struct
         {
-            int32_t x, y, z;
+            int64_t x, y, z;
         };
 
-        int32_t e[3];
+        int64_t e[3];
     };
 
-    int32_t &
+    int64_t &
     operator[](size_t index)
     {
         AssertSlow(index < 3);
@@ -108,13 +108,13 @@ struct V4i
     {
         struct
         {
-            int32_t x, y, z, w;
+            int64_t x, y, z, w;
         };
 
-        int32_t e[4];
+        int64_t e[4];
     };
 
-    int32_t &
+    int64_t &
     operator[](size_t index)
     {
         AssertSlow(index < 4);
@@ -126,9 +126,9 @@ typedef float V2 __attribute__((ext_vector_type(2)));
 typedef float V3 __attribute__((ext_vector_type(3)));
 typedef float V4 __attribute__((ext_vector_type(4)));
 
-typedef int32_t V2i __attribute__((ext_vector_type(2)));
-typedef int32_t V3i __attribute__((ext_vector_type(3)));
-typedef int32_t V4i __attribute__((ext_vector_type(4)));
+typedef int64_t V2i __attribute__((ext_vector_type(2)));
+typedef int64_t V3i __attribute__((ext_vector_type(3)));
+typedef int64_t V4i __attribute__((ext_vector_type(4)));
 #endif
 
 struct Rect2

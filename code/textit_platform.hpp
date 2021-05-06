@@ -433,7 +433,7 @@ struct Platform
     void (*WaitForJobs)(PlatformJobQueue *queue);
 
     String (*ReadFile)(Arena *arena, String filename);
-    String (*ReadFileInto)(size_t buffer_size, void *buffer, String filename);
+    size_t (*ReadFileInto)(size_t buffer_size, void *buffer, String filename);
 
     PlatformHighResTime (*GetTime)(void);
     double (*SecondsElapsed)(PlatformHighResTime start, PlatformHighResTime end);

@@ -47,19 +47,19 @@ MakeColorF(float x, float y, float z)
     return result;
 }
 
-TEXTIT_INLINE V2i MakeV2i(int32_t s) { return MakeVectorInternal(V2i, s, s); }
-TEXTIT_INLINE V2i MakeV2i(int32_t x, int32_t y) { return MakeVectorInternal(V2i, x, y); }
-TEXTIT_INLINE V3i MakeV3i(int32_t s) { return MakeVectorInternal(V3i, s, s, s); }
-TEXTIT_INLINE V3i MakeV3i(V2i xy, int32_t z) { return MakeVectorInternal(V3i, xy[0], xy[1], z); }
-TEXTIT_INLINE V3i MakeV3i(int32_t x, V2i yz) { return MakeVectorInternal(V3i, x, yz[0], yz[1]); }
-TEXTIT_INLINE V3i MakeV3i(int32_t x, int32_t y, int32_t z) { return MakeVectorInternal(V3i, x, y, z); }
-TEXTIT_INLINE V4i MakeV4i(int32_t s) { return MakeVectorInternal(V4i, s, s, s, s); }
-TEXTIT_INLINE V4i MakeV4i(V2i xy, int32_t z, int32_t w) { return MakeVectorInternal(V4i, xy[0], xy[1], z, w); }
-TEXTIT_INLINE V4i MakeV4i(int32_t x, int32_t y, V2i zw) { return MakeVectorInternal(V4i, x, y, zw[0], zw[1]); }
+TEXTIT_INLINE V2i MakeV2i(int64_t s) { return MakeVectorInternal(V2i, s, s); }
+TEXTIT_INLINE V2i MakeV2i(int64_t x, int64_t y) { return MakeVectorInternal(V2i, x, y); }
+TEXTIT_INLINE V3i MakeV3i(int64_t s) { return MakeVectorInternal(V3i, s, s, s); }
+TEXTIT_INLINE V3i MakeV3i(V2i xy, int64_t z) { return MakeVectorInternal(V3i, xy[0], xy[1], z); }
+TEXTIT_INLINE V3i MakeV3i(int64_t x, V2i yz) { return MakeVectorInternal(V3i, x, yz[0], yz[1]); }
+TEXTIT_INLINE V3i MakeV3i(int64_t x, int64_t y, int64_t z) { return MakeVectorInternal(V3i, x, y, z); }
+TEXTIT_INLINE V4i MakeV4i(int64_t s) { return MakeVectorInternal(V4i, s, s, s, s); }
+TEXTIT_INLINE V4i MakeV4i(V2i xy, int64_t z, int64_t w) { return MakeVectorInternal(V4i, xy[0], xy[1], z, w); }
+TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, V2i zw) { return MakeVectorInternal(V4i, x, y, zw[0], zw[1]); }
 TEXTIT_INLINE V4i MakeV4i(V2i xy, V2i zw) { return MakeVectorInternal(V4i, xy[0], xy[1], zw[0], zw[1]); }
-TEXTIT_INLINE V4i MakeV4i(V3i xyz, int32_t w) { return MakeVectorInternal(V4i, xyz[0], xyz[1], xyz[2], w); }
-TEXTIT_INLINE V4i MakeV4i(int32_t x, V3i yzw) { return MakeVectorInternal(V4i, x, yzw[0], yzw[1], yzw[2]); }
-TEXTIT_INLINE V4i MakeV4i(int32_t x, int32_t y, int32_t z, int32_t w) { return MakeVectorInternal(V4i, x, y, z, w); }
+TEXTIT_INLINE V4i MakeV4i(V3i xyz, int64_t w) { return MakeVectorInternal(V4i, xyz[0], xyz[1], xyz[2], w); }
+TEXTIT_INLINE V4i MakeV4i(int64_t x, V3i yzw) { return MakeVectorInternal(V4i, x, yzw[0], yzw[1], yzw[2]); }
+TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return MakeVectorInternal(V4i, x, y, z, w); }
 
 #if COMPILER_MSVC
 
@@ -213,26 +213,26 @@ IMPLEMENT_V4_SCALAR_OPERATORS(V4, float, /)
 IMPLEMENT_V4_VECTOR_OPERATORS(V4, float, *)
 IMPLEMENT_V4_VECTOR_OPERATORS(V4, float, /)
 
-IMPLEMENT_V2_VECTOR_OPERATORS(V2i, int32_t, +)
-IMPLEMENT_V2_VECTOR_OPERATORS(V2i, int32_t, -)
-IMPLEMENT_V2_SCALAR_OPERATORS(V2i, int32_t, *)
-IMPLEMENT_V2_SCALAR_OPERATORS(V2i, int32_t, /)
-IMPLEMENT_V2_VECTOR_OPERATORS(V2i, int32_t, *)
-IMPLEMENT_V2_VECTOR_OPERATORS(V2i, int32_t, /)
+IMPLEMENT_V2_VECTOR_OPERATORS(V2i, int64_t, +)
+IMPLEMENT_V2_VECTOR_OPERATORS(V2i, int64_t, -)
+IMPLEMENT_V2_SCALAR_OPERATORS(V2i, int64_t, *)
+IMPLEMENT_V2_SCALAR_OPERATORS(V2i, int64_t, /)
+IMPLEMENT_V2_VECTOR_OPERATORS(V2i, int64_t, *)
+IMPLEMENT_V2_VECTOR_OPERATORS(V2i, int64_t, /)
 
-IMPLEMENT_V3_VECTOR_OPERATORS(V3i, int32_t, +)
-IMPLEMENT_V3_VECTOR_OPERATORS(V3i, int32_t, -)
-IMPLEMENT_V3_SCALAR_OPERATORS(V3i, int32_t, *)
-IMPLEMENT_V3_SCALAR_OPERATORS(V3i, int32_t, /)
-IMPLEMENT_V3_VECTOR_OPERATORS(V3i, int32_t, *)
-IMPLEMENT_V3_VECTOR_OPERATORS(V3i, int32_t, /)
+IMPLEMENT_V3_VECTOR_OPERATORS(V3i, int64_t, +)
+IMPLEMENT_V3_VECTOR_OPERATORS(V3i, int64_t, -)
+IMPLEMENT_V3_SCALAR_OPERATORS(V3i, int64_t, *)
+IMPLEMENT_V3_SCALAR_OPERATORS(V3i, int64_t, /)
+IMPLEMENT_V3_VECTOR_OPERATORS(V3i, int64_t, *)
+IMPLEMENT_V3_VECTOR_OPERATORS(V3i, int64_t, /)
 
-IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int32_t, +)
-IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int32_t, -)
-IMPLEMENT_V4_SCALAR_OPERATORS(V4i, int32_t, *)
-IMPLEMENT_V4_SCALAR_OPERATORS(V4i, int32_t, /)
-IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int32_t, *)
-IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int32_t, /)
+IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int64_t, +)
+IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int64_t, -)
+IMPLEMENT_V4_SCALAR_OPERATORS(V4i, int64_t, *)
+IMPLEMENT_V4_SCALAR_OPERATORS(V4i, int64_t, /)
+IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int64_t, *)
+IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int64_t, /)
 
 #endif
 
@@ -271,19 +271,19 @@ TEXTIT_INLINE float ACosH(float x) { return acoshf(x); }
 TEXTIT_INLINE float ATanH(float x) { return atanhf(x); }
 TEXTIT_INLINE float Abs(float x) { return fabsf(x); }
 
-TEXTIT_INLINE int32_t
-Abs(int32_t x)
+TEXTIT_INLINE int64_t
+Abs(int64_t x)
 {
     return (x < 0 ? -x : x);
 }
 
-TEXTIT_INLINE int
-DivFloor(int a, int b)
+TEXTIT_INLINE int64_t
+DivFloor(int64_t a, int64_t b)
 {
     Assert(b != 0);
-    int res = a / b;
-    int rem = a % b;
-    int corr = (rem != 0 && ((rem < 0) != (b < 0)));
+    int64_t res = a / b;
+    int64_t rem = a % b;
+    int64_t corr = (rem != 0 && ((rem < 0) != (b < 0)));
     return res - corr;
 }
 
@@ -670,15 +670,15 @@ Cross(V3 a, V3 b)
     return result;
 }
 
-TEXTIT_INLINE uint32_t LengthSq(V2i a) { return a.x*a.x + a.y*a.y; }
-TEXTIT_INLINE uint32_t LengthSq(V3i a) { return a.x*a.x + a.y*a.y + a.z*a.z; }
-TEXTIT_INLINE uint32_t LengthSq(V4i a) { return a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w; }
+TEXTIT_INLINE uint64_t LengthSq(V2i a) { return a.x*a.x + a.y*a.y; }
+TEXTIT_INLINE uint64_t LengthSq(V3i a) { return a.x*a.x + a.y*a.y + a.z*a.z; }
+TEXTIT_INLINE uint64_t LengthSq(V4i a) { return a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w; }
 TEXTIT_INLINE float Length(V2i a) { return SquareRoot((float)(a.x*a.x + a.y*a.y)); }
 TEXTIT_INLINE float Length(V3i a) { return SquareRoot((float)(a.x*a.x + a.y*a.y + a.z*a.z)); }
 TEXTIT_INLINE float Length(V4i a) { return SquareRoot((float)(a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w)); }
 
-TEXTIT_INLINE int
-Min(int a, int b)
+TEXTIT_INLINE int64_t
+Min(int64_t a, int64_t b)
 {
     return (a < b ? a : b);
 }
@@ -713,8 +713,8 @@ Min(V4i a, V4i b)
     return result;
 }
 
-TEXTIT_INLINE int
-Max(int a, int b)
+TEXTIT_INLINE int64_t
+Max(int64_t a, int64_t b)
 {
     return (a > b ? a : b);
 }
@@ -749,8 +749,8 @@ Max(V4i a, V4i b)
     return result;
 }
 
-TEXTIT_INLINE int
-Clamp(int a, int min, int max)
+TEXTIT_INLINE int64_t
+Clamp(int64_t a, int64_t min, int64_t max)
 {
     if (a < min) a = min;
     if (a > max) a = max;
@@ -793,8 +793,8 @@ Clamp(V4i a, V4i min, V4i max)
     return a;
 }
 
-TEXTIT_INLINE int
-Clamp01(int a)
+TEXTIT_INLINE int64_t
+Clamp01(int64_t a)
 {
     if (a < 0) a = 0;
     if (a > 1) a = 1;
@@ -837,25 +837,25 @@ Clamp01(V4i a)
     return a;
 }
 
-TEXTIT_INLINE int32_t
+TEXTIT_INLINE int64_t
 ManhattanDistance(V2i a, V2i b)
 {
-    int32_t result = Abs(a.x - b.x) + Abs(a.y - b.y);
+    int64_t result = Abs(a.x - b.x) + Abs(a.y - b.y);
     return result;
 }
 
-TEXTIT_INLINE int32_t
+TEXTIT_INLINE int64_t
 ManhattanDistance(V3i a, V3i b)
 {
-    int32_t result = Abs(a.x - b.x) + Abs(a.y - b.y) + Abs(a.z - b.z);
+    int64_t result = Abs(a.x - b.x) + Abs(a.y - b.y) + Abs(a.z - b.z);
     return result;
 }
 
 TEXTIT_INLINE float
 DiagonalDistance(V2i a, V2i b, float diagonal_cost = SquareRoot(2.0f))
 {
-    int32_t dx = Abs(a.x - b.x);
-    int32_t dy = Abs(a.y - b.y);
+    int64_t dx = Abs(a.x - b.x);
+    int64_t dy = Abs(a.y - b.y);
     float result = (float)(dx + dy) + (diagonal_cost - 2.0f)*(float)Min(dx, dy);
     return result;
 }
@@ -863,9 +863,9 @@ DiagonalDistance(V2i a, V2i b, float diagonal_cost = SquareRoot(2.0f))
 TEXTIT_INLINE float
 DiagonalDistance(V3i a, V3i b, float diagonal_cost = SquareRoot(2.0f))
 {
-    int32_t dx = Abs(a.x - b.x);
-    int32_t dy = Abs(a.y - b.y);
-    int32_t dz = Abs(a.z - b.z);
+    int64_t dx = Abs(a.x - b.x);
+    int64_t dy = Abs(a.y - b.y);
+    int64_t dz = Abs(a.z - b.z);
     float result = (float)(dx + dy + dz) + (diagonal_cost - 2.0f)*(float)Min(Min(dx, dy), dz);
     return result;
 }
@@ -998,7 +998,7 @@ MakeRect2iMinMax(V2i min, V2i max)
 }
 
 TEXTIT_INLINE Rect2i
-MakeRect2iMinDim(int min_x, int min_y, int dim_x, int dim_y)
+MakeRect2iMinDim(int64_t min_x, int64_t min_y, int64_t dim_x, int64_t dim_y)
 {
     Rect2i result;
     result.min.x = min_x;
@@ -1026,13 +1026,13 @@ MakeRect2iCenterHalfDim(V2i center, V2i half_dim)
     return result;
 }
 
-TEXTIT_INLINE int32_t
+TEXTIT_INLINE int64_t
 GetWidth(Rect2i a)
 {
     return a.max.x - a.min.x;
 }
 
-TEXTIT_INLINE int32_t
+TEXTIT_INLINE int64_t
 GetHeight(Rect2i a)
 {
     return a.max.y - a.min.y;
@@ -1093,7 +1093,7 @@ Union(Rect2i a, Rect2i b)
 }
 
 TEXTIT_INLINE Rect2i
-Intersect(Rect2i a, int b_min_x, int b_min_y, int b_max_x, int b_max_y)
+Intersect(Rect2i a, int64_t b_min_x, int64_t b_min_y, int64_t b_max_x, int64_t b_max_y)
 {
     Rect2i result;
     result.min.x = Max(a.min.x, b_min_x);
@@ -1264,19 +1264,19 @@ MakeRect3iCenterHalfDim(V3i center, V3i half_dim)
     return result;
 }
 
-TEXTIT_INLINE int32_t
+TEXTIT_INLINE int64_t
 GetWidth(Rect3i a)
 {
     return a.max.x - a.min.x;
 }
 
-TEXTIT_INLINE int32_t
+TEXTIT_INLINE int64_t
 GetHeight(Rect3i a)
 {
     return a.max.y - a.min.y;
 }
 
-TEXTIT_INLINE int32_t
+TEXTIT_INLINE int64_t
 GetDepth(Rect3i a)
 {
     return a.max.z - a.min.z;

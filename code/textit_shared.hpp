@@ -163,7 +163,7 @@ HashString(String string)
 }
 
 static inline uint64_t
-HashIntegers(uint32_t a, uint32_t b = 0, uint32_t c = 0, uint32_t d = 0)
+HashIntegers(uint64_t a, uint64_t b = 0)
 {
     unsigned char seed[16] =
     {
@@ -172,7 +172,7 @@ HashIntegers(uint32_t a, uint32_t b = 0, uint32_t c = 0, uint32_t d = 0)
         10,  127, 212, 213,
         197, 48,  36,  148,
     };
-    __m128i hash = _mm_set_epi32(d, c, b, a);
+    __m128i hash = _mm_set_epi64x(b, a);
     hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i *)seed));
     hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i *)seed));
     return *(uint64_t *)&hash;
@@ -238,6 +238,14 @@ RemoveOrdered(Array<T> *array_init, size_t remove_index)
     }
 
     return result;
+}
+
+static inline int32_t
+SafeTruncateI64(int64_t value)
+{
+    Assert((value >= INT32_MIN) &&
+           (value <= INT32_MAX));
+    return (int32_t)value;
 }
 
 #endif /* TEXTIT_SHARED_HPP */

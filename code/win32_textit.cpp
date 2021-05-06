@@ -374,6 +374,56 @@ Win32_ReportError(PlatformErrorType type, char *error, ...)
     }
 }
 
+static size_t
+Win32_ReadFileInto(size_t buffer_size, void *buffer, String filename)
+{
+    Assert((buffer_size == 0) || buffer);
+
+    size_t result = 0;
+
+    ScopedMemory filename_temp_memory(&win32_state.temp_arena);
+    wchar_t *file_wide = Win32_Utf8ToUtf16(&win32_state.temp_arena, (char *)filename.data, (int)filename.size);
+
+    HANDLE handle = CreateFileW(file_wide, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    if (handle != INVALID_HANDLE_VALUE)
+    {
+        DWORD file_size_high;
+        DWORD file_size_low = GetFileSize(handle, &file_size_high);
+        // NOTE: Right now we're just doing 32 bit file IO.
+        if (!file_size_high) {
+            DWORD bytes_to_read = file_size_low;
+            if (bytes_to_read > buffer_size - 1)
+            {
+                bytes_to_read = (DWORD)(buffer_size - 1);
+            }
+
+            DWORD bytes_read;
+            if (ReadFile(handle, buffer, file_size_low, &bytes_read, 0))
+            {
+                if (bytes_read == bytes_to_read)
+                {
+                    result = bytes_to_read;
+                    ((char *)buffer)[bytes_to_read] = 0; // null terminate, just for convenience.
+                }
+                else
+                {
+                    Win32_DebugPrint("Did not read expected number of bytes from file '%s'\n", filename);
+                }
+            }
+            else
+            {
+                Win32_DebugPrint("Could not read file '%s'\n", filename);
+            }
+        }
+    }
+    else
+    {
+        Win32_DebugPrint("Could not open file '%s'\n", filename);
+    }
+
+    return result;
+}
+
 static String
 Win32_ReadFile(Arena *arena, String filename)
 {
@@ -950,6 +1000,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
     platform->AddJob = Win32_AddJob;
     platform->WaitForJobs = Win32_WaitForJobs;
     platform->ReadFile = Win32_ReadFile;
+    platform->ReadFileInto = Win32_ReadFileInto;
     platform->GetTime = Win32_GetTime;
     platform->SecondsElapsed = Win32_SecondsElapsed;
     platform->SleepThread = Win32_SleepThread;

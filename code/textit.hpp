@@ -14,15 +14,46 @@
 #include "textit_image.hpp"
 #include "textit_render.hpp"
 
+enum LineEndKind
+{
+    LineEnd_LF,
+    LineEnd_CRLF,
+};
+
+static inline String
+LineEndString(LineEndKind kind)
+{
+    switch (kind)
+    {
+        case LineEnd_LF:   return StringLiteral("\n");
+        case LineEnd_CRLF: return StringLiteral("\r\n");
+    }
+    return StringLiteral("");
+}
+
 #define TEXTIT_BUFFER_SIZE Megabytes(1)
 struct Buffer
 {
     Arena arena;
     String name;
 
-    int32_t count;
-    char text[TEXTIT_BUFFER_SIZE];
+    LineEndKind line_end;
+
+    int64_t count;
+    uint8_t text[TEXTIT_BUFFER_SIZE];
 };
+
+static inline uint8_t
+Peek(Buffer *buffer, int64_t index)
+{
+    uint8_t result = 0;
+    if ((index >= 0) &&
+        (index < buffer->count))
+    {
+        result = buffer->text[index];
+    }
+    return result;
+}
 
 struct View
 {
@@ -33,9 +64,9 @@ struct View
 
 struct BufferLocation
 {
-    int32_t line_number;
+    int64_t line_number;
     Range line_range;
-    int32_t pos;
+    int64_t pos;
 };
 
 struct EditorState

@@ -63,8 +63,8 @@ static inline V2i
 RandomInRect(RandomSeries *series, Rect2i rect)
 {
     V2i result;
-    result.x = RandomRange(series, rect.min.x, rect.max.x);
-    result.y = RandomRange(series, rect.min.y, rect.max.y);
+    result.x = RandomRange(series, (int32_t)rect.min.x, (int32_t)rect.max.x);
+    result.y = RandomRange(series, (int32_t)rect.min.y, (int32_t)rect.max.y);
     return result;
 }
 
