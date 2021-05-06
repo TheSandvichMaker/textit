@@ -32,6 +32,23 @@ struct StringMap
     StringMapNode **nodes;
 };
 
+struct ThemeColor
+{
+    String name;
+    Color color;
+};
+
+#define MAX_THEME_COLORS 256
+struct Theme
+{
+    size_t color_count;
+    ThemeColor colors[MAX_THEME_COLORS];
+};
+
+static inline void LoadDefaultTheme();
+static inline void SetThemeColor(String name, Color color);
+static inline Color GetThemeColor(String name);
+
 static inline StringMap *PushStringMap(Arena *arena, size_t size);
 static inline void *StringMapFind(StringMap *map, String string);
 static inline void StringMapInsert(StringMap *map, String string, void *data);
@@ -43,7 +60,7 @@ struct EditorState
     Arena permanent_arena;
     Arena transient_arena;
 
-    StringMap *theme;
+    Theme theme;
 
     Font font;
 
@@ -58,7 +75,6 @@ struct EditorState
 };
 static EditorState *editor_state;
 
-static inline Color GetThemeColor(String name);
 static inline void SetDebugDelay(int milliseconds, int frame_count);
 
 #endif /* TEXTIT_HPP */
