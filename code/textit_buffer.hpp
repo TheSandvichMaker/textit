@@ -23,6 +23,8 @@ struct UndoNode
     UndoNode *next;
     UndoNode *prev;
 
+    uint64_t ordinal;
+
     int64_t pos;
     String forward;
     String backward;
@@ -30,6 +32,7 @@ struct UndoNode
 
 struct UndoState
 {
+    uint64_t current_ordinal;
     UndoNode undo_sentinel;
 };
 

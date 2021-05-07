@@ -105,3 +105,23 @@ MoveCursorRelative(View *view, V2i delta)
     }
     view->cursor.y = new_cursor.y;
 }
+
+static inline void
+UndoOnce(View *view)
+{
+    Buffer *buffer = view->buffer;
+
+    UndoNode *node;
+    do
+    {
+        node = buffer->undo_state.undo_sentinel.prev;
+        node->next->prev = node->prev;
+        node->prev->next = node->next;
+
+        Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
+        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
+        SetCursorPos(view, node->pos);
+    }
+    while ((node != &buffer->undo_state.undo_sentinel) &&
+           (node->ordinal == buffer->undo_state.undo_sentinel.prev->ordinal));
+}

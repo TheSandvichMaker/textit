@@ -205,6 +205,10 @@ HandleViewInput(View *view)
                 int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), text);
                 SetCursorPos(view, pos);
             }
+            else
+            {
+                buffer->undo_state.current_ordinal += 1;
+            }
         }
         else
         {
@@ -297,7 +301,7 @@ HandleViewInput(View *view)
                 {
                     if (ctrl_down)
                     {
-                        UndoOnce(buffer);
+                        UndoOnce(view);
                     }
                 } break;
             }
@@ -452,9 +456,9 @@ DrawView(View *view)
          node !=  &buffer->undo_state.undo_sentinel;
          node = node->next)
     {
-        DrawLine(at_p, FormatTempString("Forward: %.*s", StringExpand(node->forward)), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, FormatTempString("Backward: %.*s", StringExpand(node->backward)), text_foreground, text_background); at_p.y -= 1;
-        at_p.y -= 1;
+        DrawLine(at_p, FormatTempString("Ordinal: %llu, Pos: %lld", node->ordinal, node->pos), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, FormatTempString("Forward: \"%.*s\"", StringExpand(node->forward)), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, FormatTempString("Backward: \"%.*s\"", StringExpand(node->backward)), text_foreground, text_background); at_p.y -= 1;
     }
 }
 

@@ -9,6 +9,7 @@ PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
     node->next->prev = node;
     node->prev->next = node;
 
+    node->ordinal = state->current_ordinal;
     node->pos = pos;
     node->forward = forward;
     node->backward = backward;
@@ -231,15 +232,4 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
 
     int64_t result = BufferReplaceRangeNoUndoHistory(buffer, range, text);
     return result;
-}
-
-static inline void
-UndoOnce(Buffer *buffer)
-{
-    UndoNode *node = buffer->undo_state.undo_sentinel.prev;
-    node->next->prev = node->prev;
-    node->prev->next = node->next;
-
-    Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
-    BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
 }
