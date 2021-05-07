@@ -1,18 +1,54 @@
 static inline void
 PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
 {
-    UndoState *state = &buffer->undo_state;
+    UndoState *undo = &buffer->undo_state;
     UndoNode *node = PushStruct(&buffer->arena, UndoNode);
 
-    node->next = &state->undo_sentinel;
-    node->prev = state->undo_sentinel.prev;
-    node->next->prev = node;
-    node->prev->next = node;
+    node->parent = undo->at;
+    node->next_child = node->parent->first_child;
+    node->parent->first_child = node;
 
-    node->ordinal = state->current_ordinal;
+    node->ordinal = undo->current_ordinal;
     node->pos = pos;
     node->forward = forward;
     node->backward = backward;
+
+    undo->at = node;
+    undo->depth += 1;
+}
+
+static inline UndoNode *
+GetCurrentUndoNode(Buffer *buffer)
+{
+    UndoState *undo = &buffer->undo_state;
+    return undo->at;
+}
+
+static inline void
+SelectNextUndoBranch(Buffer *buffer)
+{
+    UndoNode *node = GetCurrentUndoNode(buffer);
+
+    uint32_t child_count = 0;
+    for (UndoNode *child = node->first_child;
+         child;
+         child = child->next_child)
+    {
+        child_count += 1;
+    }
+
+    node->selected_branch = (node->selected_branch + 1) % child_count;
+}
+
+static inline UndoNode *
+GetNextChild(UndoNode *node)
+{
+    UndoNode *result = node->first_child;
+    for (uint32_t i = 0; i < node->selected_branch; i += 1)
+    {
+        result = result->next_child;
+    }
+    return result;
 }
 
 static inline LineEndKind
@@ -52,8 +88,7 @@ NewBuffer(String buffer_name)
 {
     Buffer *result = BootstrapPushStruct(Buffer, arena);
     result->name = PushString(&result->arena, buffer_name);
-    result->undo_state.undo_sentinel.next = &result->undo_state.undo_sentinel;
-    result->undo_state.undo_sentinel.prev = &result->undo_state.undo_sentinel;
+    result->undo_state.at = &result->undo_state.root;
     return result;
 }
 
@@ -232,4 +267,46 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
 
     int64_t result = BufferReplaceRangeNoUndoHistory(buffer, range, text);
     return result;
+}
+
+static inline int64_t
+UndoOnce(Buffer *buffer)
+{
+    int64_t pos = -1;
+
+    UndoState *undo = &buffer->undo_state;
+
+    UndoNode *node = undo->at;
+    if (node->parent)
+    {
+        undo->depth -= 1;
+        undo->at = node->parent;
+
+        Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
+        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
+        pos = node->pos;
+    }
+    
+    return pos;
+}
+
+static inline int64_t
+RedoOnce(Buffer *buffer)
+{
+    int64_t pos = -1;
+
+    UndoState *undo = &buffer->undo_state;
+    
+    UndoNode *node = GetNextChild(undo->at);
+    if (node)
+    {
+        undo->depth += 1;
+        undo->at = node;
+
+        Range remove_range = MakeRangeStartLength(node->pos, node->backward.size);
+        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
+        pos = node->pos;
+    }
+
+    return pos;
 }

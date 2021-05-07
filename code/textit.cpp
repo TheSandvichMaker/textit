@@ -104,8 +104,8 @@ GetThemeColor(String name)
 static inline void
 LoadDefaultTheme()
 {
-    SetThemeColor("text_foreground"_str, MakeColor(192, 255, 255));
-    SetThemeColor("text_background"_str, MakeColor(192, 0, 0));
+    SetThemeColor("text_foreground"_str, MakeColor(255, 255, 255));
+    SetThemeColor("text_background"_str, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_foreground"_str, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_background"_str, MakeColor(192, 255, 128));
     SetThemeColor("unrenderable_text_foreground"_str, MakeColor(255, 255, 255));
@@ -192,10 +192,14 @@ HandleViewInput(View *view)
 {
     Buffer *buffer = view->buffer;
 
+    static bool last_was_non_alpha = false;
     for (PlatformEvent *event = nullptr;
          NextEvent(&event, PlatformEventFilter_Text|PlatformEventFilter_KeyDown);
          )
     {
+        // TODO: How to group these
+        buffer->undo_state.current_ordinal += 1;
+
         BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
         if (event->type == PlatformEvent_Text)
         {
@@ -204,10 +208,6 @@ HandleViewInput(View *view)
             {
                 int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), text);
                 SetCursorPos(view, pos);
-            }
-            else
-            {
-                buffer->undo_state.current_ordinal += 1;
             }
         }
         else
@@ -301,7 +301,31 @@ HandleViewInput(View *view)
                 {
                     if (ctrl_down)
                     {
-                        UndoOnce(view);
+                        int64_t pos = UndoOnce(buffer);
+                        if (pos >= 0)
+                        {
+                            SetCursorPos(view, pos);
+                        }
+                    }
+                } break;
+
+                case 'R':
+                {
+                    if (ctrl_down)
+                    {
+                        int64_t pos = RedoOnce(buffer);
+                        if (pos >= 0)
+                        {
+                            SetCursorPos(view, pos);
+                        }
+                    }
+                } break;
+
+                case 'B':
+                {
+                    if (ctrl_down)
+                    {
+                        SelectNextUndoBranch(buffer);
                     }
                 } break;
             }
@@ -452,13 +476,25 @@ DrawView(View *view)
     PushRectOutline(Layer_Background, right, text_foreground, text_background);
 
     V2i at_p = MakeV2i(right.min.x + 2, right.max.y - 2);
-    for (UndoNode *node = buffer->undo_state.undo_sentinel.next;
-         node !=  &buffer->undo_state.undo_sentinel;
-         node = node->next)
+
+    UndoNode *current = GetCurrentUndoNode(buffer);
+    DrawLine(at_p, FormatTempString("At level: %llu", buffer->undo_state.depth), text_foreground, text_background); at_p.y -= 1;
+    DrawLine(at_p, FormatTempString("Ordinal: %llu, Pos: %lld", current->ordinal, current->pos), text_foreground, text_background); at_p.y -= 1;
+    DrawLine(at_p, FormatTempString("Forward: \"%.*s\"", StringExpand(current->forward)), text_foreground, text_background); at_p.y -= 1;
+    DrawLine(at_p, FormatTempString("Backward: \"%.*s\"", StringExpand(current->backward)), text_foreground, text_background); at_p.y -= 1;
+    at_p.y -= 1;
+
+    uint32_t branch_index = 0;
+    for (UndoNode *child = current->first_child;
+         child;
+         child = child->next_child)
     {
-        DrawLine(at_p, FormatTempString("Ordinal: %llu, Pos: %lld", node->ordinal, node->pos), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, FormatTempString("Forward: \"%.*s\"", StringExpand(node->forward)), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, FormatTempString("Backward: \"%.*s\"", StringExpand(node->backward)), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, FormatTempString("Branch %d%s", branch_index, (branch_index == current->selected_branch ? " (NEXT)" : "")), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, FormatTempString("Ordinal: %llu, Pos: %lld", child->ordinal, child->pos), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, FormatTempString("Forward: \"%.*s\"", StringExpand(child->forward)), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, FormatTempString("Backward: \"%.*s\"", StringExpand(child->backward)), text_foreground, text_background); at_p.y -= 1;
+        branch_index += 1;
+        at_p.y -= 1;
     }
 }
 

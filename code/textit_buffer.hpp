@@ -20,8 +20,11 @@ LineEndString(LineEndKind kind)
 
 struct UndoNode
 {
-    UndoNode *next;
-    UndoNode *prev;
+    UndoNode *parent;
+
+    uint32_t selected_branch;
+    UndoNode *first_child;
+    UndoNode *next_child;
 
     uint64_t ordinal;
 
@@ -33,7 +36,9 @@ struct UndoNode
 struct UndoState
 {
     uint64_t current_ordinal;
-    UndoNode undo_sentinel;
+    uint64_t depth;
+    UndoNode root;
+    UndoNode *at;
 };
 
 #define TEXTIT_BUFFER_SIZE Megabytes(1)

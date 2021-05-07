@@ -106,7 +106,7 @@ CheckArena(Arena* arena)
     PushSize_(arena, size, align, false, LOCATION_STRING(#arena))
 
 static inline void *
-PushSize_(Arena *arena, size_t Size, size_t Align, bool Clear, const char *Tag)
+PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
 {
     if (!arena->capacity)
     {
@@ -119,32 +119,32 @@ PushSize_(Arena *arena, size_t Size, size_t Align, bool Clear, const char *Tag)
         // NOTE: Let's align up to page size because that's the minimum allocation granularity anyway,
         //       and the code doing the commit down below assumes our capacity is page aligned.
         arena->capacity = AlignPow2(arena->capacity, platform->page_size);
-        arena->base = (char *)platform->ReserveMemory(arena->capacity, PlatformMemFlag_NoLeakCheck, Tag);
+        arena->base = (char *)platform->ReserveMemory(arena->capacity, PlatformMemFlag_NoLeakCheck, tag);
     }
 
-    size_t AlignOffset = GetAlignOffset(arena, Align);
-    size_t AlignedSize = Size + AlignOffset;
+    size_t align_offset = GetAlignOffset(arena, align);
+    size_t aligned_size = size + align_offset;
 
-    Assert((arena->used + AlignedSize) <= arena->capacity);
+    Assert((arena->used + aligned_size) <= arena->capacity);
 
-    char *Unalignedbase = arena->base + arena->used;
+    char *unaligned_base = arena->base + arena->used;
 
-    if (arena->committed < (arena->used + AlignedSize))
+    if (arena->committed < (arena->used + aligned_size))
     {
-        size_t CommitSize = AlignPow2(AlignedSize, platform->page_size);
-        platform->CommitMemory(arena->base + arena->committed, CommitSize);
-        arena->committed += CommitSize;
-        Assert(arena->committed >= (arena->used + AlignedSize));
+        size_t commit_size = AlignPow2(aligned_size, platform->page_size);
+        platform->CommitMemory(arena->base + arena->committed, commit_size);
+        arena->committed += commit_size;
+        Assert(arena->committed >= (arena->used + aligned_size));
     }
 
-    void *Result = Unalignedbase + AlignOffset;
-    arena->used += AlignedSize;
+    void *result = unaligned_base + align_offset;
+    arena->used += aligned_size;
 
-    if (Clear) {
-        ZeroSize(AlignedSize, Result);
+    if (clear) {
+        ZeroSize(size, result);
     }
 
-    return Result;
+    return result;
 }
 
 #define BootstrapPushStruct(Type, Member, ...)                                        \
