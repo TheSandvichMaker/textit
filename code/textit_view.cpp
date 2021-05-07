@@ -111,17 +111,20 @@ UndoOnce(View *view)
 {
     Buffer *buffer = view->buffer;
 
-    UndoNode *node;
-    do
+    if (!DllIsEmpty(&buffer->undo_state.undo_sentinel))
     {
-        node = buffer->undo_state.undo_sentinel.prev;
-        node->next->prev = node->prev;
-        node->prev->next = node->next;
+        UndoNode *node;
+        do
+        {
+            node = buffer->undo_state.undo_sentinel.prev;
+            node->next->prev = node->prev;
+            node->prev->next = node->next;
 
-        Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
-        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
-        SetCursorPos(view, node->pos);
+            Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
+            BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
+            SetCursorPos(view, node->pos);
+        }
+        while (!DllIsEmpty(&buffer->undo_state.undo_sentinel) &&
+               (node->ordinal == buffer->undo_state.undo_sentinel.prev->ordinal));
     }
-    while ((node != &buffer->undo_state.undo_sentinel) &&
-           (node->ordinal == buffer->undo_state.undo_sentinel.prev->ordinal));
 }
