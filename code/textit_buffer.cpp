@@ -1,3 +1,19 @@
+static inline void
+PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
+{
+    UndoState *state = &buffer->undo_state;
+    UndoNode *node = PushStruct(&buffer->arena, UndoNode);
+
+    node->next = &state->undo_sentinel;
+    node->prev = state->undo_sentinel.prev;
+    node->next->prev = node;
+    node->prev->next = node;
+
+    node->pos = pos;
+    node->forward = forward;
+    node->backward = backward;
+}
+
 static inline LineEndKind
 GuessLineEndKind(String string)
 {
@@ -35,6 +51,8 @@ NewBuffer(String buffer_name)
 {
     Buffer *result = BootstrapPushStruct(Buffer, arena);
     result->name = PushString(&result->arena, buffer_name);
+    result->undo_state.undo_sentinel.next = &result->undo_state.undo_sentinel;
+    result->undo_state.undo_sentinel.prev = &result->undo_state.undo_sentinel;
     return result;
 }
 
@@ -144,8 +162,17 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
     return pos;
 }
 
+static inline String
+BufferPushRange(Arena *arena, Buffer *buffer, Range range)
+{
+    int64_t range_size = range.end - range.start;
+    String string = MakeString(range_size, buffer->text + range.start);
+    String result = PushString(arena, string);
+    return result;
+}
+
 static inline int64_t
-BufferReplaceRange(Buffer *buffer, Range range, String text)
+BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 {
     range = ClampRange(range, BufferRange(buffer));
 
@@ -181,4 +208,38 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
         edit_end += delta;
     }
     return edit_end;
+}
+
+static inline int64_t
+BufferReplaceRange(Buffer *buffer, Range range, String text)
+{
+    range = ClampRange(range, BufferRange(buffer));
+
+    String backward = {};
+    if (RangeSize(range) > 0)
+    {
+        backward = BufferPushRange(&buffer->arena, buffer, range);
+    }
+
+    String forward = {};
+    if (text.size > 0)
+    {
+        forward = PushString(&buffer->arena, text);
+    }
+
+    PushUndo(buffer, range.start, forward, backward);
+
+    int64_t result = BufferReplaceRangeNoUndoHistory(buffer, range, text);
+    return result;
+}
+
+static inline void
+UndoOnce(Buffer *buffer)
+{
+    UndoNode *node = buffer->undo_state.undo_sentinel.prev;
+    node->next->prev = node->prev;
+    node->prev->next = node->next;
+
+    Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
+    BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
 }

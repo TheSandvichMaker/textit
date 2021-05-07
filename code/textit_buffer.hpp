@@ -18,6 +18,21 @@ LineEndString(LineEndKind kind)
     return StringLiteral("");
 }
 
+struct UndoNode
+{
+    UndoNode *next;
+    UndoNode *prev;
+
+    int64_t pos;
+    String forward;
+    String backward;
+};
+
+struct UndoState
+{
+    UndoNode undo_sentinel;
+};
+
 #define TEXTIT_BUFFER_SIZE Megabytes(1)
 struct Buffer
 {
@@ -25,6 +40,8 @@ struct Buffer
     String name;
 
     LineEndKind line_end;
+
+    UndoState undo_state;
 
     int64_t count;
     uint8_t text[TEXTIT_BUFFER_SIZE];

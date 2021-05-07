@@ -1026,6 +1026,23 @@ MakeRect2iCenterHalfDim(V2i center, V2i half_dim)
     return result;
 }
 
+TEXTIT_INLINE void
+SplitRect2iHorizontal(Rect2i rect, int64_t split_point, Rect2i *out_left, Rect2i *out_right)
+{
+    split_point = Clamp(split_point, rect.min.x, rect.max.x);
+
+    Rect2i left;
+    left.min = rect.min;
+    left.max = MakeV2i(split_point, rect.max.y);
+
+    Rect2i right;
+    right.min = MakeV2i(split_point, rect.min.x);
+    right.max = rect.max;
+
+    *out_left = left;
+    *out_right = right;
+}
+
 TEXTIT_INLINE int64_t
 GetWidth(Rect2i a)
 {

@@ -292,6 +292,14 @@ HandleViewInput(View *view)
                 {
                     MoveCursorRelative(view, MakeV2i(0, 1));
                 } break;
+
+                case 'Z':
+                {
+                    if (ctrl_down)
+                    {
+                        UndoOnce(buffer);
+                    }
+                } break;
             }
         }
     }
@@ -426,11 +434,28 @@ DrawView(View *view)
     Color filebar_text_foreground = GetThemeColor("filebar_text_foreground"_str);
     Color filebar_text_background = GetThemeColor("filebar_text_background"_str);
 
-    PushRectOutline(Layer_Background, bounds, text_foreground, text_background);
+    int64_t width = GetWidth(bounds);
+
+    Rect2i left, right;
+    SplitRect2iHorizontal(bounds, width / 2, &left, &right);
+
+    PushRectOutline(Layer_Background, left, text_foreground, text_background);
     DrawLine(MakeV2i(bounds.min.x + 2, bounds.max.y - 1),
              FormatTempString("%.*s - scroll: %d", StringExpand(buffer->name), view->scroll_at),
              filebar_text_foreground, filebar_text_background);
-    DrawTextArea(view, bounds);
+
+    DrawTextArea(view, left);
+    PushRectOutline(Layer_Background, right, text_foreground, text_background);
+
+    V2i at_p = MakeV2i(right.min.x + 2, right.max.y - 2);
+    for (UndoNode *node = buffer->undo_state.undo_sentinel.next;
+         node !=  &buffer->undo_state.undo_sentinel;
+         node = node->next)
+    {
+        DrawLine(at_p, FormatTempString("Forward: %.*s", StringExpand(node->forward)), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, FormatTempString("Backward: %.*s", StringExpand(node->backward)), text_foreground, text_background); at_p.y -= 1;
+        at_p.y -= 1;
+    }
 }
 
 void

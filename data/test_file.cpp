@@ -79,6 +79,8 @@ NewBuffer(String buffer_name)
 {
     Buffer *result = BootstrapPushStruct(Buffer, arena);
     result->name = PushString(&result->arena, buffer_name);
+    result->undo_state->undo_sentinel.next = &result->undo_state->undo_sentinel;
+    result->undo_state->undo_sentinel.prev = &result->undo_state->undo_sentinel;
     return result;
 }
 

@@ -104,6 +104,12 @@ ClampRange(Range range, Range bounds)
     return range;
 }
 
+static inline int64_t
+RangeSize(Range range)
+{
+    return range.end - range.start;
+}
+
 // NOTE: These colors are in BGRA byte order
 struct Color
 {
