@@ -29,7 +29,7 @@ static inline void *CreateGlobalState_(size_t size, size_t align, void *variable
 #if TEXTIT_BUILD_DLL
 #define GLOBAL_STATE(type, variable_name) \
     static type Paste(variable_name, _prototype_); \
-    static type *variable_name = CreateGlobalState(type, &variable_name, &Paste(variable_name, _prototype_));
+    static type *variable_name = (CreateGlobalState(type, &variable_name, &Paste(variable_name, _prototype_)), &Paste(variable_name, _prototype_));
 #else
 #define GLOBAL_STATE(type, variable_name) \
     static type Paste(variable_name, _);  \

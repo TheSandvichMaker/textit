@@ -7,12 +7,79 @@
 #include "textit_buffer.cpp"
 #include "textit_view.cpp"
 
+static inline Command *
+FindCommand(String name)
+{
+    Command *result = NullCommand();
+    for (size_t i = 0; i < command_list->command_count; i += 1)
+    {
+        Command *command = &command_list->commands[i];
+        if (AreEqual(command->name, name))
+        {
+            result = command;
+            break;
+        }
+    }
+    return result;
+}
+
+static inline void
+CMD_MoveLeft(EditorState *editor)
+{
+    View *view = editor->open_view;
+    MoveCursorRelative(view, MakeV2i(-1, 0));
+}
+REGISTER_COMMAND(CMD_MoveLeft);
+
+static inline void
+CMD_MoveRight(EditorState *editor)
+{
+    View *view = editor->open_view;
+    MoveCursorRelative(view, MakeV2i(1, 0));
+}
+REGISTER_COMMAND(CMD_MoveRight);
+
+static inline void
+CMD_MoveLeftIdentifier(EditorState *editor)
+{
+    View *view = editor->open_view;
+    Buffer *buffer = view->buffer;
+
+    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+    int64_t pos = ScanWordBackward(buffer, loc.pos);
+    pos = ClampToRange(pos, loc.line_range);
+    SetCursorPos(view, pos);
+}
+REGISTER_COMMAND(CMD_MoveLeftIdentifier);
+
+static inline void
+CMD_MoveRightIdentifier(EditorState *editor)
+{
+    View *view = editor->open_view;
+    Buffer *buffer = view->buffer;
+
+    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+    int64_t pos = ScanWordForward(buffer, loc.pos);
+    pos = ClampToRange(pos, loc.line_range);
+    SetCursorPos(view, pos);
+}
+REGISTER_COMMAND(CMD_MoveRightIdentifier);
+
+static inline void
+LoadDefaultBindings(BindingMap *bindings)
+{
+    bindings->map[PlatformInputCode_Left].regular = FindCommand("CMD_MoveLeft"_str);
+    bindings->map[PlatformInputCode_Right].regular = FindCommand("CMD_MoveRight"_str);
+    bindings->map[PlatformInputCode_Left].ctrl = FindCommand("CMD_MoveLeftIdentifier"_str);
+    bindings->map[PlatformInputCode_Right].ctrl = FindCommand("CMD_MoveRightIdentifier"_str);
+}
+
 static inline StringMap *
 PushStringMap(Arena *arena, size_t size)
 {
     StringMap *result = PushStruct(arena, StringMap);
     result->arena = arena;
-    result->size  = size;
+    result->size = size;
     result->nodes = PushArray(arena, result->size, StringMapNode *);
     return result;
 }
@@ -170,15 +237,6 @@ LoadFontFromDisk(Arena *arena, String filename, int glyph_w, int glyph_h)
     return result;
 }
 
-TEXTIT_INLINE Color
-LinearToSRGB(V3 linear)
-{
-    Color result = MakeColor((uint8_t)(SquareRoot(linear.x)*255.0f),
-                             (uint8_t)(SquareRoot(linear.y)*255.0f),
-                             (uint8_t)(SquareRoot(linear.z)*255.0f));
-    return result;
-}
-
 static inline Bitmap
 GetGlyphBitmap(Font *font, Glyph glyph)
 {
@@ -213,121 +271,146 @@ HandleViewInput(View *view)
         else
         {
             bool ctrl_down = event->ctrl_down;
-            switch (event->input_code)
+            bool shift_down = event->shift_down;
+            bool ctrl_shift_down = ctrl_down && shift_down;
+
+            Binding *binding = &editor_state->bindings.map[event->input_code];
+            Command *command = binding->regular;
+            if (ctrl_shift_down)
             {
-                case PlatformInputCode_Back:
+                command = binding->ctrl_shift;
+            }
+            else if (ctrl_down)
+            {
+                command = binding->ctrl;
+            }
+            else if (shift_down)
+            {
+                command = binding->shift;
+            }
+
+            if (command)
+            {
+                command->proc(editor_state);
+            }
+            else
+            {
+                switch (event->input_code)
                 {
-                    if (ctrl_down)
+                    case PlatformInputCode_Back:
                     {
-                        int64_t start_pos = loc.pos;
-                        int64_t end_pos = ScanWordBackward(buffer, loc.pos);
-                        int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
-                        SetCursorPos(view, final_pos);
-                    }
-                    else
-                    {
-                        int64_t newline_length = PeekNewlineBackward(buffer, loc.pos - 1);
-                        int64_t to_delete = 1;
-                        if (newline_length)
+                        if (ctrl_down)
                         {
-                            to_delete = newline_length;
+                            int64_t start_pos = loc.pos;
+                            int64_t end_pos = ScanWordBackward(buffer, loc.pos);
+                            int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
+                            SetCursorPos(view, final_pos);
                         }
-                        int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos - to_delete, to_delete), {});
-                        SetCursorPos(view, pos);
-                    }
-                } break;
-
-                case PlatformInputCode_Delete:
-                {
-                    if (ctrl_down)
-                    {
-                        int64_t start_pos = loc.pos;
-                        int64_t end_pos = ScanWordForward(buffer, loc.pos);
-                        int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
-                        SetCursorPos(view, final_pos);
-                    }
-                    else
-                    {
-                        int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos, 1), {});
-                        SetCursorPos(view, pos);
-                    }
-                } break;
-
-                case PlatformInputCode_Return:
-                {
-                    int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), LineEndString(buffer->line_end));
-                    SetCursorPos(view, pos);
-                } break;
-
-                case PlatformInputCode_Left:
-                {
-                    if (ctrl_down)
-                    {
-                        int64_t pos = ScanWordBackward(buffer, loc.pos);
-                        pos = ClampToRange(pos, loc.line_range);
-                        SetCursorPos(view, pos);
-                    }
-                    else
-                    {
-                        MoveCursorRelative(view, MakeV2i(-1, 0));
-                    }
-                } break;
-
-                case PlatformInputCode_Right:
-                {
-                    if (ctrl_down)
-                    {
-                        int64_t pos = ScanWordForward(buffer, loc.pos);
-                        pos = ClampToRange(pos, loc.line_range);
-                        SetCursorPos(view, pos);
-                    }
-                    else
-                    {
-                        MoveCursorRelative(view, MakeV2i(1, 0));
-                    }
-                } break;
-
-                case PlatformInputCode_Up:
-                {
-                    MoveCursorRelative(view, MakeV2i(0, -1));
-                } break;
-
-                case PlatformInputCode_Down:
-                {
-                    MoveCursorRelative(view, MakeV2i(0, 1));
-                } break;
-
-                case 'Z':
-                {
-                    if (ctrl_down)
-                    {
-                        int64_t pos = UndoOnce(buffer);
-                        if (pos >= 0)
+                        else
                         {
+                            int64_t newline_length = PeekNewlineBackward(buffer, loc.pos - 1);
+                            int64_t to_delete = 1;
+                            if (newline_length)
+                            {
+                                to_delete = newline_length;
+                            }
+                            int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos - to_delete, to_delete), {});
                             SetCursorPos(view, pos);
                         }
-                    }
-                } break;
+                    } break;
 
-                case 'R':
-                {
-                    if (ctrl_down)
+                    case PlatformInputCode_Delete:
                     {
-                        int64_t pos = RedoOnce(buffer);
-                        if (pos >= 0)
+                        if (ctrl_down)
                         {
+                            int64_t start_pos = loc.pos;
+                            int64_t end_pos = ScanWordForward(buffer, loc.pos);
+                            int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
+                            SetCursorPos(view, final_pos);
+                        }
+                        else
+                        {
+                            int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos, 1), {});
                             SetCursorPos(view, pos);
                         }
-                    }
-                } break;
+                    } break;
 
-                case 'B':
-                {
-                    if (ctrl_down)
+                    case PlatformInputCode_Return:
                     {
-                        SelectNextUndoBranch(buffer);
-                    }
-                } break;
+                        int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), LineEndString(buffer->line_end));
+                        SetCursorPos(view, pos);
+                    } break;
+
+                    case PlatformInputCode_Left:
+                    {
+                        if (ctrl_down)
+                        {
+                            int64_t pos = ScanWordBackward(buffer, loc.pos);
+                            pos = ClampToRange(pos, loc.line_range);
+                            SetCursorPos(view, pos);
+                        }
+                        else
+                        {
+                            MoveCursorRelative(view, MakeV2i(-1, 0));
+                        }
+                    } break;
+
+                    case PlatformInputCode_Right:
+                    {
+                        if (ctrl_down)
+                        {
+                            int64_t pos = ScanWordForward(buffer, loc.pos);
+                            pos = ClampToRange(pos, loc.line_range);
+                            SetCursorPos(view, pos);
+                        }
+                        else
+                        {
+                            MoveCursorRelative(view, MakeV2i(1, 0));
+                        }
+                    } break;
+
+                    case PlatformInputCode_Up:
+                    {
+                        MoveCursorRelative(view, MakeV2i(0, -1));
+                    } break;
+
+                    case PlatformInputCode_Down:
+                    {
+                        MoveCursorRelative(view, MakeV2i(0, 1));
+                    } break;
+
+                    case 'Z':
+                    {
+                        if (ctrl_down)
+                        {
+                            int64_t pos = UndoOnce(buffer);
+                            if (pos >= 0)
+                            {
+                                SetCursorPos(view, pos);
+                            }
+                        }
+                    } break;
+
+                    case 'R':
+                    {
+                        if (ctrl_down)
+                        {
+                            int64_t pos = RedoOnce(buffer);
+                            if (pos >= 0)
+                            {
+                                SetCursorPos(view, pos);
+                            }
+                        }
+                    } break;
+
+                    case 'B':
+                    {
+                        if (ctrl_down)
+                        {
+                            SelectNextUndoBranch(buffer);
+                        }
+                    } break;
+                }
             }
         }
     }
@@ -524,6 +607,7 @@ AppUpdateAndRender(Platform *platform_)
         editor_state->open_view = NewView(editor_state->open_buffer);
 
         LoadDefaultTheme();
+        LoadDefaultBindings(&editor_state->bindings);
 
         platform->app_initialized = true;
     }
