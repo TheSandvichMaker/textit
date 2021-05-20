@@ -34,7 +34,7 @@ struct Win32AppCode
 struct PlatformJobEntry
 {
     PlatformJobProc *proc;
-    void *args;
+    void *params;
 };
 
 struct PlatformJobQueue
@@ -53,6 +53,19 @@ struct PlatformJobQueue
     PlatformJobEntry jobs[256];
 
     StaticAssert(IsPow2(ArrayCount(jobs)), "Jobs array must be a power of 2");
+};
+
+struct ThreadLocalContext
+{
+    ThreadLocalContext *next;
+
+    Arena *temp_arena;
+    Arena *prev_temp_arena;
+
+    Arena temp_arena_1_;
+    Arena temp_arena_2_;
+
+    HANDLE input_wait_event;
 };
 
 struct Win32State

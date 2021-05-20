@@ -20,6 +20,36 @@ __declspec(dllexport) unsigned long NvOptimusEnablement        = 1;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
+static inline bool
+Win32_NextEvent(PlatformEvent **out_event, PlatformEventFilter filter)
+{
+    bool result = false;
+
+    PlatformEvent *it = *out_event;
+    if (!it)
+    {
+        it = platform->first_event;
+    }
+    else
+    {
+        it = it->next;
+    }
+
+    while (it)
+    {
+        if (!it->consumed_ && MatchFilter(it->type, filter))
+        {
+            result = true;
+            it->consumed_ = true;
+            *out_event = it;
+            break;
+        }
+        it = it->next;
+    }
+
+    return result;
+}
+
 static void *
 Win32_Reserve(size_t size, uint32_t flags, const char *tag)
 {
@@ -223,7 +253,7 @@ FormatString(Arena *arena, char *fmt, ...)
 static inline void
 Win32_DebugPrint(char *fmt, ...)
 {
-    Arena *arena = GetTempArena();
+    Arena *arena = platform->GetTempArena();
     ScopedMemory temp(arena);
 
     va_list args;
@@ -241,7 +271,7 @@ Win32_LogPrint(PlatformLogLevel level, char *fmt, ...)
 {
     Win32State *state = &win32_state;
 
-    Arena *arena = GetTempArena();
+    Arena *arena = platform->GetTempArena();
     ScopedMemory temp(arena);
 
     va_list args;
@@ -350,7 +380,7 @@ Win32_GetPrevLogLine(PlatformLogLine *line)
 static inline void
 Win32_ReportError(PlatformErrorType type, char *error, ...)
 {
-    Arena *arena = GetTempArena();
+    Arena *arena = platform->GetTempArena();
     ScopedMemory temp(arena);
 
     va_list args;
@@ -646,6 +676,13 @@ PushEvent()
     return result;
 }
 
+static void
+Win32_PushTickEvent(void)
+{
+    PlatformEvent *event = PushEvent();
+    event->type = PlatformEvent_Tick;
+}
+
 static bool
 Win32_HandleSpecialKeys(HWND window, int vk_code, bool pressed, bool alt_is_down)
 {
@@ -823,6 +860,9 @@ Win32_InitializeTLSForThread(ThreadLocalContext *context)
 
     context->temp_arena      = &context->temp_arena_1_;
     context->prev_temp_arena = &context->temp_arena_2_;
+
+    SetCapacity(context->temp_arena, Megabytes(4));
+    SetCapacity(context->prev_temp_arena, Megabytes(4));
 }
 
 static ThreadLocalContext *
@@ -836,7 +876,30 @@ Win32_GetThreadLocalContext(void)
     return result;
 }
 
-struct Win32ThreadArgs
+static void
+Win32_DestroyThreadLocalContext(void)
+{
+    ThreadLocalContext *context = Win32_GetThreadLocalContext();
+    if (context)
+    {
+        Release(context->temp_arena);
+        Release(context->prev_temp_arena);
+    }
+    else
+    {
+        INVALID_CODE_PATH;
+    }
+}
+
+static inline Arena *
+Win32_GetTempArena(void)
+{
+    ThreadLocalContext *context = Win32_GetThreadLocalContext();
+    Arena *result = context->temp_arena;
+    return result;
+}
+
+struct Win32JobThreadParams
 {
     ThreadLocalContext *context;
     PlatformJobQueue *queue;
@@ -844,13 +907,13 @@ struct Win32ThreadArgs
 };
 
 static DWORD WINAPI
-Win32_ThreadProc(LPVOID userdata)
+Win32_JobThreadProc(LPVOID userdata)
 {
-    Win32ThreadArgs *args = (Win32ThreadArgs *)userdata;
+    Win32JobThreadParams *params = (Win32JobThreadParams *)userdata;
 
-    Win32_InitializeTLSForThread(args->context);
-    PlatformJobQueue *queue = args->queue;
-    SetEvent(args->ready);
+    Win32_InitializeTLSForThread(params->context);
+    PlatformJobQueue *queue = params->queue;
+    SetEvent(params->ready);
 
     for (;;)
     {
@@ -869,7 +932,7 @@ Win32_ThreadProc(LPVOID userdata)
                 Clear(context->temp_arena);
 
                 PlatformJobEntry *job = &queue->jobs[entry_index % ArrayCount(queue->jobs)];
-                job->proc(job->args);
+                job->proc(job->params);
 
                 uint32_t jobs_count = InterlockedDecrement(&queue->jobs_in_flight);
                 if (jobs_count == 0)
@@ -887,6 +950,8 @@ Win32_ThreadProc(LPVOID userdata)
             }
         }
     }
+
+    Win32_DestroyThreadLocalContext();
 
     return 0;
 }
@@ -906,12 +971,12 @@ Win32_InitializeJobQueue(PlatformJobQueue *queue, int thread_count)
     HANDLE ready = CreateEventA(NULL, FALSE, FALSE, NULL);
     for (int i = 0; i < thread_count; ++i)
     {
-        Win32ThreadArgs args = {};
-        args.context = &queue->tls[i];
-        args.queue = queue;
-        args.ready = ready;
+        Win32JobThreadParams params = {};
+        params.context = &queue->tls[i];
+        params.queue = queue;
+        params.ready = ready;
 
-        queue->threads[i] = CreateThread(NULL, 0, Win32_ThreadProc, &args, 0, NULL);
+        queue->threads[i] = CreateThread(NULL, 0, Win32_JobThreadProc, &params, 0, NULL);
         WaitForSingleObject(ready, INFINITE);
     }
     CloseHandle(ready);
@@ -924,13 +989,13 @@ Win32_SleepThread(int milliseconds)
 }
 
 static void
-Win32_AddJob(PlatformJobQueue *queue, void *args, PlatformJobProc *proc)
+Win32_AddJob(PlatformJobQueue *queue, void *params, PlatformJobProc *proc)
 {
     uint32_t new_next_write = queue->next_write + 1;
 
     PlatformJobEntry *entry = &queue->jobs[queue->next_write % ArrayCount(queue->jobs)];
     entry->proc = proc;
-    entry->args = args;
+    entry->params = params;
 
     MemoryBarrier();
 
@@ -982,6 +1047,8 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
     PlatformJobQueue  low_priority_queue = {};
 
     platform->page_size = system_info.dwPageSize;
+    platform->NextEvent = Win32_NextEvent;
+    platform->PushTickEvent = Win32_PushTickEvent;
     platform->high_priority_queue = &high_priority_queue;
     platform->low_priority_queue = &low_priority_queue;
     platform->DebugPrint = Win32_DebugPrint;
@@ -997,6 +1064,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
     platform->DecommitMemory = Win32_Decommit;
     platform->DeallocateMemory = Win32_Deallocate;
     platform->GetThreadLocalContext = Win32_GetThreadLocalContext;
+    platform->GetTempArena = Win32_GetTempArena;
     platform->AddJob = Win32_AddJob;
     platform->WaitForJobs = Win32_WaitForJobs;
     platform->ReadFile = Win32_ReadFile;
@@ -1145,6 +1213,10 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
                 {
                     PlatformEvent *event = PushEvent();
                     wchar_t buf[] = { (wchar_t)message.wParam, 0 };
+                    if (buf[0] == L'\r')
+                    {
+                        buf[0] = L'\n';
+                    }
                     event->type = PlatformEvent_Text;
                     event->text = Win32_Utf16ToUtf8(&win32_state.temp_arena, buf, &event->text_length);
                 } break;

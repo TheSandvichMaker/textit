@@ -33,6 +33,14 @@ IsAlphanumericAscii(uint8_t c)
 }
 
 static inline bool
+IsValidIdentifierAscii(uint8_t c)
+{
+    bool result = (IsAlphanumericAscii(c) ||
+                   c == '_');
+    return result;
+}
+
+static inline bool
 IsWhitespaceAscii(uint8_t c)
 {
     bool result = ((c == ' ') || (c == '\t') || (c == '\r') || (c == '\n'));
@@ -56,7 +64,7 @@ IsAsciiByte(uint8_t b)
 }
 
 static inline int
-IsHeadUnicodeByte(uint8_t b)
+IsHeadUtf8Byte(uint8_t b)
 {
     if ((b & 0xE0) == 0xC0) return true;
     if ((b & 0xF0) == 0xE0) return true;
@@ -65,7 +73,7 @@ IsHeadUnicodeByte(uint8_t b)
 }
 
 static inline bool
-IsTrailingUnicodeByte(uint8_t b)
+IsTrailingUtf8Byte(uint8_t b)
 {
     if ((b & 0xC0) == 0x80)
     {
@@ -78,10 +86,10 @@ IsTrailingUnicodeByte(uint8_t b)
 }
 
 static inline bool
-IsUnicodeByte(uint8_t b)
+IsUtf8Byte(uint8_t b)
 {
-    return (IsHeadUnicodeByte(b) ||
-            IsTrailingUnicodeByte(b));
+    return (IsHeadUtf8Byte(b) ||
+            IsTrailingUtf8Byte(b));
 }
 
 static inline ParseUtf8Result
@@ -231,7 +239,7 @@ FormatTempString(char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    String result = FormatStringV(GetTempArena(), fmt, args);
+    String result = FormatStringV(platform->GetTempArena(), fmt, args);
     va_end(args);
     return result;
 }

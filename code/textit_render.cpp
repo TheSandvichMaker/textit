@@ -337,7 +337,7 @@ PushRectOutline(RenderLayer layer, const Rect2i &rect, Color foreground, Color b
 static void
 BeginRender(void)
 {
-    Arena *arena = GetTempArena();
+    Arena *arena = platform->GetTempArena();
     render_state->arena = arena;
 
     Bitmap *target = render_state->target;
@@ -362,7 +362,7 @@ struct TiledRenderJobParams
 static
 PLATFORM_JOB(TiledRenderJob)
 {
-    TiledRenderJobParams *params = (TiledRenderJobParams *)args;
+    TiledRenderJobParams *params = (TiledRenderJobParams *)userdata;
 
     Rect2i clip_rect = params->clip_rect;
 

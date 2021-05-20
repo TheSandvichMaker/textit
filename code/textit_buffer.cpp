@@ -8,7 +8,9 @@ PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
     node->next_child = node->parent->first_child;
     node->parent->first_child = node;
 
+    undo->current_ordinal += 1;
     node->ordinal = undo->current_ordinal;
+
     node->pos = pos;
     node->forward = forward;
     node->backward = backward;
@@ -47,6 +49,47 @@ GetNextChild(UndoNode *node)
     for (uint32_t i = 0; i < node->selected_branch; i += 1)
     {
         result = result->next_child;
+    }
+    return result;
+}
+
+static inline uint64_t
+GetCurrentUndoOrdinal(Buffer *buffer)
+{
+    return buffer->undo_state.current_ordinal;
+}
+
+static inline void
+MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
+{
+    Assert(last_ordinal >= first_ordinal);
+    UndoNode *node = buffer->undo_state.at;
+    while (node && node->ordinal > last_ordinal)
+    {
+        node = node->parent;
+    }
+    while (node && node->ordinal > first_ordinal)
+    {
+        node->ordinal = first_ordinal;
+        node = node->parent;
+    }
+    buffer->undo_state.current_ordinal = first_ordinal;
+}
+
+static inline bool
+IsInBufferRange(Buffer *buffer, int64_t pos)
+{
+    bool result = ((pos >= 0) && (pos < buffer->count));
+    return result;
+}
+
+static inline uint8_t
+ReadBufferByte(Buffer *buffer, int64_t pos)
+{
+    uint8_t result = 0;
+    if (IsInBufferRange(buffer, pos))
+    {
+        result = buffer->text[pos];
     }
     return result;
 }
@@ -277,7 +320,7 @@ UndoOnce(Buffer *buffer)
     UndoState *undo = &buffer->undo_state;
 
     UndoNode *node = undo->at;
-    if (node->parent)
+    while (node->parent)
     {
         undo->depth -= 1;
         undo->at = node->parent;
@@ -285,6 +328,15 @@ UndoOnce(Buffer *buffer)
         Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
         BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
         pos = node->pos;
+
+        if (node->parent->ordinal == node->ordinal)
+        {
+            node = node->parent;
+        }
+        else
+        {
+            break;
+        }
     }
     
     return pos;
@@ -298,7 +350,7 @@ RedoOnce(Buffer *buffer)
     UndoState *undo = &buffer->undo_state;
     
     UndoNode *node = GetNextChild(undo->at);
-    if (node)
+    while (node)
     {
         undo->depth += 1;
         undo->at = node;
@@ -306,6 +358,16 @@ RedoOnce(Buffer *buffer)
         Range remove_range = MakeRangeStartLength(node->pos, node->backward.size);
         BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
         pos = node->pos;
+
+        UndoNode *next_node = GetNextChild(node);
+        if (next_node && next_node->ordinal == node->ordinal)
+        {
+            node = next_node;
+        }
+        else
+        {
+            break;
+        }
     }
 
     return pos;

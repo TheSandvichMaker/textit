@@ -1,10 +1,6 @@
 #ifndef TEXTIT_RENDER_HPP
 #define TEXTIT_RENDER_HPP
 
-#define RECT_HASH_COUNT_X 8
-#define RECT_HASH_COUNT_Y 8
-#define RECT_HASH_COUNT (RECT_HASH_COUNT_X*RECT_HASH_COUNT_Y)
-
 // NOTE: These are for code page 437 fonts
 // https://en.wikipedia.org/wiki/Code_page_437#Character_set
 typedef uint32_t Glyph;
@@ -38,7 +34,7 @@ enum
     Glyph_ArrowDown              = 25,
     Glyph_ArrowLeft              = 26,
     Glyph_ArrowRight             = 27,
-    Glyph_SquishedL              = 28, // TODO: What's this?
+    Glyph_RightAngle             = 28, // TODO: What's this?
     Glyph_ArrowsLeftRight        = 29,
     Glyph_TriangleUp             = 30,
     Glyph_TriangleDown           = 31,

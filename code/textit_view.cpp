@@ -3,7 +3,14 @@ NewView(Buffer *buffer)
 {
     View *result = BootstrapPushStruct(View, arena);
     result->buffer = buffer;
+    platform->PushTickEvent(); // tick at least once to initially render the view
     return result;
+}
+
+static inline void
+DestroyView(View *view)
+{
+    Release(&view->arena);
 }
 
 static inline BufferLocation
@@ -87,11 +94,27 @@ static inline void
 MoveCursorRelative(View *view, V2i delta)
 {
     V2i old_cursor = view->cursor;
+    BufferLocation loc = ViewCursorToBufferLocation(view->buffer, old_cursor + delta);
+
+    int64_t offset = 0;
+    while (IsInBufferRange(view->buffer, loc.pos + offset) &&
+           IsTrailingUtf8Byte(ReadBufferByte(view->buffer, loc.pos + offset)))
+    {
+        if (delta.x > 0)
+        {
+            offset += 1;
+        }
+        else
+        {
+            offset -= 1;
+        }
+    }
+    loc.pos += offset;
+    delta.x += offset;
+
     V2i new_cursor = view->cursor + delta;
 
-    BufferLocation loc = ViewCursorToBufferLocation(view->buffer, new_cursor);
     int64_t line_length = loc.line_range.end - loc.line_range.start;
-
     new_cursor.y = ClampToRange(new_cursor.y, MakeRange(0, loc.line_number));
 
     if (delta.x != 0)
@@ -106,3 +129,45 @@ MoveCursorRelative(View *view, V2i delta)
     view->cursor.y = new_cursor.y;
 }
 
+static inline void
+WriteText(View *view, String text)
+{
+    Buffer *buffer = view->buffer;
+    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+
+    uint64_t start_ordinal = GetCurrentUndoOrdinal(buffer);
+    bool should_merge = false;
+    for (size_t i = 0; i < text.size; i += 1)
+    {
+        if (text.data[0] != '\n')
+        {
+            UndoNode *last_undo = GetCurrentUndoNode(buffer);
+
+            String last_text = last_undo->forward;
+            if ((last_undo->pos == loc.pos - 1) &&
+                (last_text.size > 0))
+            {
+                if ((text.data[0] == ' ') &&
+                    (last_text.data[0] == ' '))
+                {
+                    should_merge = true;
+                }
+                else if (IsValidIdentifierAscii(text.data[0]) &&
+                         IsValidIdentifierAscii(last_text.data[0]))
+                {
+                    should_merge = true;
+                }
+            }
+        }
+    }
+    if (text.data[0] == '\n' || IsPrintableAscii(text.data[0]) || IsUtf8Byte(text.data[0]))
+    {
+        int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), text);
+        SetCursorPos(view, pos);
+    }
+    if (should_merge)
+    {
+        uint64_t end_ordinal = GetCurrentUndoOrdinal(buffer);
+        MergeUndoHistory(buffer, start_ordinal, end_ordinal);
+    }
+}

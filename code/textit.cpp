@@ -245,28 +245,23 @@ GetGlyphBitmap(Font *font, Glyph glyph)
     return result;
 }
 
+static inline void DrawView(View *view);
+
 static inline void
-HandleViewInput(View *view)
+HandleViewEvents(View *view)
 {
     Buffer *buffer = view->buffer;
 
     static bool last_was_non_alpha = false;
     for (PlatformEvent *event = nullptr;
-         NextEvent(&event, PlatformEventFilter_Text|PlatformEventFilter_KeyDown);
+         platform->NextEvent(&event, PlatformEventFilter_Text|PlatformEventFilter_KeyDown|PlatformEventFilter_Tick);
          )
     {
-        // TODO: How to group these
-        buffer->undo_state.current_ordinal += 1;
-
         BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
         if (event->type == PlatformEvent_Text)
         {
             String text = MakeString(event->text_length, event->text);
-            if (IsPrintableAscii(text.data[0]))
-            {
-                int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), text);
-                SetCursorPos(view, pos);
-            }
+            WriteText(view, text);
         }
         else
         {
@@ -333,12 +328,6 @@ HandleViewInput(View *view)
                             int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos, 1), {});
                             SetCursorPos(view, pos);
                         }
-                    } break;
-
-                    case PlatformInputCode_Return:
-                    {
-                        int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), LineEndString(buffer->line_end));
-                        SetCursorPos(view, pos);
                     } break;
 
                     case PlatformInputCode_Left:
@@ -410,34 +399,59 @@ HandleViewInput(View *view)
                             SelectNextUndoBranch(buffer);
                         }
                     } break;
+
+                    INCOMPLETE_SWITCH
                 }
             }
         }
-    }
 
-    int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
-    int64_t top = view->scroll_at;
-    int64_t bot = view->scroll_at + viewport_height;
-    if (view->cursor.y < top)
-    {
-        view->scroll_at += view->cursor.y - top;
-    }
-    if (view->cursor.y > bot)
-    {
-        view->scroll_at += view->cursor.y - bot;
+        int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
+        int64_t top = view->scroll_at;
+        int64_t bot = view->scroll_at + viewport_height;
+        if (view->cursor.y < top)
+        {
+            view->scroll_at += view->cursor.y - top;
+        }
+        if (view->cursor.y > bot)
+        {
+            view->scroll_at += view->cursor.y - bot;
+        }
+
+        BeginRender();
+        DrawView(editor_state->open_view);
+        EndRender();
     }
 }
 
-static inline void
+static inline V2i
 DrawLine(V2i p, String line, Color foreground, Color background)
 {
     V2i at_p = p;
-    for (size_t i = 0; i < line.size; ++i)
+    for (size_t i = 0; i < line.size;)
     {
-        Sprite sprite = MakeSprite(line.data[i], foreground, background);
-        PushTile(Layer_Text, at_p, sprite);
-        at_p.x += 1;
+        if (IsUtf8Byte(line.data[i]))
+        {
+            ParseUtf8Result unicode = ParseUtf8Codepoint(&line.data[i]);
+            String string = FormatTempString("\\u%x", unicode.codepoint);
+            at_p = DrawLine(at_p, string, foreground, background);
+            i += unicode.advance;
+        }
+        else if (IsPrintableAscii(line.data[i]))
+        {
+            Sprite sprite = MakeSprite(line.data[i], foreground, background);
+            PushTile(Layer_Text, at_p, sprite);
+
+            at_p.x += 1;
+            i += 1;
+        }
+        else
+        {
+            String string = FormatTempString("\\x%02hhx", line.data[i]);
+            at_p = DrawLine(at_p, string, foreground, background);
+            i += 1;
+        }
     }
+    return at_p;
 }
 
 static inline void
@@ -516,6 +530,7 @@ DrawTextArea(View *view, Rect2i bounds)
                 }
                 PushTile(Layer_Text, at_p, sprite);
                 at_p.x += 1;
+                pos += 1;
             }
             else
             {
@@ -525,11 +540,21 @@ DrawTextArea(View *view, Rect2i bounds)
                 {
                     Swap(foreground, background);
                 }
-                String hex = FormatTempString("x%hhX", b);
-                DrawLine(at_p, hex, foreground, background);
-                at_p.x += hex.size;
+                ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
+                String string = FormatTempString("\\u%x", unicode.codepoint);
+                for (size_t i = 0; i < string.size; ++i)
+                {
+                    PushTile(Layer_Text, at_p, MakeSprite(string.data[i], foreground, background));
+                    at_p.x += 1;
+                    if (at_p.x >= (bounds.max.x - 2))
+                    {
+                        PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
+                        at_p.x = left - 1;
+                        at_p.y -= 1;
+                    }
+                }
+                pos += unicode.advance;
             }
-            pos += 1;
         }
     }
 }
@@ -603,11 +628,11 @@ AppUpdateAndRender(Platform *platform_)
         editor_state->font = LoadFontFromDisk(&editor_state->transient_arena, StringLiteral("font8x16.bmp"), 8, 16);
         InitializeRenderState(&editor_state->transient_arena, &platform->backbuffer, &editor_state->font);
 
-        editor_state->open_buffer = OpenFileIntoNewBuffer(StringLiteral("test_file.cpp"));
-        editor_state->open_view = NewView(editor_state->open_buffer);
-
         LoadDefaultTheme();
         LoadDefaultBindings(&editor_state->bindings);
+
+        editor_state->open_buffer = OpenFileIntoNewBuffer(StringLiteral("test_file.txt"));
+        editor_state->open_view = NewView(editor_state->open_buffer);
 
         platform->app_initialized = true;
     }
@@ -615,15 +640,10 @@ AppUpdateAndRender(Platform *platform_)
     editor_state->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);
     editor_state->text_mouse_p = editor_state->screen_mouse_p / GlyphDim(&editor_state->font);
 
-    BeginRender();
-
     View *view = editor_state->open_view;
     view->viewport = render_state->viewport;
 
-    HandleViewInput(editor_state->open_view);
-    DrawView(editor_state->open_view);
-
-    EndRender();
+    HandleViewEvents(editor_state->open_view);
 
     if (editor_state->debug_delay_frame_count > 0)
     {

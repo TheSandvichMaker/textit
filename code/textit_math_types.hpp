@@ -1,7 +1,6 @@
 #ifndef TEXTIT_MATH_TYPES_HPP
 #define TEXTIT_MATH_TYPES_HPP
 
-#if COMPILER_MSVC
 struct V2
 {
     union
@@ -121,15 +120,6 @@ struct V4i
         return e[index];
     }
 };
-#else
-typedef float V2 __attribute__((ext_vector_type(2)));
-typedef float V3 __attribute__((ext_vector_type(3)));
-typedef float V4 __attribute__((ext_vector_type(4)));
-
-typedef int64_t V2i __attribute__((ext_vector_type(2)));
-typedef int64_t V3i __attribute__((ext_vector_type(3)));
-typedef int64_t V4i __attribute__((ext_vector_type(4)));
-#endif
 
 struct Rect2
 {

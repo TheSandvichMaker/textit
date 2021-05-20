@@ -88,6 +88,48 @@
 #if COMPILER_MSVC
 #define _AMD64_
 #include <windef.h>
+
+#define ALWAYS_INLINE __forceinline
+
+static inline uint32_t
+AtomicAdd(volatile uint32_t *dest, uint32_t value)
+{
+    // NOTE: This returns the value _before_ adding
+    uint32_t result = (uint32_t)_InterlockedExchangeAdd((volatile long *)dest, value);
+    return result;
+}
+
+static inline uint32_t
+AtomicIncrement(volatile uint32_t *dest)
+{
+    // NOTE: This returns the value _before_ adding
+    uint32_t result = (uint32_t)_InterlockedIncrement((volatile long *)dest) - 1;
+    return result;
+}
+
+static inline uint32_t
+AtomicExchange(volatile uint32_t *dest, uint32_t value)
+{
+    // NOTE: This returns the value _before_ exchanging
+    uint32_t result = (uint32_t)_InterlockedExchange((volatile long *)dest, value);
+    return result;
+}
+
+static inline uint32_t
+GetThreadID()
+{
+    uint8_t *thread_local_storage = (uint8_t *)__readgsqword(0x30);
+    uint32_t thread_id = *(uint32_t *)(thread_local_storage + 0x48);
+    return thread_id;
+}
+#elif COMPILER_LLVM
+static inline uint32_t
+AtomicAdd(volatile uint32_t *dest, uint32_t value)
+{
+    // NOTE: This returns the value _before_ adding
+    uint32_t result = __atomic_fetch_add(dest, value, __ATOMIC_SEQ_CST);
+    return result;
+}
 #endif
 
 struct TicketMutex
@@ -95,18 +137,6 @@ struct TicketMutex
     volatile uint32_t ticket;
     volatile uint32_t serving;
 };
-
-#if COMPILER_MSVC
-static inline uint32_t
-AtomicAdd(volatile uint32_t *dest, uint32_t value)
-{
-    // NOTE: This returns the value _before_ adding
-    uint32_t result = (uint32_t)_InterlockedExchangeAdd((volatile LONG *)dest, value);
-    return result;
-}
-#else
-// todo...
-#endif
 
 static inline void
 BeginTicketMutex(TicketMutex *mutex)
@@ -133,6 +163,7 @@ enum PlatformEventType
     PlatformEvent_KeyUp,
     PlatformEvent_KeyDown,
     PlatformEvent_Text,
+    PlatformEvent_Tick,
     PlatformEvent_COUNT,
 };
 
@@ -146,6 +177,7 @@ enum PlatformEventFilter_ENUM
     PlatformEventFilter_KeyDown   = 1 << 3,
     PlatformEventFilter_Keyboard  = PlatformEventFilter_KeyUp|PlatformEventFilter_KeyDown,
     PlatformEventFilter_Text      = 1 << 4,
+    PlatformEventFilter_Tick      = 1 << 5,
     PlatformEventFilter_ANY       = 0xFFFFFFFF,
 };
 
@@ -357,17 +389,11 @@ struct PlatformHighResTime
     uint64_t opaque;
 };
 
-struct ThreadLocalContext
-{
-    Arena *temp_arena;
-    Arena *prev_temp_arena;
-
-    Arena temp_arena_1_;
-    Arena temp_arena_2_;
-};
+struct PlatformThreadHandle;
+struct ThreadLocalContext;
 
 struct PlatformJobQueue;
-#define PLATFORM_JOB(name) void name(void *args)
+#define PLATFORM_JOB(name) void name(void *userdata)
 typedef PLATFORM_JOB(PlatformJobProc);
 
 #define PLATFORM_MAX_LOG_LINES 1024
@@ -400,6 +426,8 @@ struct Platform
 
     PlatformEvent *first_event;
     PlatformEvent *last_event;
+    bool (*NextEvent)(PlatformEvent **out_event, PlatformEventFilter filter);
+    void (*PushTickEvent)(void);
 
     int32_t mouse_x, mouse_y, mouse_y_flipped;
     int32_t mouse_dx, mouse_dy;
@@ -428,6 +456,7 @@ struct Platform
     void (*DeallocateMemory)(void *memory);
 
     ThreadLocalContext *(*GetThreadLocalContext)(void);
+    Arena *(*GetTempArena)(void);
 
     void (*AddJob)(PlatformJobQueue *queue, void *arg, PlatformJobProc *proc);
     void (*WaitForJobs)(PlatformJobQueue *queue);
@@ -443,63 +472,10 @@ struct Platform
 
 static Platform *platform;
 
-static inline Arena *
-GetTempArena(void)
-{
-    ThreadLocalContext *context = platform->GetThreadLocalContext();
-    Arena *result = context->temp_arena;
-    return result;
-}
-
 static inline void
 LeaveUnhandled(PlatformEvent *event)
 {
     event->consumed_ = false;
-}
-
-static inline PlatformEvent *
-PopEvent(PlatformEventFilter filter = PlatformEventFilter_ANY)
-{
-    PlatformEvent *it = platform->first_event;
-    while (it->consumed_ || MatchFilter(it->type, filter))
-    {
-        it = it->next;
-    }
-    if (it)
-    {
-        it->consumed_ = true;
-    }
-    return it;
-}
-
-static inline bool
-NextEvent(PlatformEvent **out_event, PlatformEventFilter filter = PlatformEventFilter_ANY)
-{
-    bool result = false;
-
-    PlatformEvent *it = *out_event;
-    if (!it)
-    {
-        it = platform->first_event;
-    }
-    else
-    {
-        it = it->next;
-    }
-
-    while (it)
-    {
-        if (!it->consumed_ && MatchFilter(it->type, filter))
-        {
-            result = true;
-            it->consumed_ = true;
-            *out_event = it;
-            break;
-        }
-        it = it->next;
-    }
-
-    return result;
 }
 
 #define APP_UPDATE_AND_RENDER(name) void name(Platform *platform)

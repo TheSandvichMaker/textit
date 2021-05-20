@@ -17,24 +17,20 @@
 
 // Constructor functions
 
-#if COMPILER_MSVC
 #define MakeVectorInternal(type, ...) type { __VA_ARGS__ }
-#else
-#define MakeVectorInternal(type, ...) (type) { __VA_ARGS__ }
-#endif
 
 TEXTIT_INLINE V2 MakeV2(float s) { return MakeVectorInternal(V2, s, s); }
 TEXTIT_INLINE V2 MakeV2(float x, float y) { return MakeVectorInternal(V2, x, y); }
 TEXTIT_INLINE V3 MakeV3(float s) { return MakeVectorInternal(V3, s, s, s); }
-TEXTIT_INLINE V3 MakeV3(V2 xy, float z) { return MakeVectorInternal(V3, xy[0], xy[1], z); }
-TEXTIT_INLINE V3 MakeV3(float x, V2 yz) { return MakeVectorInternal(V3, x, yz[0], yz[1]); }
+TEXTIT_INLINE V3 MakeV3(V2 xy, float z) { return MakeVectorInternal(V3, xy.x, xy.y, z); }
+TEXTIT_INLINE V3 MakeV3(float x, V2 yz) { return MakeVectorInternal(V3, x, yz.x, yz.y); }
 TEXTIT_INLINE V3 MakeV3(float x, float y, float z) { return MakeVectorInternal(V3, x, y, z); }
 TEXTIT_INLINE V4 MakeV4(float s) { return MakeVectorInternal(V4, s, s, s, s); }
-TEXTIT_INLINE V4 MakeV4(V2 xy, float z, float w) { return MakeVectorInternal(V4, xy[0], xy[1], z, w); }
-TEXTIT_INLINE V4 MakeV4(float x, float y, V2 zw) { return MakeVectorInternal(V4, x, y, zw[0], zw[1]); }
-TEXTIT_INLINE V4 MakeV4(V2 xy, V2 zw) { return MakeVectorInternal(V4, xy[0], xy[1], zw[0], zw[1]); }
-TEXTIT_INLINE V4 MakeV4(V3 xyz, float w) { return MakeVectorInternal(V4, xyz[0], xyz[1], xyz[2], w); }
-TEXTIT_INLINE V4 MakeV4(float x, V3 yzw) { return MakeVectorInternal(V4, x, yzw[0], yzw[1], yzw[2]); }
+TEXTIT_INLINE V4 MakeV4(V2 xy, float z, float w) { return MakeVectorInternal(V4, xy.x, xy.y, z, w); }
+TEXTIT_INLINE V4 MakeV4(float x, float y, V2 zw) { return MakeVectorInternal(V4, x, y, zw.x, zw.y); }
+TEXTIT_INLINE V4 MakeV4(V2 xy, V2 zw) { return MakeVectorInternal(V4, xy.x, xy.y, zw.x, zw.y); }
+TEXTIT_INLINE V4 MakeV4(V3 xyz, float w) { return MakeVectorInternal(V4, xyz.x, xyz.y, xyz.z, w); }
+TEXTIT_INLINE V4 MakeV4(float x, V3 yzw) { return MakeVectorInternal(V4, x, yzw.x, yzw.y, yzw.z); }
 TEXTIT_INLINE V4 MakeV4(float x, float y, float z, float w) { return MakeVectorInternal(V4, x, y, z, w); }
 
 TEXTIT_INLINE V3
@@ -50,21 +46,19 @@ MakeColorF(float x, float y, float z)
 TEXTIT_INLINE V2i MakeV2i(int64_t s) { return MakeVectorInternal(V2i, s, s); }
 TEXTIT_INLINE V2i MakeV2i(int64_t x, int64_t y) { return MakeVectorInternal(V2i, x, y); }
 TEXTIT_INLINE V3i MakeV3i(int64_t s) { return MakeVectorInternal(V3i, s, s, s); }
-TEXTIT_INLINE V3i MakeV3i(V2i xy, int64_t z) { return MakeVectorInternal(V3i, xy[0], xy[1], z); }
-TEXTIT_INLINE V3i MakeV3i(int64_t x, V2i yz) { return MakeVectorInternal(V3i, x, yz[0], yz[1]); }
+TEXTIT_INLINE V3i MakeV3i(V2i xy, int64_t z) { return MakeVectorInternal(V3i, xy.x, xy.y, z); }
+TEXTIT_INLINE V3i MakeV3i(int64_t x, V2i yz) { return MakeVectorInternal(V3i, x, yz.x, yz.y); }
 TEXTIT_INLINE V3i MakeV3i(int64_t x, int64_t y, int64_t z) { return MakeVectorInternal(V3i, x, y, z); }
 TEXTIT_INLINE V4i MakeV4i(int64_t s) { return MakeVectorInternal(V4i, s, s, s, s); }
-TEXTIT_INLINE V4i MakeV4i(V2i xy, int64_t z, int64_t w) { return MakeVectorInternal(V4i, xy[0], xy[1], z, w); }
-TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, V2i zw) { return MakeVectorInternal(V4i, x, y, zw[0], zw[1]); }
-TEXTIT_INLINE V4i MakeV4i(V2i xy, V2i zw) { return MakeVectorInternal(V4i, xy[0], xy[1], zw[0], zw[1]); }
-TEXTIT_INLINE V4i MakeV4i(V3i xyz, int64_t w) { return MakeVectorInternal(V4i, xyz[0], xyz[1], xyz[2], w); }
-TEXTIT_INLINE V4i MakeV4i(int64_t x, V3i yzw) { return MakeVectorInternal(V4i, x, yzw[0], yzw[1], yzw[2]); }
+TEXTIT_INLINE V4i MakeV4i(V2i xy, int64_t z, int64_t w) { return MakeVectorInternal(V4i, xy.x, xy.y, z, w); }
+TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, V2i zw) { return MakeVectorInternal(V4i, x, y, zw.x, zw.y); }
+TEXTIT_INLINE V4i MakeV4i(V2i xy, V2i zw) { return MakeVectorInternal(V4i, xy.x, xy.y, zw.x, zw.y); }
+TEXTIT_INLINE V4i MakeV4i(V3i xyz, int64_t w) { return MakeVectorInternal(V4i, xyz.x, xyz.y, xyz.z, w); }
+TEXTIT_INLINE V4i MakeV4i(int64_t x, V3i yzw) { return MakeVectorInternal(V4i, x, yzw.x, yzw.y, yzw.z); }
 TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return MakeVectorInternal(V4i, x, y, z, w); }
 
-#if COMPILER_MSVC
-
 #define IMPLEMENT_V2_VECTOR_OPERATORS(type, scalar_type, op) \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (const type &a, const type &b)               \
     {                                                        \
         type result;                                         \
@@ -72,7 +66,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.y = a.y op b.y;                               \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type &                                   \
+    TEXTIT_INLINE type &                                     \
     operator Paste(op, =) (type &a, const type &b)           \
     {                                                        \
         a = a op b;                                          \
@@ -80,7 +74,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
     }
 
 #define IMPLEMENT_V2_SCALAR_OPERATORS(type, scalar_type, op) \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (const type &a, scalar_type b)               \
     {                                                        \
         type result;                                         \
@@ -88,7 +82,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.y = a.y op b;                                 \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (scalar_type a, const type &b)               \
     {                                                        \
         type result;                                         \
@@ -96,7 +90,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.y = a op b.y;                                 \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type &                                   \
+    TEXTIT_INLINE type &                                     \
     operator Paste(op, =) (type &a, scalar_type b)           \
     {                                                        \
         a = a op b;                                          \
@@ -104,7 +98,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
     }
 
 #define IMPLEMENT_V3_VECTOR_OPERATORS(type, scalar_type, op) \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (const type &a, const type &b)               \
     {                                                        \
         type result;                                         \
@@ -113,7 +107,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.z = a.z op b.z;                               \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type &                                   \
+    TEXTIT_INLINE type &                                     \
     operator Paste(op, =) (type &a, const type &b)           \
     {                                                        \
         a = a op b;                                          \
@@ -121,7 +115,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
     }
 
 #define IMPLEMENT_V3_SCALAR_OPERATORS(type, scalar_type, op) \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (const type &a, scalar_type b)               \
     {                                                        \
         type result;                                         \
@@ -130,7 +124,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.z = a.z op b;                                 \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (scalar_type a, const type &b)               \
     {                                                        \
         type result;                                         \
@@ -139,7 +133,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.z = a op b.z;                                 \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type &                                   \
+    TEXTIT_INLINE type &                                     \
     operator Paste(op, =) (type &a, scalar_type b)           \
     {                                                        \
         a = a op b;                                          \
@@ -147,7 +141,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
     }
 
 #define IMPLEMENT_V4_VECTOR_OPERATORS(type, scalar_type, op) \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (const type &a, const type &b)               \
     {                                                        \
         type result;                                         \
@@ -157,7 +151,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.w = a.w op b.w;                               \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type &                                   \
+    TEXTIT_INLINE type &                                     \
     operator Paste(op, =) (type &a, const type &b)           \
     {                                                        \
         a = a op b;                                          \
@@ -165,7 +159,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
     }
 
 #define IMPLEMENT_V4_SCALAR_OPERATORS(type, scalar_type, op) \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (const type &a, scalar_type b)               \
     {                                                        \
         type result;                                         \
@@ -175,7 +169,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.w = a.w op b;                                 \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type                                     \
+    TEXTIT_INLINE type                                       \
     operator op (scalar_type a, const type &b)               \
     {                                                        \
         type result;                                         \
@@ -185,7 +179,7 @@ TEXTIT_INLINE V4i MakeV4i(int64_t x, int64_t y, int64_t z, int64_t w) { return M
         result.w = a op b.w;                                 \
         return result;                                       \
     }                                                        \
-    TEXTIT_INLINE type &                                   \
+    TEXTIT_INLINE type &                                     \
     operator Paste(op, =) (type &a, scalar_type b)           \
     {                                                        \
         a = a op b;                                          \
@@ -233,8 +227,6 @@ IMPLEMENT_V4_SCALAR_OPERATORS(V4i, int64_t, *)
 IMPLEMENT_V4_SCALAR_OPERATORS(V4i, int64_t, /)
 IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int64_t, *)
 IMPLEMENT_V4_VECTOR_OPERATORS(V4i, int64_t, /)
-
-#endif
 
 TEXTIT_INLINE bool
 AreEqual(V2i a, V2i b)
