@@ -319,7 +319,7 @@ HandleViewEvents(View *view)
                         if (ctrl_down)
                         {
                             int64_t start_pos = loc.pos;
-                            int64_t end_pos = ScanWordForward(buffer, loc.pos);
+                            int64_t end_pos = ScanWordEndForward(buffer, loc.pos);
                             int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
                             SetCursorPos(view, final_pos);
                         }

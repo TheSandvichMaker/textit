@@ -47,6 +47,13 @@ IsWhitespaceAscii(uint8_t c)
     return result;
 }
 
+static inline bool
+IsHorizontalWhitespaceAscii(uint8_t c)
+{
+    bool result = ((c == ' ') || (c == '\t'));
+    return result;
+}
+
 //
 // Unicode party
 //

@@ -73,24 +73,16 @@ MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
         node->ordinal = first_ordinal;
         node = node->parent;
     }
-    buffer->undo_state.current_ordinal = first_ordinal;
+    if (buffer->undo_state.current_ordinal == last_ordinal)
+    {
+        buffer->undo_state.current_ordinal = first_ordinal;
+    }
 }
 
 static inline bool
 IsInBufferRange(Buffer *buffer, int64_t pos)
 {
     bool result = ((pos >= 0) && (pos < buffer->count));
-    return result;
-}
-
-static inline uint8_t
-ReadBufferByte(Buffer *buffer, int64_t pos)
-{
-    uint8_t result = 0;
-    if (IsInBufferRange(buffer, pos))
-    {
-        result = buffer->text[pos];
-    }
     return result;
 }
 
@@ -152,26 +144,25 @@ BufferRange(Buffer *buffer)
 }
 
 static inline uint8_t
-Peek(Buffer *buffer, int64_t index)
+ReadBufferByte(Buffer *buffer, int64_t pos)
 {
     uint8_t result = 0;
-    if ((index >= 0) &&
-        (index < buffer->count))
+    if (IsInBufferRange(buffer, pos))
     {
-        result = buffer->text[index];
+        result = buffer->text[pos];
     }
     return result;
 }
 
 static inline int64_t
-PeekNewline(Buffer *buffer, int64_t index)
+PeekNewline(Buffer *buffer, int64_t pos)
 {
-    if (Peek(buffer, index + 0) == '\r' &&
-        Peek(buffer, index + 1) == '\n')
+    if (ReadBufferByte(buffer, pos + 0) == '\r' &&
+        ReadBufferByte(buffer, pos + 1) == '\n')
     {
         return 2;
     }
-    if (Peek(buffer, index) == '\n')
+    if (ReadBufferByte(buffer, pos) == '\n')
     {
         return 1;
     }
@@ -179,38 +170,71 @@ PeekNewline(Buffer *buffer, int64_t index)
 }
 
 static inline int64_t
-PeekNewlineBackward(Buffer *buffer, int64_t index)
+PeekNewlineBackward(Buffer *buffer, int64_t pos)
 {
-    if (Peek(buffer, index - 0) == '\n' &&
-        Peek(buffer, index - 1) == '\r')
+    if (ReadBufferByte(buffer, pos - 0) == '\n' &&
+        ReadBufferByte(buffer, pos - 1) == '\r')
     {
         return 2;
     }
-    if (Peek(buffer, index) == '\n')
+    if (ReadBufferByte(buffer, pos) == '\n')
     {
         return 1;
     }
     return 0;
+}
+
+static inline int64_t
+ScanWordEndForward(Buffer *buffer, int64_t pos)
+{
+    bool skipped_whitespace = false;
+    if (IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    {
+        skipped_whitespace = true;
+        while (IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+        {
+            pos += 1;
+            if (ReadBufferByte(buffer, pos) == '\n')
+            {
+                return pos;
+            }
+        }
+    }
+    if (IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
+    {
+        while (IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
+        {
+            pos += 1;
+        }
+    }
+    else if (!skipped_whitespace)
+    {
+        while (!IsAlphanumericAscii(ReadBufferByte(buffer, pos)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+        {
+            pos += 1;
+        }
+    }
+    return pos;
 }
 
 static inline int64_t
 ScanWordForward(Buffer *buffer, int64_t pos)
 {
-    if (IsAlphanumericAscii(Peek(buffer, pos)))
+    if (IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
     {
-        while (IsAlphanumericAscii(Peek(buffer, pos)))
+        while (IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
         {
             pos += 1;
         }
     }
     else
     {
-        while (!IsAlphanumericAscii(Peek(buffer, pos)) && !IsWhitespaceAscii(Peek(buffer, pos)))
+        while (!IsAlphanumericAscii(ReadBufferByte(buffer, pos)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
         {
             pos += 1;
         }
     }
-    while (IsWhitespaceAscii(Peek(buffer, pos)))
+    while (IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
         pos += 1;
     }
@@ -220,20 +244,20 @@ ScanWordForward(Buffer *buffer, int64_t pos)
 static inline int64_t
 ScanWordBackward(Buffer *buffer, int64_t pos)
 {
-    while (IsWhitespaceAscii(Peek(buffer, pos - 1)))
+    while (IsWhitespaceAscii(ReadBufferByte(buffer, pos - 1)))
     {
         pos -= 1;
     }
-    if (IsAlphanumericAscii(Peek(buffer, pos - 1)))
+    if (IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)))
     {
-        while (IsAlphanumericAscii(Peek(buffer, pos - 1)))
+        while (IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)))
         {
             pos -= 1;
         }
     }
     else
     {
-        while (!IsAlphanumericAscii(Peek(buffer, pos - 1)) && !IsWhitespaceAscii(Peek(buffer, pos - 1)))
+        while (!IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos - 1)))
         {
             pos -= 1;
         }
