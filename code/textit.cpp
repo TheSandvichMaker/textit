@@ -24,6 +24,20 @@ FindCommand(String name)
 }
 
 static inline void
+CMD_EnterTextMode(EditorState *editor)
+{
+    editor->edit_mode = EditMode_Text;
+}
+REGISTER_COMMAND(CMD_EnterTextMode);
+
+static inline void
+CMD_EnterCommandMode(EditorState *editor)
+{
+    editor->edit_mode = EditMode_Command;
+}
+REGISTER_COMMAND(CMD_EnterCommandMode);
+
+static inline void
 CMD_MoveLeft(EditorState *editor)
 {
     View *view = editor->open_view;
@@ -38,6 +52,22 @@ CMD_MoveRight(EditorState *editor)
     MoveCursorRelative(view, MakeV2i(1, 0));
 }
 REGISTER_COMMAND(CMD_MoveRight);
+
+static inline void
+CMD_MoveDown(EditorState *editor)
+{
+    View *view = editor->open_view;
+    MoveCursorRelative(view, MakeV2i(0, 1));
+}
+REGISTER_COMMAND(CMD_MoveDown);
+
+static inline void
+CMD_MoveUp(EditorState *editor)
+{
+    View *view = editor->open_view;
+    MoveCursorRelative(view, MakeV2i(0, -1));
+}
+REGISTER_COMMAND(CMD_MoveUp);
 
 static inline void
 CMD_MoveLeftIdentifier(EditorState *editor)
@@ -66,12 +96,79 @@ CMD_MoveRightIdentifier(EditorState *editor)
 REGISTER_COMMAND(CMD_MoveRightIdentifier);
 
 static inline void
-LoadDefaultBindings(BindingMap *bindings)
+CMD_WriteText(EditorState *editor, String text)
 {
-    bindings->map[PlatformInputCode_Left].regular = FindCommand("CMD_MoveLeft"_str);
-    bindings->map[PlatformInputCode_Right].regular = FindCommand("CMD_MoveRight"_str);
-    bindings->map[PlatformInputCode_Left].ctrl = FindCommand("CMD_MoveLeftIdentifier"_str);
-    bindings->map[PlatformInputCode_Right].ctrl = FindCommand("CMD_MoveRightIdentifier"_str);
+    View *view = editor->open_view;
+    Buffer *buffer = view->buffer;
+    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+
+    uint64_t start_ordinal = GetCurrentUndoOrdinal(buffer);
+    bool should_merge = false;
+    for (size_t i = 0; i < text.size; i += 1)
+    {
+        if (text.data[0] != '\n')
+        {
+            UndoNode *last_undo = GetCurrentUndoNode(buffer);
+
+            String last_text = last_undo->forward;
+            if ((last_undo->pos == loc.pos - 1) &&
+                (last_text.size > 0))
+            {
+                if ((text.data[0] == ' ') &&
+                    ((last_text.data[0] == ' ') ||
+                     IsValidIdentifierAscii(last_text.data[0])))
+                {
+                    should_merge = true;
+                }
+                else if (IsValidIdentifierAscii(text.data[0]) &&
+                         IsValidIdentifierAscii(last_text.data[0]))
+                {
+                    should_merge = true;
+                }
+            }
+        }
+    }
+    if (text.data[0] == '\n' || IsPrintableAscii(text.data[0]) || IsUtf8Byte(text.data[0]))
+    {
+        int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), text);
+        SetCursorPos(view, pos);
+    }
+    if (should_merge)
+    {
+        uint64_t end_ordinal = GetCurrentUndoOrdinal(buffer);
+        MergeUndoHistory(buffer, start_ordinal, end_ordinal);
+    }
+}
+REGISTER_COMMAND(CMD_WriteText);
+
+static inline void
+LoadDefaultBindings()
+{
+    BindingMap *command = &editor_state->bindings[EditMode_Command];
+    command->text_command = nullptr;
+    command->map[PlatformInputCode_Left].regular  = FindCommand("CMD_MoveLeft"_str);
+    command->map[PlatformInputCode_Right].regular = FindCommand("CMD_MoveRight"_str);
+    command->map[PlatformInputCode_Up].regular    = FindCommand("CMD_MoveUp"_str);
+    command->map[PlatformInputCode_Down].regular  = FindCommand("CMD_MoveDown"_str);
+    command->map[PlatformInputCode_Left].ctrl     = FindCommand("CMD_MoveLeftIdentifier"_str);
+    command->map[PlatformInputCode_Right].ctrl    = FindCommand("CMD_MoveRightIdentifier"_str);
+    command->map['H'].regular                     = FindCommand("CMD_MoveLeft"_str);
+    command->map['J'].regular                     = FindCommand("CMD_MoveDown"_str);
+    command->map['K'].regular                     = FindCommand("CMD_MoveUp"_str);
+    command->map['L'].regular                     = FindCommand("CMD_MoveRight"_str);
+    command->map['W'].regular                     = FindCommand("CMD_MoveRightIdentifier"_str);
+    command->map['B'].regular                     = FindCommand("CMD_MoveLeftIdentifier"_str);
+    command->map['I'].regular                     = FindCommand("CMD_EnterTextMode"_str);
+
+    BindingMap *text = &editor_state->bindings[EditMode_Text];
+    text->text_command = FindCommand("CMD_WriteText"_str);
+    text->map[PlatformInputCode_Left].regular     = FindCommand("CMD_MoveLeft"_str);
+    text->map[PlatformInputCode_Right].regular    = FindCommand("CMD_MoveRight"_str);
+    text->map[PlatformInputCode_Up].regular       = FindCommand("CMD_MoveUp"_str);
+    text->map[PlatformInputCode_Down].regular     = FindCommand("CMD_MoveDown"_str);
+    text->map[PlatformInputCode_Left].ctrl        = FindCommand("CMD_MoveLeftIdentifier"_str);
+    text->map[PlatformInputCode_Right].ctrl       = FindCommand("CMD_MoveRightIdentifier"_str);
+    text->map[PlatformInputCode_Escape].regular   = FindCommand("CMD_EnterCommandMode"_str);
 }
 
 static inline StringMap *
@@ -254,22 +351,25 @@ HandleViewEvents(View *view)
 
     static bool last_was_non_alpha = false;
     for (PlatformEvent *event = nullptr;
-         platform->NextEvent(&event, PlatformEventFilter_Text|PlatformEventFilter_KeyDown|PlatformEventFilter_Tick);
+         platform->NextEvent(&event, PlatformEventFilter_ANY);
          )
     {
+        BindingMap *bindings = &editor_state->bindings[editor_state->edit_mode];
+
         BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
-        if (event->type == PlatformEvent_Text)
+        if ((event->type == PlatformEvent_Text) && bindings->text_command)
         {
             String text = MakeString(event->text_length, event->text);
-            WriteText(view, text);
+            bindings->text_command->text_proc(editor_state, text);
         }
-        else
+        else if (MatchFilter(event->type, PlatformEventFilter_Input) &&
+                 event->pressed)
         {
             bool ctrl_down = event->ctrl_down;
             bool shift_down = event->shift_down;
             bool ctrl_shift_down = ctrl_down && shift_down;
 
-            Binding *binding = &editor_state->bindings.map[event->input_code];
+            Binding *binding = &bindings->map[event->input_code];
             Command *command = binding->regular;
             if (ctrl_shift_down)
             {
@@ -330,44 +430,6 @@ HandleViewEvents(View *view)
                         }
                     } break;
 
-                    case PlatformInputCode_Left:
-                    {
-                        if (ctrl_down)
-                        {
-                            int64_t pos = ScanWordBackward(buffer, loc.pos);
-                            pos = ClampToRange(pos, loc.line_range);
-                            SetCursorPos(view, pos);
-                        }
-                        else
-                        {
-                            MoveCursorRelative(view, MakeV2i(-1, 0));
-                        }
-                    } break;
-
-                    case PlatformInputCode_Right:
-                    {
-                        if (ctrl_down)
-                        {
-                            int64_t pos = ScanWordForward(buffer, loc.pos);
-                            pos = ClampToRange(pos, loc.line_range);
-                            SetCursorPos(view, pos);
-                        }
-                        else
-                        {
-                            MoveCursorRelative(view, MakeV2i(1, 0));
-                        }
-                    } break;
-
-                    case PlatformInputCode_Up:
-                    {
-                        MoveCursorRelative(view, MakeV2i(0, -1));
-                    } break;
-
-                    case PlatformInputCode_Down:
-                    {
-                        MoveCursorRelative(view, MakeV2i(0, 1));
-                    } break;
-
                     case 'Z':
                     {
                         if (ctrl_down)
@@ -418,7 +480,8 @@ HandleViewEvents(View *view)
         }
 
         BeginRender();
-        DrawView(editor_state->open_view);
+        view->viewport = render_state->viewport;
+        DrawView(view);
         EndRender();
     }
 }
@@ -629,7 +692,7 @@ AppUpdateAndRender(Platform *platform_)
         InitializeRenderState(&editor_state->transient_arena, &platform->backbuffer, &editor_state->font);
 
         LoadDefaultTheme();
-        LoadDefaultBindings(&editor_state->bindings);
+        LoadDefaultBindings();
 
         editor_state->open_buffer = OpenFileIntoNewBuffer(StringLiteral("test_file.txt"));
         editor_state->open_view = NewView(editor_state->open_buffer);
@@ -639,9 +702,6 @@ AppUpdateAndRender(Platform *platform_)
 
     editor_state->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);
     editor_state->text_mouse_p = editor_state->screen_mouse_p / GlyphDim(&editor_state->font);
-
-    View *view = editor_state->open_view;
-    view->viewport = render_state->viewport;
 
     HandleViewEvents(editor_state->open_view);
 

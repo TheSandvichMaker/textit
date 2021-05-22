@@ -342,8 +342,8 @@ BeginRender(void)
 
     Bitmap *target = render_state->target;
     Font *font = render_state->fonts[Layer_Text];
-    int64_t viewport_w = (target->w + font->glyph_w - 1) / font->glyph_w;
-    int64_t viewport_h = (target->h + font->glyph_h - 1) / font->glyph_h;
+    int64_t viewport_w = (target->w) / font->glyph_w;
+    int64_t viewport_h = (target->h) / font->glyph_h;
     render_state->viewport = MakeRect2iMinDim(0, 0, viewport_w, viewport_h);
 
     render_state->cb_command_at = 0;

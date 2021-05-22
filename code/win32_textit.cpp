@@ -1146,7 +1146,8 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
                 case WM_SYSKEYDOWN:
                 {
 					int vk_code = (int)message.wParam;
-					bool pressed = (message.lParam & (1ull << 31)) == 0;
+                    bool pressed = (message.message == WM_KEYDOWN ||
+                                    message.message == WM_SYSKEYDOWN);
                     bool alt_down = (message.lParam & (1 << 29)) != 0;
                     bool ctrl_down = !!(GetKeyState(VK_CONTROL) & 0xFF00);
                     bool shift_down = !!(GetKeyState(VK_SHIFT) & 0xFF00);

@@ -168,7 +168,7 @@ enum PlatformEventType
 };
 
 typedef uint32_t PlatformEventFilter;
-enum PlatformEventFilter_ENUM
+enum PlatformEventFilter_ENUM : PlatformEventFilter
 {
     PlatformEventFilter_MouseUp   = 1 << 0,
     PlatformEventFilter_MouseDown = 1 << 1,
@@ -176,6 +176,7 @@ enum PlatformEventFilter_ENUM
     PlatformEventFilter_KeyUp     = 1 << 2,
     PlatformEventFilter_KeyDown   = 1 << 3,
     PlatformEventFilter_Keyboard  = PlatformEventFilter_KeyUp|PlatformEventFilter_KeyDown,
+    PlatformEventFilter_Input     = PlatformEventFilter_Mouse|PlatformEventFilter_Keyboard,
     PlatformEventFilter_Text      = 1 << 4,
     PlatformEventFilter_Tick      = 1 << 5,
     PlatformEventFilter_ANY       = 0xFFFFFFFF,

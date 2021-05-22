@@ -188,10 +188,12 @@ static inline int64_t
 ScanWordEndForward(Buffer *buffer, int64_t pos)
 {
     bool skipped_whitespace = false;
-    if (IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    if (IsInBufferRange(buffer, pos) &&
+        IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
         skipped_whitespace = true;
-        while (IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+        while (IsInBufferRange(buffer, pos) &&
+               IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
         {
             pos += 1;
             if (ReadBufferByte(buffer, pos) == '\n')
@@ -200,16 +202,18 @@ ScanWordEndForward(Buffer *buffer, int64_t pos)
             }
         }
     }
-    if (IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
+    if (IsInBufferRange(buffer, pos) &&
+        IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
     {
-        while (IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
+        while (IsInBufferRange(buffer, pos) && IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
         {
             pos += 1;
         }
     }
     else if (!skipped_whitespace)
     {
-        while (!IsAlphanumericAscii(ReadBufferByte(buffer, pos)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+        while (IsInBufferRange(buffer, pos) &&
+               !IsAlphanumericAscii(ReadBufferByte(buffer, pos)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
         {
             pos += 1;
         }
@@ -220,21 +224,25 @@ ScanWordEndForward(Buffer *buffer, int64_t pos)
 static inline int64_t
 ScanWordForward(Buffer *buffer, int64_t pos)
 {
-    if (IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
+    if (IsInBufferRange(buffer, pos) &&
+        IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
     {
-        while (IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
+        while (IsInBufferRange(buffer, pos) &&
+               IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
         {
             pos += 1;
         }
     }
     else
     {
-        while (!IsAlphanumericAscii(ReadBufferByte(buffer, pos)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+        while (IsInBufferRange(buffer, pos) &&
+               !IsAlphanumericAscii(ReadBufferByte(buffer, pos)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
         {
             pos += 1;
         }
     }
-    while (IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    while (IsInBufferRange(buffer, pos) &&
+           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
         pos += 1;
     }
@@ -244,20 +252,24 @@ ScanWordForward(Buffer *buffer, int64_t pos)
 static inline int64_t
 ScanWordBackward(Buffer *buffer, int64_t pos)
 {
-    while (IsWhitespaceAscii(ReadBufferByte(buffer, pos - 1)))
+    while (IsInBufferRange(buffer, pos) &&
+           IsWhitespaceAscii(ReadBufferByte(buffer, pos - 1)))
     {
         pos -= 1;
     }
-    if (IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)))
+    if (IsInBufferRange(buffer, pos) &&
+        IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)))
     {
-        while (IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)))
+        while (IsInBufferRange(buffer, pos) &&
+               IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)))
         {
             pos -= 1;
         }
     }
     else
     {
-        while (!IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos - 1)))
+        while (IsInBufferRange(buffer, pos) &&
+               !IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos - 1)))
         {
             pos -= 1;
         }
@@ -350,8 +362,7 @@ UndoOnce(Buffer *buffer)
         undo->at = node->parent;
 
         Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
-        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
-        pos = node->pos;
+        pos = BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
 
         if (node->parent->ordinal == node->ordinal)
         {
@@ -380,8 +391,7 @@ RedoOnce(Buffer *buffer)
         undo->at = node;
 
         Range remove_range = MakeRangeStartLength(node->pos, node->backward.size);
-        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
-        pos = node->pos;
+        pos = BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
 
         UndoNode *next_node = GetNextChild(node);
         if (next_node && next_node->ordinal == node->ordinal)
