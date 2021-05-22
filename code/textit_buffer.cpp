@@ -1,7 +1,7 @@
 static inline void
 PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
 {
-    UndoState *undo = &buffer->undo_state;
+    auto undo = &buffer->undo;
     UndoNode *node = PushStruct(&buffer->arena, UndoNode);
 
     node->parent = undo->at;
@@ -20,16 +20,16 @@ PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
 }
 
 static inline UndoNode *
-GetCurrentUndoNode(Buffer *buffer)
+CurrentUndoNode(Buffer *buffer)
 {
-    UndoState *undo = &buffer->undo_state;
+    auto undo = &buffer->undo;
     return undo->at;
 }
 
 static inline void
 SelectNextUndoBranch(Buffer *buffer)
 {
-    UndoNode *node = GetCurrentUndoNode(buffer);
+    UndoNode *node = CurrentUndoNode(buffer);
 
     uint32_t child_count = 0;
     for (UndoNode *child = node->first_child;
@@ -43,7 +43,7 @@ SelectNextUndoBranch(Buffer *buffer)
 }
 
 static inline UndoNode *
-GetNextChild(UndoNode *node)
+NextChild(UndoNode *node)
 {
     UndoNode *result = node->first_child;
     for (uint32_t i = 0; i < node->selected_branch; i += 1)
@@ -54,16 +54,16 @@ GetNextChild(UndoNode *node)
 }
 
 static inline uint64_t
-GetCurrentUndoOrdinal(Buffer *buffer)
+CurrentUndoOrdinal(Buffer *buffer)
 {
-    return buffer->undo_state.current_ordinal;
+    return buffer->undo.current_ordinal;
 }
 
 static inline void
 MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
 {
     Assert(last_ordinal >= first_ordinal);
-    UndoNode *node = buffer->undo_state.at;
+    UndoNode *node = buffer->undo.at;
     while (node && node->ordinal > last_ordinal)
     {
         node = node->parent;
@@ -73,9 +73,9 @@ MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
         node->ordinal = first_ordinal;
         node = node->parent;
     }
-    if (buffer->undo_state.current_ordinal == last_ordinal)
+    if (buffer->undo.current_ordinal == last_ordinal)
     {
-        buffer->undo_state.current_ordinal = first_ordinal;
+        buffer->undo.current_ordinal = first_ordinal;
     }
 }
 
@@ -123,7 +123,7 @@ NewBuffer(String buffer_name)
 {
     Buffer *result = BootstrapPushStruct(Buffer, arena);
     result->name = PushString(&result->arena, buffer_name);
-    result->undo_state.at = &result->undo_state.root;
+    result->undo.at = &result->undo.root;
     return result;
 }
 
@@ -353,7 +353,7 @@ UndoOnce(Buffer *buffer)
 {
     int64_t pos = -1;
 
-    UndoState *undo = &buffer->undo_state;
+    auto undo = &buffer->undo;
 
     UndoNode *node = undo->at;
     while (node->parent)
@@ -382,9 +382,9 @@ RedoOnce(Buffer *buffer)
 {
     int64_t pos = -1;
 
-    UndoState *undo = &buffer->undo_state;
+    auto undo = &buffer->undo;
     
-    UndoNode *node = GetNextChild(undo->at);
+    UndoNode *node = NextChild(undo->at);
     while (node)
     {
         undo->depth += 1;
@@ -393,7 +393,7 @@ RedoOnce(Buffer *buffer)
         Range remove_range = MakeRangeStartLength(node->pos, node->backward.size);
         pos = BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
 
-        UndoNode *next_node = GetNextChild(node);
+        UndoNode *next_node = NextChild(node);
         if (next_node && next_node->ordinal == node->ordinal)
         {
             node = next_node;

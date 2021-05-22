@@ -6,140 +6,8 @@
 #include "textit_render.cpp"
 #include "textit_buffer.cpp"
 #include "textit_view.cpp"
-
-static inline Command *
-FindCommand(String name)
-{
-    Command *result = NullCommand();
-    for (size_t i = 0; i < command_list->command_count; i += 1)
-    {
-        Command *command = &command_list->commands[i];
-        if (AreEqual(command->name, name))
-        {
-            result = command;
-            break;
-        }
-    }
-    return result;
-}
-
-static inline void
-CMD_EnterTextMode(EditorState *editor)
-{
-    editor->edit_mode = EditMode_Text;
-}
-REGISTER_COMMAND(CMD_EnterTextMode);
-
-static inline void
-CMD_EnterCommandMode(EditorState *editor)
-{
-    editor->edit_mode = EditMode_Command;
-}
-REGISTER_COMMAND(CMD_EnterCommandMode);
-
-static inline void
-CMD_MoveLeft(EditorState *editor)
-{
-    View *view = editor->open_view;
-    MoveCursorRelative(view, MakeV2i(-1, 0));
-}
-REGISTER_COMMAND(CMD_MoveLeft);
-
-static inline void
-CMD_MoveRight(EditorState *editor)
-{
-    View *view = editor->open_view;
-    MoveCursorRelative(view, MakeV2i(1, 0));
-}
-REGISTER_COMMAND(CMD_MoveRight);
-
-static inline void
-CMD_MoveDown(EditorState *editor)
-{
-    View *view = editor->open_view;
-    MoveCursorRelative(view, MakeV2i(0, 1));
-}
-REGISTER_COMMAND(CMD_MoveDown);
-
-static inline void
-CMD_MoveUp(EditorState *editor)
-{
-    View *view = editor->open_view;
-    MoveCursorRelative(view, MakeV2i(0, -1));
-}
-REGISTER_COMMAND(CMD_MoveUp);
-
-static inline void
-CMD_MoveLeftIdentifier(EditorState *editor)
-{
-    View *view = editor->open_view;
-    Buffer *buffer = view->buffer;
-
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
-    int64_t pos = ScanWordBackward(buffer, loc.pos);
-    pos = ClampToRange(pos, loc.line_range);
-    SetCursorPos(view, pos);
-}
-REGISTER_COMMAND(CMD_MoveLeftIdentifier);
-
-static inline void
-CMD_MoveRightIdentifier(EditorState *editor)
-{
-    View *view = editor->open_view;
-    Buffer *buffer = view->buffer;
-
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
-    int64_t pos = ScanWordForward(buffer, loc.pos);
-    pos = ClampToRange(pos, loc.line_range);
-    SetCursorPos(view, pos);
-}
-REGISTER_COMMAND(CMD_MoveRightIdentifier);
-
-static inline void
-CMD_WriteText(EditorState *editor, String text)
-{
-    View *view = editor->open_view;
-    Buffer *buffer = view->buffer;
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
-
-    uint64_t start_ordinal = GetCurrentUndoOrdinal(buffer);
-    bool should_merge = false;
-    for (size_t i = 0; i < text.size; i += 1)
-    {
-        if (text.data[0] != '\n')
-        {
-            UndoNode *last_undo = GetCurrentUndoNode(buffer);
-
-            String last_text = last_undo->forward;
-            if ((last_undo->pos == loc.pos - 1) &&
-                (last_text.size > 0))
-            {
-                if ((text.data[0] == ' ') &&
-                    ((last_text.data[0] == ' ') ||
-                     IsValidIdentifierAscii(last_text.data[0])))
-                {
-                    should_merge = true;
-                }
-                else if (IsValidIdentifierAscii(text.data[0]) &&
-                         IsValidIdentifierAscii(last_text.data[0]))
-                {
-                    should_merge = true;
-                }
-            }
-        }
-    }
-    if (text.data[0] == '\n' || IsPrintableAscii(text.data[0]) || IsUtf8Byte(text.data[0]))
-    {
-        int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), text);
-        SetCursorPos(view, pos);
-    }
-    if (should_merge)
-    {
-        uint64_t end_ordinal = GetCurrentUndoOrdinal(buffer);
-        MergeUndoHistory(buffer, start_ordinal, end_ordinal);
-    }
-}
-REGISTER_COMMAND(CMD_WriteText);
+#include "textit_command.cpp"
+#include "textit_base_commands.cpp"
 
 static inline void
 LoadDefaultBindings()
@@ -159,6 +27,9 @@ LoadDefaultBindings()
     command->map['W'].regular                     = FindCommand("CMD_MoveRightIdentifier"_str);
     command->map['B'].regular                     = FindCommand("CMD_MoveLeftIdentifier"_str);
     command->map['I'].regular                     = FindCommand("CMD_EnterTextMode"_str);
+    command->map['X'].regular                     = FindCommand("CMD_DeleteChar"_str);
+    command->map['U'].regular                     = FindCommand("CMD_UndoOnce"_str);
+    command->map['R'].regular                     = FindCommand("CMD_RedoOnce"_str);
 
     BindingMap *text = &editor_state->bindings[EditMode_Text];
     text->text_command = FindCommand("CMD_WriteText"_str);
@@ -169,6 +40,10 @@ LoadDefaultBindings()
     text->map[PlatformInputCode_Left].ctrl        = FindCommand("CMD_MoveLeftIdentifier"_str);
     text->map[PlatformInputCode_Right].ctrl       = FindCommand("CMD_MoveRightIdentifier"_str);
     text->map[PlatformInputCode_Escape].regular   = FindCommand("CMD_EnterCommandMode"_str);
+    text->map[PlatformInputCode_Back].regular     = FindCommand("CMD_BackspaceChar"_str);
+    text->map[PlatformInputCode_Back].ctrl        = FindCommand("CMD_BackspaceWord"_str);
+    text->map[PlatformInputCode_Delete].regular   = FindCommand("CMD_DeleteChar"_str);
+    text->map[PlatformInputCode_Delete].ctrl      = FindCommand("CMD_DeleteWord"_str);
 }
 
 static inline StringMap *
@@ -272,6 +147,7 @@ LoadDefaultTheme()
     SetThemeColor("text_background"_str, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_foreground"_str, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_background"_str, MakeColor(192, 255, 128));
+    SetThemeColor("filebar_text_background_text_mode"_str, MakeColor(255, 192, 128));
     SetThemeColor("unrenderable_text_foreground"_str, MakeColor(255, 255, 255));
     SetThemeColor("unrenderable_text_background"_str, MakeColor(192, 0, 0));
 }
@@ -349,7 +225,6 @@ HandleViewEvents(View *view)
 {
     Buffer *buffer = view->buffer;
 
-    static bool last_was_non_alpha = false;
     for (PlatformEvent *event = nullptr;
          platform->NextEvent(&event, PlatformEventFilter_ANY);
          )
@@ -387,83 +262,6 @@ HandleViewEvents(View *view)
             if (command)
             {
                 command->proc(editor_state);
-            }
-            else
-            {
-                switch (event->input_code)
-                {
-                    case PlatformInputCode_Back:
-                    {
-                        if (ctrl_down)
-                        {
-                            int64_t start_pos = loc.pos;
-                            int64_t end_pos = ScanWordBackward(buffer, loc.pos);
-                            int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
-                            SetCursorPos(view, final_pos);
-                        }
-                        else
-                        {
-                            int64_t newline_length = PeekNewlineBackward(buffer, loc.pos - 1);
-                            int64_t to_delete = 1;
-                            if (newline_length)
-                            {
-                                to_delete = newline_length;
-                            }
-                            int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos - to_delete, to_delete), {});
-                            SetCursorPos(view, pos);
-                        }
-                    } break;
-
-                    case PlatformInputCode_Delete:
-                    {
-                        if (ctrl_down)
-                        {
-                            int64_t start_pos = loc.pos;
-                            int64_t end_pos = ScanWordEndForward(buffer, loc.pos);
-                            int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
-                            SetCursorPos(view, final_pos);
-                        }
-                        else
-                        {
-                            int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos, 1), {});
-                            SetCursorPos(view, pos);
-                        }
-                    } break;
-
-                    case 'Z':
-                    {
-                        if (ctrl_down)
-                        {
-                            int64_t pos = UndoOnce(buffer);
-                            if (pos >= 0)
-                            {
-                                SetCursorPos(view, pos);
-                            }
-                        }
-                    } break;
-
-                    case 'R':
-                    {
-                        if (ctrl_down)
-                        {
-                            int64_t pos = RedoOnce(buffer);
-                            if (pos >= 0)
-                            {
-                                SetCursorPos(view, pos);
-                            }
-                        }
-                    } break;
-
-                    case 'B':
-                    {
-                        if (ctrl_down)
-                        {
-                            SelectNextUndoBranch(buffer);
-                        }
-                    } break;
-
-                    INCOMPLETE_SWITCH
-                }
             }
         }
 
@@ -631,7 +429,16 @@ DrawView(View *view)
     Color text_foreground = GetThemeColor("text_foreground"_str);
     Color text_background = GetThemeColor("text_background"_str);
     Color filebar_text_foreground = GetThemeColor("filebar_text_foreground"_str);
-    Color filebar_text_background = GetThemeColor("filebar_text_background"_str);
+
+    String filebar_text_background_str = "filebar_text_background"_str;
+    switch (editor_state->edit_mode)
+    {
+        case EditMode_Text:
+        {
+            filebar_text_background_str = "filebar_text_background_text_mode"_str;
+        } break;
+    }
+    Color filebar_text_background = GetThemeColor(filebar_text_background_str);
 
     int64_t width = GetWidth(bounds);
 
@@ -648,8 +455,8 @@ DrawView(View *view)
 
     V2i at_p = MakeV2i(right.min.x + 2, right.max.y - 2);
 
-    UndoNode *current = GetCurrentUndoNode(buffer);
-    DrawLine(at_p, FormatTempString("At level: %llu", buffer->undo_state.depth), text_foreground, text_background); at_p.y -= 1;
+    UndoNode *current = CurrentUndoNode(buffer);
+    DrawLine(at_p, FormatTempString("At level: %llu", buffer->undo.depth), text_foreground, text_background); at_p.y -= 1;
     DrawLine(at_p, FormatTempString("Ordinal: %llu, Pos: %lld", current->ordinal, current->pos), text_foreground, text_background); at_p.y -= 1;
     DrawLine(at_p, FormatTempString("Forward: \"%.*s\"", StringExpand(current->forward)), text_foreground, text_background); at_p.y -= 1;
     DrawLine(at_p, FormatTempString("Backward: \"%.*s\"", StringExpand(current->backward)), text_foreground, text_background); at_p.y -= 1;
@@ -704,6 +511,7 @@ AppUpdateAndRender(Platform *platform_)
     editor_state->text_mouse_p = editor_state->screen_mouse_p / GlyphDim(&editor_state->font);
 
     HandleViewEvents(editor_state->open_view);
+    editor_state->edit_mode = editor_state->next_edit_mode;
 
     if (editor_state->debug_delay_frame_count > 0)
     {

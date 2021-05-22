@@ -1,6 +1,8 @@
 #ifndef TEXTIT_COMMAND_HPP
 #define TEXTIT_COMMAND_HPP
 
+#define MAX_COMMAND_COUNT 1024
+
 struct EditorState;
 
 typedef void (*CommandProc)(EditorState *editor);
@@ -31,7 +33,7 @@ NullCommand()
 struct CommandList
 {
     uint32_t command_count;
-    Command commands[1024];
+    Command commands[MAX_COMMAND_COUNT*4 / 3];
 };
 GLOBAL_STATE(CommandList, command_list);
 

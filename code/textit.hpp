@@ -71,6 +71,7 @@ struct EditorState
     Theme theme;
 
     EditMode edit_mode;
+    EditMode next_edit_mode;
     BindingMap bindings[EditMode_COUNT];
 
     Font font;
@@ -81,10 +82,29 @@ struct EditorState
     V2i screen_mouse_p;
     V2i text_mouse_p;
 
+    uint64_t enter_text_mode_undo_ordinal;
+
     int debug_delay;
     int debug_delay_frame_count;
 };
 static EditorState *editor_state;
+
+static inline View *
+CurrentView(EditorState *editor)
+{
+    return editor->open_view;
+}
+
+static inline Buffer *
+CurrentBuffer(EditorState *editor)
+{
+    Buffer *result = nullptr;
+    if (editor->open_view)
+    {
+        result = editor->open_view->buffer;
+    }
+    return result;
+}
 
 static inline void SetDebugDelay(int milliseconds, int frame_count);
 

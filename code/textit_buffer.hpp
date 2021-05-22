@@ -41,6 +41,11 @@ struct UndoState
     UndoNode *at;
 };
 
+struct BufferCursor
+{
+    int64_t pos;
+};
+
 #define TEXTIT_BUFFER_SIZE Megabytes(1)
 struct Buffer
 {
@@ -49,7 +54,13 @@ struct Buffer
 
     LineEndKind line_end;
 
-    UndoState undo_state;
+    struct
+    {
+        uint64_t current_ordinal;
+        uint64_t depth;
+        UndoNode root;
+        UndoNode *at;
+    } undo;
 
     int64_t count;
     uint8_t text[TEXTIT_BUFFER_SIZE];
