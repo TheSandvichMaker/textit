@@ -82,6 +82,7 @@ struct Buffer
     } undo;
 
     BufferCursor cursor;
+    BufferCursor mark;
 
     int64_t count;
     uint8_t text[TEXTIT_BUFFER_SIZE];

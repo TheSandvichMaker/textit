@@ -5,26 +5,42 @@
 
 struct EditorState;
 
+enum CommandKind
+{
+    Command_Basic,
+    Command_Text,
+    Command_Movement,
+};
+
 typedef void (*CommandProc)(EditorState *editor);
-#define COMMAND_PROC(name)                                                                  \
-    static void Paste(CMD_, name)(EditorState *editor);                                     \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(StringLiteral(#name), Paste(CMD_, name)); \
+#define COMMAND_PROC(name, ...)                                                                                    \
+    static void Paste(CMD_, name)(EditorState *editor);                                                       \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), Paste(CMD_, name), ##__VA_ARGS__);    \
     static void Paste(CMD_, name)(EditorState *editor)
 
 typedef void (*TextCommandProc)(EditorState *editor, String text);
-#define TEXT_COMMAND_PROC(name)                                                             \
-    static void Paste(CMD_, name)(EditorState *editor, String text);                        \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(StringLiteral(#name), Paste(CMD_, name)); \
+#define TEXT_COMMAND_PROC(name)                                                                               \
+    static void Paste(CMD_, name)(EditorState *editor, String text);                                          \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), Paste(CMD_, name));     \
     static void Paste(CMD_, name)(EditorState *editor, String text)
+
+typedef Range (*MovementProc)(EditorState *editor);
+#define MOVEMENT_PROC(name)                                                                               \
+    static Range Paste(MOV_, name)(EditorState *editor);                                          \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), Paste(MOV_, name)); \
+    static Range Paste(MOV_, name)(EditorState *editor)
 
 struct Command
 {
+    CommandKind kind;
     String name;
+    String description;
     union
     {
         void *generic;
-        CommandProc proc;
-        TextCommandProc text_proc;
+        CommandProc command;
+        TextCommandProc text;
+        MovementProc movement;
     };
 };
 
@@ -33,7 +49,7 @@ CMD_Stub(EditorState *)
 {
     platform->DebugPrint("Someone called the stub command.\n");
 }
-static Command null_command_ = { StringLiteral("CMD_Stub"), CMD_Stub };
+static Command null_command_ = { Command_Basic, "Stub"_str, "It's the stub command, if this gets called somebody did something wrong"_str, CMD_Stub };
 static inline Command *
 NullCommand()
 {
@@ -51,13 +67,15 @@ static inline Command *FindCommand(String name);
 
 struct CommandRegisterHelper
 {
-    CommandRegisterHelper(String name, void *proc)
+    CommandRegisterHelper(CommandKind kind, String name, void *proc, String description = ""_str)
     {
         Assert(FindCommand(name) == NullCommand());
         if (command_list->command_count < ArrayCount(command_list->commands))
         {
             Command *command = &command_list->commands[command_list->command_count++];
             command->name = name;
+            command->description = description;
+            command->kind = kind;
             command->generic = proc;
         }
         else

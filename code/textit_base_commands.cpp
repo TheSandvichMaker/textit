@@ -1,10 +1,12 @@
-COMMAND_PROC(EnterTextMode)
+COMMAND_PROC(EnterTextMode,
+             "Enter Text Input Mode"_str)
 {
     editor->next_edit_mode = EditMode_Text;
     editor->enter_text_mode_undo_ordinal = CurrentUndoOrdinal(CurrentBuffer(editor));
 }
 
-COMMAND_PROC(EnterCommandMode)
+COMMAND_PROC(EnterCommandMode,
+             "Enter Command Mode"_str)
 {
     editor->next_edit_mode = EditMode_Command;
 
@@ -13,16 +15,26 @@ COMMAND_PROC(EnterCommandMode)
     MergeUndoHistory(buffer, editor->enter_text_mode_undo_ordinal, current_undo_ordinal);
 }
 
-COMMAND_PROC(MoveLeft)
+MOVEMENT_PROC(MoveLeft)
 {
     View *view = CurrentView(editor);
-    MoveCursorRelative(view, MakeV2i(-1, 0));
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = GetCursor(buffer);
+    Range line_range = EncloseLine(buffer, pos);
+    pos = ClampToRange(pos - 1, line_range);
+    return MakeRange(pos);
 }
 
-COMMAND_PROC(MoveRight)
+MOVEMENT_PROC(MoveRight)
 {
     View *view = CurrentView(editor);
-    MoveCursorRelative(view, MakeV2i(1, 0));
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = GetCursor(buffer);
+    Range line_range = EncloseLine(buffer, pos);
+    pos = ClampToRange(pos + 1, line_range);
+    return MakeRange(pos);
 }
 
 COMMAND_PROC(MoveDown)
@@ -37,30 +49,30 @@ COMMAND_PROC(MoveUp)
     MoveCursorRelative(view, MakeV2i(0, -1));
 }
 
-COMMAND_PROC(MoveLeftIdentifier)
+MOVEMENT_PROC(MoveLeftIdentifier)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = CursorPos(buffer);
+    int64_t pos = GetCursor(buffer);
     Range line_range = EncloseLine(buffer, pos);
 
-    pos = ScanWordBackward(buffer, pos);
-    pos = ClampToRange(pos, line_range);
-    SetCursorPos(view, pos);
+    Range result = ScanWordBackward(buffer, pos);
+    result = ClampRange(result, line_range);
+    return result;
 }
 
-COMMAND_PROC(MoveRightIdentifier)
+MOVEMENT_PROC(MoveRightIdentifier)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = CursorPos(buffer);
+    int64_t pos = GetCursor(buffer);
     Range line_range = EncloseLine(buffer, pos);
 
-    pos = ScanWordForward(buffer, pos);
-    pos = ClampToRange(pos, line_range);
-    SetCursorPos(view, pos);
+    Range result = ScanWordForward(buffer, pos);
+    result = ClampRange(result, line_range);
+    return result;
 }
 
 COMMAND_PROC(BackspaceChar)
@@ -68,7 +80,7 @@ COMMAND_PROC(BackspaceChar)
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = CursorPos(buffer);
+    int64_t pos = GetCursor(buffer);
     int64_t newline_length = PeekNewlineBackward(buffer, pos - 1);
     int64_t to_delete = 1;
     if (newline_length)
@@ -84,9 +96,9 @@ COMMAND_PROC(BackspaceWord)
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = CursorPos(buffer);
+    int64_t pos = GetCursor(buffer);
     int64_t start_pos = pos;
-    int64_t end_pos = ScanWordBackward(buffer, pos);
+    int64_t end_pos = ScanWordBackward(buffer, pos).end;
     int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
     SetCursorPos(view, final_pos);
 }
@@ -96,7 +108,7 @@ COMMAND_PROC(DeleteChar)
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = CursorPos(buffer);
+    int64_t pos = GetCursor(buffer);
     int64_t newline_length = PeekNewline(buffer, pos);
     int64_t to_delete = 1;
     if (newline_length)
@@ -112,7 +124,7 @@ COMMAND_PROC(DeleteWord)
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = CursorPos(buffer);
+    int64_t pos = GetCursor(buffer);
 
     int64_t start_pos = pos;
     int64_t end_pos = ScanWordEndForward(buffer, pos);
@@ -155,12 +167,27 @@ COMMAND_PROC(SplitWindowVertical)
     SplitWindow(window, WindowSplit_Vert);
 }
 
+COMMAND_PROC(DeleteSelection)
+{
+    Buffer *buffer = CurrentBuffer(editor);
+    Range mark_range = MakeSanitaryRange(buffer->cursor.pos, buffer->mark.pos);
+    mark_range.end += 1;
+    int64_t pos = BufferReplaceRange(buffer, mark_range, ""_str);
+    SetCursor(buffer, pos);
+}
+
+COMMAND_PROC(ChangeSelection)
+{
+    CMD_DeleteSelection(editor);
+    CMD_EnterTextMode(editor);
+}
+
 TEXT_COMMAND_PROC(WriteText)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = CursorPos(buffer);
+    int64_t pos = GetCursor(buffer);
 
     uint64_t start_ordinal = CurrentUndoOrdinal(buffer);
     bool should_merge = false;

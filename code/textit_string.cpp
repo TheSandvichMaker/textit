@@ -54,6 +54,13 @@ IsHorizontalWhitespaceAscii(uint8_t c)
     return result;
 }
 
+static inline bool
+IsVerticalWhitespaceAscii(uint8_t c)
+{
+    bool result ((c == '\r') || (c == '\n'));
+    return result;
+}
+
 //
 // Unicode party
 //
@@ -97,6 +104,32 @@ IsUtf8Byte(uint8_t b)
 {
     return (IsHeadUtf8Byte(b) ||
             IsTrailingUtf8Byte(b));
+}
+
+static inline CharacterClassFlags
+CharacterizeByte(uint8_t c)
+{
+    CharacterClassFlags result = 0;
+    if (IsHorizontalWhitespaceAscii(c)) result |= Character_HorizontalWhitespace;
+    if (IsVerticalWhitespaceAscii(c)) result |= Character_VerticalWhitespace;
+    if (IsAlphabeticAscii(c)) result |= Character_Alphabetic;
+    if (IsNumericAscii(c)) result |= Character_Numeric;
+    if (c == '_') result |= 0x10; // todo: waddup
+    if (IsUtf8Byte(c)) result |= Character_Utf8;
+    return result;
+}
+
+static inline CharacterClassFlags
+CharacterizeByteLoosely(uint8_t c)
+{
+    CharacterClassFlags result = 0;
+    if (IsHorizontalWhitespaceAscii(c)) result |= Character_HorizontalWhitespace;
+    if (IsVerticalWhitespaceAscii(c)) result |= Character_VerticalWhitespace;
+    if (IsAlphabeticAscii(c)) result |= Character_Identifier;
+    if (IsNumericAscii(c)) result |= Character_Identifier;
+    if (c == '_') result |= Character_Identifier; // todo: waddup
+    if (IsUtf8Byte(c)) result |= Character_Utf8;
+    return result;
 }
 
 static inline ParseUtf8Result

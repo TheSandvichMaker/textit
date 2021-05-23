@@ -78,9 +78,7 @@ static inline void
 SetCursorPos(View *view, int64_t pos)
 {
     Buffer *buffer = GetBuffer(view);
-
-    pos = ClampToBufferRange(buffer, pos);
-    buffer->cursor.pos = pos;
+    SetCursor(buffer, pos);
     view->cursor = BufferPosToViewCursor(buffer, pos);
 }
 
@@ -124,5 +122,5 @@ MoveCursorRelative(View *view, V2i delta)
     }
     view->cursor.y = new_cursor.y;
 
-    SetCursorPos(buffer, loc.pos);
+    SetCursor(buffer, loc.pos);
 }

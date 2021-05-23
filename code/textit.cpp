@@ -210,7 +210,6 @@ RecalculateViewBounds(Window *window, Rect2i rect)
     }
 }
 
-
 static inline void
 DrawWindows(Window *window)
 {
@@ -263,6 +262,8 @@ LoadDefaultBindings()
     command->map['U'].regular                     = FindCommand("UndoOnce"_str);
     command->map['R'].ctrl                        = FindCommand("RedoOnce"_str);
     command->map['V'].ctrl                        = FindCommand("SplitWindowVertical"_str);
+    command->map['D'].regular                     = FindCommand("DeleteSelection"_str);
+    command->map['C'].regular                     = FindCommand("ChangeSelection"_str);
 
     BindingMap *text = &editor_state->bindings[EditMode_Text];
     text->text_command = FindCommand("WriteText"_str);
@@ -385,6 +386,7 @@ LoadDefaultTheme()
     SetThemeColor("filebar_text_background_text_mode"_str, MakeColor(255, 192, 128));
     SetThemeColor("unrenderable_text_foreground"_str, MakeColor(255, 255, 255));
     SetThemeColor("unrenderable_text_background"_str, MakeColor(192, 0, 0));
+    SetThemeColor("selection_background"_str, MakeColor(64, 128, 255));
 }
 
 // Ryan's text controls example: https://hatebin.com/ovcwtpsfmj
@@ -468,7 +470,7 @@ HandleViewEvents(View *view)
         if ((event->type == PlatformEvent_Text) && bindings->text_command)
         {
             String text = MakeString(event->text_length, event->text);
-            bindings->text_command->text_proc(editor_state, text);
+            bindings->text_command->text(editor_state, text);
         }
         else if (MatchFilter(event->type, PlatformEventFilter_Input) &&
                  event->pressed)
@@ -479,22 +481,48 @@ HandleViewEvents(View *view)
 
             Binding *binding = &bindings->map[event->input_code];
             Command *command = binding->regular;
-            if (ctrl_shift_down)
+            if (ctrl_shift_down && binding->ctrl_shift)
             {
                 command = binding->ctrl_shift;
             }
-            else if (ctrl_down)
+            else if (ctrl_down && binding->ctrl)
             {
                 command = binding->ctrl;
             }
-            else if (shift_down)
+            else if (shift_down && binding->shift)
             {
                 command = binding->shift;
             }
 
             if (command)
             {
-                command->proc(editor_state);
+                switch (command->kind)
+                {
+                    case Command_Basic:
+                    {
+                        int64_t mark = GetMark(buffer);
+                        command->command(editor_state);
+                        if (mark == GetMark(buffer))
+                        {
+                            SetMark(buffer, GetCursor(buffer));
+                        }
+                    } break;
+
+                    case Command_Text:
+                    {
+                        INVALID_CODE_PATH;
+                    } break;
+
+                    case Command_Movement:
+                    {
+                        Range range = command->movement(editor_state);
+                        if (!shift_down)
+                        {
+                            buffer->mark.pos = range.start;
+                        }
+                        SetCursorPos(view, range.end);
+                    } break;
+                }
             }
         }
     }
@@ -519,7 +547,7 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-        editor_state->font = LoadFontFromDisk(&editor_state->transient_arena, StringLiteral("font8x16.bmp"), 8, 16);
+        editor_state->font = LoadFontFromDisk(&editor_state->transient_arena, "font8x16.bmp"_str, 8, 16);
         InitializeRenderState(&editor_state->transient_arena, &platform->backbuffer, &editor_state->font);
 
         LoadDefaultTheme();
@@ -547,6 +575,7 @@ AppUpdateAndRender(Platform *platform_)
 
         editor_state->root_window.is_leaf = true;
         editor_state->root_window.view = editor_state->active_view;
+        RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
 
         platform->PushTickEvent();
         platform->app_initialized = true;

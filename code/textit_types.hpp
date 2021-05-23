@@ -66,13 +66,9 @@ struct Range
 static inline Range
 MakeRange(int64_t start, int64_t end)
 {
-    Range result = {};
+    Range result;
     result.start = start;
     result.end = end;
-    if (result.start > result.end)
-    {
-        Swap(result.start, result.end);
-    }
     return result;
 }
 
@@ -80,6 +76,33 @@ static inline Range
 MakeRange(int64_t pos)
 {
     return MakeRange(pos, pos);
+}
+
+static inline Range
+MakeSanitaryRange(int64_t start, int64_t end)
+{
+    Range result;
+    if (start <= end)
+    {
+        result.start = start;
+        result.end = end;
+    }
+    else
+    {
+        result.start = end;
+        result.end = start;
+    }
+    return result;
+}
+
+static inline Range
+SanitizeRange(Range range)
+{
+    if (range.end < range.start)
+    {
+        Swap(range.end, range.start);
+    }
+    return range;
 }
 
 static inline Range
@@ -107,6 +130,7 @@ ClampRange(Range range, Range bounds)
 static inline int64_t
 RangeSize(Range range)
 {
+    range = SanitizeRange(range);
     return range.end - range.start;
 }
 

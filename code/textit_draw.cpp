@@ -34,7 +34,8 @@ DrawTextArea(View *view, Rect2i bounds)
 {
     Buffer *buffer = GetBuffer(view);
 
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+    int64_t cursor_pos = buffer->cursor.pos;
+    int64_t mark_pos = buffer->mark.pos;
 
     int64_t left = bounds.min.x + 2;
     V2i at_p = MakeV2i(left, bounds.max.y - 2);
@@ -43,6 +44,9 @@ DrawTextArea(View *view, Rect2i bounds)
     Color text_background = GetThemeColor("text_background"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
     Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
+    Color selection_background = GetThemeColor("selection_background"_str);
+
+    Range mark_range = MakeSanitaryRange(cursor_pos, mark_pos);
 
     int64_t scan_line = 0;
     int64_t pos = 0;
@@ -68,7 +72,7 @@ DrawTextArea(View *view, Rect2i bounds)
             break;
         }
 
-        if (pos == loc.pos)
+        if (pos == cursor_pos)
         {
             PushTile(Layer_Text, at_p, MakeSprite('\0', text_background, text_foreground));
         }
@@ -99,7 +103,12 @@ DrawTextArea(View *view, Rect2i bounds)
             if (IsAsciiByte(b))
             {
                 Sprite sprite = MakeSprite(buffer->text[pos], text_foreground, text_background);
-                if (pos == loc.pos)
+                if ((editor_state->edit_mode == EditMode_Command) &&
+                    (pos >= mark_range.start && pos <= mark_range.end))
+                {
+                    sprite.background = selection_background;
+                }
+                if (pos == cursor_pos)
                 {
                     Swap(sprite.foreground, sprite.background);
                 }
@@ -111,7 +120,7 @@ DrawTextArea(View *view, Rect2i bounds)
             {
                 Color foreground = unrenderable_text_foreground;
                 Color background = unrenderable_text_background;
-                if (pos == loc.pos)
+                if (pos == cursor_pos)
                 {
                     Swap(foreground, background);
                 }

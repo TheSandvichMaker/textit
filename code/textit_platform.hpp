@@ -46,6 +46,8 @@
 #define Expand_(x) x
 #define Expand(x) Expand(x)
 
+#define HasFlag(mask, flag) (!!((mask) & (flag)))
+
 #define BitIsSet(mask, bit) ((mask) & ((u64)1 << bit))
 #define SetBit(mask, bit)   ((mask) |= ((u64)1 << bit))
 #define UnsetBit(mask, bit) ((mask) &= ~((u64)1 << bit))

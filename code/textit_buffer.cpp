@@ -31,9 +31,15 @@ GuessLineEndKind(String string)
 }
 
 static inline int64_t
-CursorPos(Buffer *buffer)
+GetCursor(Buffer *buffer)
 {
     return buffer->cursor.pos;
+}
+
+static inline int64_t
+GetMark(Buffer *buffer)
+{
+    return buffer->mark.pos;
 }
 
 static inline bool
@@ -52,10 +58,17 @@ ClampToBufferRange(Buffer *buffer, int64_t pos)
 }
 
 static inline void
-SetCursorPos(Buffer *buffer, int64_t pos)
+SetCursor(Buffer *buffer, int64_t pos)
 {
     pos = ClampToBufferRange(buffer, pos);
     buffer->cursor.pos = pos;
+}
+
+static inline void
+SetMark(Buffer *buffer, int64_t pos)
+{
+    pos = ClampToBufferRange(buffer, pos);
+    buffer->mark.pos = pos;
 }
 
 static inline Range
@@ -142,60 +155,74 @@ ScanWordEndForward(Buffer *buffer, int64_t pos)
     return pos;
 }
 
-static inline int64_t
+// taxonomy of a word motion
+
+// #include 
+// ^ cursor start
+//  ^ selection start
+//         ^ cursor/selection end
+
+// ##include
+// ^ cursor start
+// ^ selection start
+//  ^ cursor/selection end
+
+static inline Range
 ScanWordForward(Buffer *buffer, int64_t pos)
 {
-    if (IsInBufferRange(buffer, pos) &&
-        IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
-    {
-        while (IsInBufferRange(buffer, pos) &&
-               IsAlphanumericAscii(ReadBufferByte(buffer, pos)))
-        {
-            pos += 1;
-        }
-    }
-    else
-    {
-        while (IsInBufferRange(buffer, pos) &&
-               !IsAlphanumericAscii(ReadBufferByte(buffer, pos)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
-        {
-            pos += 1;
-        }
-    }
-    while (IsInBufferRange(buffer, pos) &&
-           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    CharacterClassFlags p0_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
+    CharacterClassFlags p1_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos + 1));
+    if (p0_class != p1_class)
     {
         pos += 1;
     }
-    return pos;
+
+    Range result = MakeRange(pos);
+
+    while (IsInBufferRange(buffer, pos + 1) &&
+           CharacterizeByteLoosely(ReadBufferByte(buffer, pos + 1)) == p1_class)
+    {
+        pos += 1;
+    }
+
+    while (IsInBufferRange(buffer, pos + 1) &&
+           IsHorizontalWhitespaceAscii(ReadBufferByte(buffer, pos + 1)))
+    {
+        pos += 1;
+    }
+
+    result.end = pos;
+    return result;
 }
 
-static inline int64_t
+static inline Range
 ScanWordBackward(Buffer *buffer, int64_t pos)
 {
-    while (IsInBufferRange(buffer, pos) &&
-           IsWhitespaceAscii(ReadBufferByte(buffer, pos - 1)))
+    CharacterClassFlags p0_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
+    CharacterClassFlags p1_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos - 1));
+    if (!HasFlag(p0_class, Character_Whitespace) && (p0_class != p1_class))
     {
         pos -= 1;
     }
-    if (IsInBufferRange(buffer, pos) &&
-        IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)))
+
+    Range result = MakeRange(pos);
+
+    while (IsInBufferRange(buffer, pos) &&
+           IsHorizontalWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
-        while (IsInBufferRange(buffer, pos) &&
-               IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)))
-        {
-            pos -= 1;
-        }
+        pos -= 1;
     }
-    else
+
+    CharacterClassFlags skip_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
+
+    while (IsInBufferRange(buffer, pos - 1) &&
+           CharacterizeByteLoosely(ReadBufferByte(buffer, pos - 1)) == skip_class)
     {
-        while (IsInBufferRange(buffer, pos) &&
-               !IsAlphanumericAscii(ReadBufferByte(buffer, pos - 1)) && !IsWhitespaceAscii(ReadBufferByte(buffer, pos - 1)))
-        {
-            pos -= 1;
-        }
+        pos -= 1;
     }
-    return pos;
+
+    result.end = pos;
+    return result;
 }
 
 static inline Range
@@ -350,6 +377,7 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 static inline int64_t
 BufferReplaceRange(Buffer *buffer, Range range, String text)
 {
+    range = SanitizeRange(range);
     range = ClampRange(range, BufferRange(buffer));
 
     String backward = {};
@@ -384,7 +412,11 @@ UndoOnce(Buffer *buffer)
         undo->at = node->parent;
 
         Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
-        pos = BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
+        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
+        pos = node->pos;
+
+        SetCursor(buffer, pos);
+        SetMark(buffer, pos + node->backward.size - 1);
 
         if (node->parent->ordinal == node->ordinal)
         {
@@ -395,7 +427,7 @@ UndoOnce(Buffer *buffer)
             break;
         }
     }
-    
+
     return pos;
 }
 
@@ -413,7 +445,12 @@ RedoOnce(Buffer *buffer)
         undo->at = node;
 
         Range remove_range = MakeRangeStartLength(node->pos, node->backward.size);
-        pos = BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
+        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
+
+        pos = node->pos;
+
+        SetCursor(buffer, pos);
+        SetMark(buffer, pos + node->forward.size - 1);
 
         UndoNode *next_node = NextChild(node);
         if (next_node && next_node->ordinal == node->ordinal)
