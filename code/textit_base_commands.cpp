@@ -149,6 +149,12 @@ COMMAND_PROC(SelectNextUndoBranch)
     SelectNextUndoBranch(CurrentBuffer(editor));
 }
 
+COMMAND_PROC(SplitWindowVertical)
+{
+    Window *window = &editor->root_window;
+    SplitWindow(window, WindowSplit_Vert);
+}
+
 TEXT_COMMAND_PROC(WriteText)
 {
     View *view = CurrentView(editor);

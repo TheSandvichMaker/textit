@@ -103,6 +103,7 @@ OpenNewView(BufferID buffer)
     }
 
     View *result = BootstrapPushStruct(View, arena);
+    result->id =  id;
     result->buffer = buffer;
 
     editor->views[result->id.index] = result;
@@ -147,6 +148,97 @@ DestroyView(ViewID id)
     editor_state->views[id.index] = nullptr;
 }
 
+static inline ViewID
+DuplicateView(ViewID id)
+{
+    ViewID result = ViewID::Null();
+
+    View *view = GetView(id);
+    if (view != editor_state->null_view)
+    {
+        View *new_view = OpenNewView(view->buffer);
+        new_view->cursor = view->cursor;
+        new_view->scroll_at = view->scroll_at;
+        result = new_view->id;
+    }
+
+    return result;
+}
+
+static inline void
+SplitWindow(Window *window, WindowSplitKind split)
+{
+    Assert(window->is_leaf);
+
+    ViewID view = window->view;
+    window->is_leaf = false;
+    window->split = split;
+
+    Window *a = window->a = PushStruct(&editor_state->transient_arena, Window);
+    a->is_leaf = true;
+    a->view = view;
+
+    Window *b = window->b = PushStruct(&editor_state->transient_arena, Window);
+    b->is_leaf = true;
+    b->view = DuplicateView(view);
+}
+
+static inline void
+RecalculateViewBounds(Window *window, Rect2i rect)
+{
+    if (window->is_leaf)
+    {
+        View *view = GetView(window->view);
+        view->viewport = rect;
+    }
+    else
+    {
+        Rect2i a_rect, b_rect;
+        if (window->split == WindowSplit_Horz)
+        {
+            int64_t split = GetHeight(rect) / 2;
+            SplitRect2iHorizontal(rect, split, &a_rect, &b_rect);
+        }
+        else
+        {
+            Assert(window->split == WindowSplit_Vert);
+            int64_t split = GetWidth(rect) / 2;
+            SplitRect2iVertical(rect, split, &a_rect, &b_rect);
+        }
+        RecalculateViewBounds(window->a, a_rect);
+        RecalculateViewBounds(window->b, b_rect);
+    }
+}
+
+
+static inline void
+DrawWindows(Window *window)
+{
+    if (window->is_leaf)
+    {
+        View *view = GetView(window->view);
+
+        int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
+        int64_t top = view->scroll_at;
+        int64_t bot = view->scroll_at + viewport_height;
+        if (view->cursor.y < top)
+        {
+            view->scroll_at += view->cursor.y - top;
+        }
+        if (view->cursor.y > bot)
+        {
+            view->scroll_at += view->cursor.y - bot;
+        }
+
+        DrawView(view);
+    }
+    else
+    {
+        DrawWindows(window->a);
+        DrawWindows(window->b);
+    }
+}
+
 static inline void
 LoadDefaultBindings()
 {
@@ -170,6 +262,7 @@ LoadDefaultBindings()
     command->map['X'].regular                     = FindCommand("DeleteChar"_str);
     command->map['U'].regular                     = FindCommand("UndoOnce"_str);
     command->map['R'].ctrl                        = FindCommand("RedoOnce"_str);
+    command->map['V'].ctrl                        = FindCommand("SplitWindowVertical"_str);
 
     BindingMap *text = &editor_state->bindings[EditMode_Text];
     text->text_command = FindCommand("WriteText"_str);
@@ -404,23 +497,6 @@ HandleViewEvents(View *view)
                 command->proc(editor_state);
             }
         }
-
-        int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
-        int64_t top = view->scroll_at;
-        int64_t bot = view->scroll_at + viewport_height;
-        if (view->cursor.y < top)
-        {
-            view->scroll_at += view->cursor.y - top;
-        }
-        if (view->cursor.y > bot)
-        {
-            view->scroll_at += view->cursor.y - bot;
-        }
-
-        BeginRender();
-        view->viewport = render_state->viewport;
-        DrawView(view);
-        EndRender();
     }
 }
 
@@ -454,11 +530,23 @@ AppUpdateAndRender(Platform *platform_)
             editor_state->free_buffer_ids[i].index = MAX_BUFFER_COUNT - i - 1;
         }
 
+        for (int16_t i = 0; i < MAX_VIEW_COUNT; i += 1)
+        {
+            editor_state->free_view_ids[i].index = MAX_VIEW_COUNT - i - 1;
+        }
+
         editor_state->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
         editor_state->message_buffer = OpenNewBuffer("messages"_str, Buffer_Indestructible|Buffer_ReadOnly);
 
+        editor_state->null_view = OpenNewView(BufferID::Null());
+
         Buffer *test_buffer = OpenBufferFromFile("test_file.txt"_str);
-        editor_state->open_view = OpenNewView(test_buffer->id);
+        View *view = OpenNewView(test_buffer->id);
+
+        editor_state->active_view = view->id;
+
+        editor_state->root_window.is_leaf = true;
+        editor_state->root_window.view = editor_state->active_view;
 
         platform->PushTickEvent();
         platform->app_initialized = true;
@@ -467,7 +555,12 @@ AppUpdateAndRender(Platform *platform_)
     editor_state->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);
     editor_state->text_mouse_p = editor_state->screen_mouse_p / GlyphDim(&editor_state->font);
 
-    HandleViewEvents(editor_state->open_view);
+    HandleViewEvents(GetView(editor_state->active_view));
+    RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
+
+    BeginRender();
+    DrawWindows(&editor_state->root_window);
+    EndRender();
     
     Buffer *buffer = CurrentBuffer(editor_state);
     if ((editor_state->next_edit_mode == EditMode_Text) &&

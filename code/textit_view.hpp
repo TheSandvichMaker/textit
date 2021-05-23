@@ -16,4 +16,6 @@ struct View
     int64_t scroll_at;
 };
 
+static inline View *GetView(ViewID id);
+
 #endif /* TEXTIT_VIEW_HPP */

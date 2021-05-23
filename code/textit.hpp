@@ -62,6 +62,26 @@ static inline void LoadDefaultTheme();
 static inline void SetThemeColor(String name, Color color);
 static inline Color GetThemeColor(String name);
 
+enum WindowSplitKind
+{
+    WindowSplit_Horz,
+    WindowSplit_Vert,
+};
+
+struct Window
+{
+    bool is_leaf;
+    WindowSplitKind split;
+    union
+    {
+        struct
+        {
+            Window *a, *b;
+        };
+        ViewID view;
+    };
+};
+
 struct EditorState
 {
     GlobalState global_state;
@@ -90,7 +110,10 @@ struct EditorState
     ViewID used_view_ids[MAX_VIEW_COUNT];
     ViewID free_view_ids[MAX_VIEW_COUNT];
 
-    View *open_view;
+    View *null_view;
+
+    ViewID active_view;
+    Window root_window;
 
     V2i screen_mouse_p;
     V2i text_mouse_p;
@@ -135,20 +158,18 @@ Next(BufferIterator *iter)
 static inline View *
 CurrentView(EditorState *editor)
 {
-    return editor->open_view;
+    return GetView(editor->active_view);
 }
 
 static inline Buffer *
 CurrentBuffer(EditorState *editor)
 {
-    Buffer *result = editor->null_buffer;
-    if (editor->open_view)
-    {
-        result = GetBuffer(editor->open_view->buffer);
-    }
+    View *view = GetView(editor->active_view);
+    Buffer *result = GetBuffer(view->buffer);
     return result;
 }
 
+static inline void SplitWindow(Window *window, WindowSplitKind split);
 static inline void SetDebugDelay(int milliseconds, int frame_count);
 
 #endif /* TEXTIT_HPP */

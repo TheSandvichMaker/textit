@@ -154,17 +154,13 @@ DrawView(View *view)
     }
     Color filebar_text_background = GetThemeColor(filebar_text_background_str);
 
-    int64_t width = GetWidth(bounds);
-
-    Rect2i left, right;
-    SplitRect2iHorizontal(bounds, width / 2, &left, &right);
-
-    PushRectOutline(Layer_Background, left, text_foreground, text_background);
+    PushRectOutline(Layer_Background, bounds, text_foreground, text_background);
     DrawLine(MakeV2i(bounds.min.x + 2, bounds.max.y - 1),
              FormatTempString("%hd:%.*s - scroll: %d", buffer->id.index, StringExpand(buffer->name), view->scroll_at),
              filebar_text_foreground, filebar_text_background);
 
-    DrawTextArea(view, left);
+    DrawTextArea(view, bounds);
+#if 0
     PushRectOutline(Layer_Background, right, text_foreground, text_background);
 
     V2i at_p = MakeV2i(right.min.x + 2, right.max.y - 2);
@@ -188,4 +184,5 @@ DrawView(View *view)
         branch_index += 1;
         at_p.y -= 1;
     }
+#endif
 }

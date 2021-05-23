@@ -25,6 +25,13 @@ struct ResourceID
         return ((index != other.index) ||
                 (generation != other.generation));
     }
+
+    static ResourceID
+    Null(void)
+    {
+        ResourceID result = {};
+        return result;
+    }
 };
 
 using BufferID = ResourceID<struct BufferIDTag>;
