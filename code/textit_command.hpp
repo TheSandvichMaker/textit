@@ -6,7 +6,17 @@
 struct EditorState;
 
 typedef void (*CommandProc)(EditorState *editor);
+#define COMMAND_PROC(name)                                                                  \
+    static void Paste(CMD_, name)(EditorState *editor);                                     \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(StringLiteral(#name), Paste(CMD_, name)); \
+    static void Paste(CMD_, name)(EditorState *editor)
+
 typedef void (*TextCommandProc)(EditorState *editor, String text);
+#define TEXT_COMMAND_PROC(name)                                                             \
+    static void Paste(CMD_, name)(EditorState *editor, String text);                        \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(StringLiteral(#name), Paste(CMD_, name)); \
+    static void Paste(CMD_, name)(EditorState *editor, String text)
+
 struct Command
 {
     String name;

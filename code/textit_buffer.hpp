@@ -1,6 +1,8 @@
 #ifndef TEXTIT_BUFFER_HPP
 #define TEXTIT_BUFFER_HPP
 
+#define MAX_BUFFER_COUNT 1024
+
 enum LineEndKind
 {
     LineEnd_LF,
@@ -46,9 +48,26 @@ struct BufferCursor
     int64_t pos;
 };
 
+struct BufferLocation
+{
+    int64_t pos;
+    int64_t line_number;
+    Range line_range;
+};
+
+typedef uint32_t BufferFlags;
+enum BufferFlags_ENUM : BufferFlags
+{
+    Buffer_Indestructible = 0x1,
+    Buffer_ReadOnly = 0x2,
+};
+
 #define TEXTIT_BUFFER_SIZE Megabytes(1)
 struct Buffer
 {
+    BufferID id;
+    BufferFlags flags;
+
     Arena arena;
     String name;
 
@@ -62,15 +81,12 @@ struct Buffer
         UndoNode *at;
     } undo;
 
+    BufferCursor cursor;
+
     int64_t count;
     uint8_t text[TEXTIT_BUFFER_SIZE];
 };
 
-struct BufferLocation
-{
-    int64_t line_number;
-    Range line_range;
-    int64_t pos;
-};
+static inline Buffer *GetBuffer(BufferID id);
 
 #endif /* TEXTIT_BUFFER_HPP */

@@ -1,13 +1,10 @@
-static inline void
-CMD_EnterTextMode(EditorState *editor)
+COMMAND_PROC(EnterTextMode)
 {
     editor->next_edit_mode = EditMode_Text;
     editor->enter_text_mode_undo_ordinal = CurrentUndoOrdinal(CurrentBuffer(editor));
 }
-REGISTER_COMMAND(CMD_EnterTextMode);
 
-static inline void
-CMD_EnterCommandMode(EditorState *editor)
+COMMAND_PROC(EnterCommandMode)
 {
     editor->next_edit_mode = EditMode_Command;
 
@@ -15,139 +12,118 @@ CMD_EnterCommandMode(EditorState *editor)
     uint64_t current_undo_ordinal = CurrentUndoOrdinal(buffer);
     MergeUndoHistory(buffer, editor->enter_text_mode_undo_ordinal, current_undo_ordinal);
 }
-REGISTER_COMMAND(CMD_EnterCommandMode);
 
-static inline void
-CMD_MoveLeft(EditorState *editor)
+COMMAND_PROC(MoveLeft)
 {
-    View *view = editor->open_view;
+    View *view = CurrentView(editor);
     MoveCursorRelative(view, MakeV2i(-1, 0));
 }
-REGISTER_COMMAND(CMD_MoveLeft);
 
-static inline void
-CMD_MoveRight(EditorState *editor)
+COMMAND_PROC(MoveRight)
 {
-    View *view = editor->open_view;
+    View *view = CurrentView(editor);
     MoveCursorRelative(view, MakeV2i(1, 0));
 }
-REGISTER_COMMAND(CMD_MoveRight);
 
-static inline void
-CMD_MoveDown(EditorState *editor)
+COMMAND_PROC(MoveDown)
 {
-    View *view = editor->open_view;
+    View *view = CurrentView(editor);
     MoveCursorRelative(view, MakeV2i(0, 1));
 }
-REGISTER_COMMAND(CMD_MoveDown);
 
-static inline void
-CMD_MoveUp(EditorState *editor)
+COMMAND_PROC(MoveUp)
 {
-    View *view = editor->open_view;
+    View *view = CurrentView(editor);
     MoveCursorRelative(view, MakeV2i(0, -1));
 }
-REGISTER_COMMAND(CMD_MoveUp);
 
-static inline void
-CMD_MoveLeftIdentifier(EditorState *editor)
-{
-    View *view = editor->open_view;
-    Buffer *buffer = view->buffer;
-
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
-    int64_t pos = ScanWordBackward(buffer, loc.pos);
-    pos = ClampToRange(pos, loc.line_range);
-    SetCursorPos(view, pos);
-}
-REGISTER_COMMAND(CMD_MoveLeftIdentifier);
-
-static inline void
-CMD_MoveRightIdentifier(EditorState *editor)
-{
-    View *view = editor->open_view;
-    Buffer *buffer = view->buffer;
-
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
-    int64_t pos = ScanWordForward(buffer, loc.pos);
-    pos = ClampToRange(pos, loc.line_range);
-    SetCursorPos(view, pos);
-}
-REGISTER_COMMAND(CMD_MoveRightIdentifier);
-
-static inline void
-CMD_BackspaceChar(EditorState *editor)
+COMMAND_PROC(MoveLeftIdentifier)
 {
     View *view = CurrentView(editor);
-    Buffer *buffer = view->buffer;
+    Buffer *buffer = GetBuffer(view);
 
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+    int64_t pos = CursorPos(buffer);
+    Range line_range = EncloseLine(buffer, pos);
 
-    int64_t newline_length = PeekNewlineBackward(buffer, loc.pos - 1);
+    pos = ScanWordBackward(buffer, pos);
+    pos = ClampToRange(pos, line_range);
+    SetCursorPos(view, pos);
+}
+
+COMMAND_PROC(MoveRightIdentifier)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = CursorPos(buffer);
+    Range line_range = EncloseLine(buffer, pos);
+
+    pos = ScanWordForward(buffer, pos);
+    pos = ClampToRange(pos, line_range);
+    SetCursorPos(view, pos);
+}
+
+COMMAND_PROC(BackspaceChar)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = CursorPos(buffer);
+    int64_t newline_length = PeekNewlineBackward(buffer, pos - 1);
     int64_t to_delete = 1;
     if (newline_length)
     {
         to_delete = newline_length;
     }
-    int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos - to_delete, to_delete), ""_str);
+    pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos - to_delete, to_delete), ""_str);
     SetCursorPos(view, pos);
 }
-REGISTER_COMMAND(CMD_BackspaceChar);
 
-static inline void
-CMD_BackspaceWord(EditorState *editor)
+COMMAND_PROC(BackspaceWord)
 {
     View *view = CurrentView(editor);
-    Buffer *buffer = view->buffer;
+    Buffer *buffer = GetBuffer(view);
 
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
-
-    int64_t start_pos = loc.pos;
-    int64_t end_pos = ScanWordBackward(buffer, loc.pos);
+    int64_t pos = CursorPos(buffer);
+    int64_t start_pos = pos;
+    int64_t end_pos = ScanWordBackward(buffer, pos);
     int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
     SetCursorPos(view, final_pos);
 }
-REGISTER_COMMAND(CMD_BackspaceWord);
 
-static inline void
-CMD_DeleteChar(EditorState *editor)
+COMMAND_PROC(DeleteChar)
 {
     View *view = CurrentView(editor);
-    Buffer *buffer = view->buffer;
+    Buffer *buffer = GetBuffer(view);
 
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
-
-    int64_t newline_length = PeekNewline(buffer, loc.pos);
+    int64_t pos = CursorPos(buffer);
+    int64_t newline_length = PeekNewline(buffer, pos);
     int64_t to_delete = 1;
     if (newline_length)
     {
         to_delete = newline_length;
     }
-    int64_t pos = BufferReplaceRange(buffer, MakeRangeStartLength(loc.pos, to_delete), ""_str);
+    pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos, to_delete), ""_str);
     SetCursorPos(view, pos);
 }
-REGISTER_COMMAND(CMD_DeleteChar);
 
-static inline void
-CMD_DeleteWord(EditorState *editor)
+COMMAND_PROC(DeleteWord)
 {
     View *view = CurrentView(editor);
-    Buffer *buffer = view->buffer;
+    Buffer *buffer = GetBuffer(view);
 
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+    int64_t pos = CursorPos(buffer);
 
-    int64_t start_pos = loc.pos;
-    int64_t end_pos = ScanWordEndForward(buffer, loc.pos);
+    int64_t start_pos = pos;
+    int64_t end_pos = ScanWordEndForward(buffer, pos);
     int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
     SetCursorPos(view, final_pos);
 }
-REGISTER_COMMAND(CMD_DeleteWord);
 
-static inline void
-CMD_UndoOnce(EditorState *editor)
+COMMAND_PROC(UndoOnce)
 {
     View *view = CurrentView(editor);
-    Buffer *buffer = view->buffer;
+    Buffer *buffer = GetBuffer(view);
 
     int64_t pos = UndoOnce(buffer);
     if (pos >= 0)
@@ -155,13 +131,11 @@ CMD_UndoOnce(EditorState *editor)
         SetCursorPos(view, pos);
     }
 }
-REGISTER_COMMAND(CMD_UndoOnce);
 
-static inline void
-CMD_RedoOnce(EditorState *editor)
+COMMAND_PROC(RedoOnce)
 {
     View *view = CurrentView(editor);
-    Buffer *buffer = view->buffer;
+    Buffer *buffer = GetBuffer(view);
 
     int64_t pos = RedoOnce(buffer);
     if (pos >= 0)
@@ -169,21 +143,18 @@ CMD_RedoOnce(EditorState *editor)
         SetCursorPos(view, pos);
     }
 }
-REGISTER_COMMAND(CMD_RedoOnce);
 
-static inline void
-CMD_SelectNextUndoBranch(EditorState *editor)
+COMMAND_PROC(SelectNextUndoBranch)
 {
     SelectNextUndoBranch(CurrentBuffer(editor));
 }
-REGISTER_COMMAND(CMD_SelectNextUndoBranch);
 
-static inline void
-CMD_WriteText(EditorState *editor, String text)
+TEXT_COMMAND_PROC(WriteText)
 {
-    View *view = editor->open_view;
-    Buffer *buffer = view->buffer;
-    BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = CursorPos(buffer);
 
     uint64_t start_ordinal = CurrentUndoOrdinal(buffer);
     bool should_merge = false;
@@ -194,7 +165,7 @@ CMD_WriteText(EditorState *editor, String text)
             UndoNode *last_undo = CurrentUndoNode(buffer);
 
             String last_text = last_undo->forward;
-            if ((last_undo->pos == loc.pos - 1) &&
+            if ((last_undo->pos == pos - 1) &&
                 (last_text.size > 0))
             {
                 if ((text.data[0] == ' ') &&
@@ -213,8 +184,8 @@ CMD_WriteText(EditorState *editor, String text)
     }
     if (text.data[0] == '\n' || IsPrintableAscii(text.data[0]) || IsUtf8Byte(text.data[0]))
     {
-        int64_t pos = BufferReplaceRange(buffer, MakeRange(loc.pos), text);
-        SetCursorPos(view, pos);
+        int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), text);
+        SetCursorPos(view, new_pos);
     }
     if (should_merge)
     {
@@ -222,5 +193,3 @@ CMD_WriteText(EditorState *editor, String text)
         MergeUndoHistory(buffer, start_ordinal, end_ordinal);
     }
 }
-REGISTER_COMMAND(CMD_WriteText);
-

@@ -1,91 +1,3 @@
-static inline void
-PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
-{
-    auto undo = &buffer->undo;
-    UndoNode *node = PushStruct(&buffer->arena, UndoNode);
-
-    node->parent = undo->at;
-    node->next_child = node->parent->first_child;
-    node->parent->first_child = node;
-
-    undo->current_ordinal += 1;
-    node->ordinal = undo->current_ordinal;
-
-    node->pos = pos;
-    node->forward = forward;
-    node->backward = backward;
-
-    undo->at = node;
-    undo->depth += 1;
-}
-
-static inline UndoNode *
-CurrentUndoNode(Buffer *buffer)
-{
-    auto undo = &buffer->undo;
-    return undo->at;
-}
-
-static inline void
-SelectNextUndoBranch(Buffer *buffer)
-{
-    UndoNode *node = CurrentUndoNode(buffer);
-
-    uint32_t child_count = 0;
-    for (UndoNode *child = node->first_child;
-         child;
-         child = child->next_child)
-    {
-        child_count += 1;
-    }
-
-    node->selected_branch = (node->selected_branch + 1) % child_count;
-}
-
-static inline UndoNode *
-NextChild(UndoNode *node)
-{
-    UndoNode *result = node->first_child;
-    for (uint32_t i = 0; i < node->selected_branch; i += 1)
-    {
-        result = result->next_child;
-    }
-    return result;
-}
-
-static inline uint64_t
-CurrentUndoOrdinal(Buffer *buffer)
-{
-    return buffer->undo.current_ordinal;
-}
-
-static inline void
-MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
-{
-    Assert(last_ordinal >= first_ordinal);
-    UndoNode *node = buffer->undo.at;
-    while (node && node->ordinal > last_ordinal)
-    {
-        node = node->parent;
-    }
-    while (node && node->ordinal > first_ordinal)
-    {
-        node->ordinal = first_ordinal;
-        node = node->parent;
-    }
-    if (buffer->undo.current_ordinal == last_ordinal)
-    {
-        buffer->undo.current_ordinal = first_ordinal;
-    }
-}
-
-static inline bool
-IsInBufferRange(Buffer *buffer, int64_t pos)
-{
-    bool result = ((pos >= 0) && (pos < buffer->count));
-    return result;
-}
-
 static inline LineEndKind
 GuessLineEndKind(String string)
 {
@@ -118,23 +30,32 @@ GuessLineEndKind(String string)
     return result;
 }
 
-static inline Buffer *
-NewBuffer(String buffer_name)
+static inline int64_t
+CursorPos(Buffer *buffer)
 {
-    Buffer *result = BootstrapPushStruct(Buffer, arena);
-    result->name = PushString(&result->arena, buffer_name);
-    result->undo.at = &result->undo.root;
+    return buffer->cursor.pos;
+}
+
+static inline bool
+IsInBufferRange(Buffer *buffer, int64_t pos)
+{
+    bool result = ((pos >= 0) && (pos < buffer->count));
     return result;
 }
 
-static inline Buffer *
-OpenFileIntoNewBuffer(String filename)
+static inline int64_t
+ClampToBufferRange(Buffer *buffer, int64_t pos)
 {
-    Buffer *result = NewBuffer(filename);
-    size_t file_size = platform->ReadFileInto(sizeof(result->text), result->text, filename);
-    result->count = (int64_t)file_size;
-    result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
-    return result;
+    if (pos >= buffer->count) pos = buffer->count - 1;
+    if (pos < 0) pos = 0;
+    return pos;
+}
+
+static inline void
+SetCursorPos(Buffer *buffer, int64_t pos)
+{
+    pos = ClampToBufferRange(buffer, pos);
+    buffer->cursor.pos = pos;
 }
 
 static inline Range
@@ -277,6 +198,102 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
     return pos;
 }
 
+static inline Range
+EncloseLine(Buffer *buffer, int64_t pos)
+{
+    Range result = MakeRange(pos, pos + 1);
+    while (IsInBufferRange(buffer, result.start) && !PeekNewlineBackward(buffer, result.start))
+    {
+        result.start -= 1;
+    }
+    while (IsInBufferRange(buffer, result.end) && !PeekNewline(buffer, result.end))
+    {
+        result.end += 1;
+    }
+    return result;
+}
+
+static inline void
+PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
+{
+    auto undo = &buffer->undo;
+    UndoNode *node = PushStruct(&buffer->arena, UndoNode);
+
+    node->parent = undo->at;
+    node->next_child = node->parent->first_child;
+    node->parent->first_child = node;
+
+    undo->current_ordinal += 1;
+    node->ordinal = undo->current_ordinal;
+
+    node->pos = pos;
+    node->forward = forward;
+    node->backward = backward;
+
+    undo->at = node;
+    undo->depth += 1;
+}
+
+static inline UndoNode *
+CurrentUndoNode(Buffer *buffer)
+{
+    auto undo = &buffer->undo;
+    return undo->at;
+}
+
+static inline void
+SelectNextUndoBranch(Buffer *buffer)
+{
+    UndoNode *node = CurrentUndoNode(buffer);
+
+    uint32_t child_count = 0;
+    for (UndoNode *child = node->first_child;
+         child;
+         child = child->next_child)
+    {
+        child_count += 1;
+    }
+
+    node->selected_branch = (node->selected_branch + 1) % child_count;
+}
+
+static inline UndoNode *
+NextChild(UndoNode *node)
+{
+    UndoNode *result = node->first_child;
+    for (uint32_t i = 0; i < node->selected_branch; i += 1)
+    {
+        result = result->next_child;
+    }
+    return result;
+}
+
+static inline uint64_t
+CurrentUndoOrdinal(Buffer *buffer)
+{
+    return buffer->undo.current_ordinal;
+}
+
+static inline void
+MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
+{
+    Assert(last_ordinal >= first_ordinal);
+    UndoNode *node = buffer->undo.at;
+    while (node && node->ordinal > last_ordinal)
+    {
+        node = node->parent;
+    }
+    while (node && node->ordinal > first_ordinal)
+    {
+        node->ordinal = first_ordinal;
+        node = node->parent;
+    }
+    if (buffer->undo.current_ordinal == last_ordinal)
+    {
+        buffer->undo.current_ordinal = first_ordinal;
+    }
+}
+
 static inline String
 BufferPushRange(Arena *arena, Buffer *buffer, Range range)
 {
@@ -289,6 +306,11 @@ BufferPushRange(Arena *arena, Buffer *buffer, Range range)
 static inline int64_t
 BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 {
+    if (buffer->flags & Buffer_ReadOnly)
+    {
+        return range.start;
+    }
+
     range = ClampRange(range, BufferRange(buffer));
 
     int64_t delta = range.start - range.end + (int64_t)text.size;

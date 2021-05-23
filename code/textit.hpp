@@ -12,6 +12,7 @@
 #include "textit_global_state.hpp"
 #include "textit_math.hpp"
 #include "textit_random.hpp"
+#include "textit_resources.hpp"
 #include "textit_image.hpp"
 #include "textit_command.hpp"
 #include "textit_render.hpp"
@@ -76,7 +77,19 @@ struct EditorState
 
     Font font;
 
-    Buffer *open_buffer;
+    uint32_t buffer_count;
+    Buffer *buffers[MAX_BUFFER_COUNT];
+    BufferID used_buffer_ids[MAX_BUFFER_COUNT];
+    BufferID free_buffer_ids[MAX_BUFFER_COUNT];
+
+    Buffer *null_buffer;
+    Buffer *message_buffer;
+
+    uint32_t view_count;
+    View *views[MAX_VIEW_COUNT];
+    ViewID used_view_ids[MAX_VIEW_COUNT];
+    ViewID free_view_ids[MAX_VIEW_COUNT];
+
     View *open_view;
 
     V2i screen_mouse_p;
@@ -89,6 +102,36 @@ struct EditorState
 };
 static EditorState *editor_state;
 
+struct BufferIterator
+{
+    size_t index;
+    Buffer *buffer;
+};
+
+static inline BufferIterator
+IterateBuffers(void)
+{
+    BufferIterator result = {};
+    result.buffer = GetBuffer(editor_state->used_buffer_ids[0]);
+    return result;
+}
+
+static inline bool
+IsValid(BufferIterator *iter)
+{
+    return (iter->index < editor_state->buffer_count);
+}
+
+static inline void
+Next(BufferIterator *iter)
+{
+    iter->index += 1;
+    if (iter->index < editor_state->buffer_count)
+    {
+        iter->buffer = GetBuffer(editor_state->used_buffer_ids[iter->index]);
+    }
+}
+
 static inline View *
 CurrentView(EditorState *editor)
 {
@@ -98,10 +141,10 @@ CurrentView(EditorState *editor)
 static inline Buffer *
 CurrentBuffer(EditorState *editor)
 {
-    Buffer *result = nullptr;
+    Buffer *result = editor->null_buffer;
     if (editor->open_view)
     {
-        result = editor->open_view->buffer;
+        result = GetBuffer(editor->open_view->buffer);
     }
     return result;
 }

@@ -1,16 +1,7 @@
-static inline View *
-NewView(Buffer *buffer)
+static inline Buffer *
+GetBuffer(View *view)
 {
-    View *result = BootstrapPushStruct(View, arena);
-    result->buffer = buffer;
-    platform->PushTickEvent(); // tick at least once to initially render the view
-    return result;
-}
-
-static inline void
-DestroyView(View *view)
-{
-    Release(&view->arena);
+    return GetBuffer(view->buffer);
 }
 
 static inline BufferLocation
@@ -58,8 +49,7 @@ ViewCursorToBufferLocation(Buffer *buffer, V2i cursor)
 static inline V2i
 BufferPosToViewCursor(Buffer *buffer, int64_t pos)
 {
-    if (pos < 0) pos = 0; // TODO: Should maybe assert in debug
-    if (pos > buffer->count) pos = buffer->count;
+    pos = ClampToBufferRange(buffer, pos);
 
     int64_t at_pos  = 0;
     int64_t at_line = 0;
@@ -87,18 +77,24 @@ BufferPosToViewCursor(Buffer *buffer, int64_t pos)
 static inline void
 SetCursorPos(View *view, int64_t pos)
 {
-    view->cursor = BufferPosToViewCursor(view->buffer, pos);
+    Buffer *buffer = GetBuffer(view);
+
+    pos = ClampToBufferRange(buffer, pos);
+    buffer->cursor.pos = pos;
+    view->cursor = BufferPosToViewCursor(buffer, pos);
 }
 
 static inline void
 MoveCursorRelative(View *view, V2i delta)
 {
+    Buffer *buffer = GetBuffer(view);
+
     V2i old_cursor = view->cursor;
-    BufferLocation loc = ViewCursorToBufferLocation(view->buffer, old_cursor + delta);
+    BufferLocation loc = ViewCursorToBufferLocation(buffer, old_cursor + delta);
 
     int64_t offset = 0;
-    while (IsInBufferRange(view->buffer, loc.pos + offset) &&
-           IsTrailingUtf8Byte(ReadBufferByte(view->buffer, loc.pos + offset)))
+    while (IsInBufferRange(buffer, loc.pos + offset) &&
+           IsTrailingUtf8Byte(ReadBufferByte(buffer, loc.pos + offset)))
     {
         if (delta.x > 0)
         {
@@ -115,7 +111,7 @@ MoveCursorRelative(View *view, V2i delta)
     V2i new_cursor = view->cursor + delta;
 
     int64_t line_length = loc.line_range.end - loc.line_range.start;
-    new_cursor.y = ClampToRange(new_cursor.y, MakeRange(0, loc.line_number));
+    new_cursor.y = ClampToRange(new_cursor.y, MakeRange(0, loc.line_number + 1));
 
     if (delta.x != 0)
     {
@@ -127,4 +123,6 @@ MoveCursorRelative(View *view, V2i delta)
         }
     }
     view->cursor.y = new_cursor.y;
+
+    SetCursorPos(buffer, loc.pos);
 }
