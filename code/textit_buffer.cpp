@@ -330,6 +330,20 @@ BufferPushRange(Arena *arena, Buffer *buffer, Range range)
     return result;
 }
 
+static inline void
+EnsureSpace(Buffer *buffer, int64_t append_size)
+{
+    Assert(buffer->count + append_size <= buffer->capacity);
+
+    if (buffer->count + append_size > buffer->committed)
+    {
+        int64_t to_commit = AlignPow2(append_size, platform->page_size);
+        platform->CommitMemory(buffer->text + buffer->committed, to_commit);
+        buffer->committed += to_commit;
+        Assert(buffer->committed >= (buffer->count + append_size));
+    }
+}
+
 static inline int64_t
 BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 {
@@ -341,23 +355,15 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     range = ClampRange(range, BufferRange(buffer));
 
     int64_t delta = range.start - range.end + (int64_t)text.size;
+    EnsureSpace(buffer, delta);
+    // TODO: Decommit behaviour
 
-    if (delta > 0)
-    {
-        int64_t offset = delta;
-        for (int64_t pos = buffer->count + delta; pos >= range.start + offset; pos -= 1)
-        {
-            buffer->text[pos] = buffer->text[pos - offset];
-        }
-    }
-    else if (delta < 0)
-    {
-        int64_t offset = -delta;
-        for (int64_t pos = range.start; pos < buffer->count - offset; pos += 1)
-        {
-            buffer->text[pos] = buffer->text[pos + offset];
-        }
-    }
+    uint8_t *source = (delta > 0
+                       ? buffer->text + range.start
+                       : buffer->text + range.end);
+    uint8_t *dest   = source + delta;
+    uint8_t *end    = buffer->text + buffer->count;
+    memmove(dest, source, end - source);
 
     buffer->count += delta;
 

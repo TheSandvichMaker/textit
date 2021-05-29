@@ -466,6 +466,7 @@ struct Platform
 
     String (*ReadFile)(Arena *arena, String filename);
     size_t (*ReadFileInto)(size_t buffer_size, void *buffer, String filename);
+    size_t (*GetFileSize)(String filename);
 
     PlatformHighResTime (*GetTime)(void);
     double (*SecondsElapsed)(PlatformHighResTime start, PlatformHighResTime end);

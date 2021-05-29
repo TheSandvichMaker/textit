@@ -31,6 +31,9 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->name = PushString(&result->arena, buffer_name);
     result->undo.at = &result->undo.root;
 
+    result->capacity = TEXTIT_BUFFER_SIZE;
+    result->text = (uint8_t *)platform->ReserveMemory((int64_t)result->capacity, 0, LOCATION_STRING("buffer storage"));
+
     editor->buffers[result->id.index] = result;
 
     return result;
@@ -40,7 +43,12 @@ static inline Buffer *
 OpenBufferFromFile(String filename)
 {
     Buffer *result = OpenNewBuffer(filename);
-    size_t file_size = platform->ReadFileInto(sizeof(result->text), result->text, filename);
+    size_t file_size = platform->GetFileSize(filename);
+    EnsureSpace(result, file_size);
+    if (platform->ReadFileInto(TEXTIT_BUFFER_SIZE, result->text, filename) != file_size)
+    {
+        INVALID_CODE_PATH;
+    }
     result->count = (int64_t)file_size;
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
     return result;
@@ -264,6 +272,7 @@ LoadDefaultBindings()
     command->map['V'].ctrl                        = FindCommand("SplitWindowVertical"_str);
     command->map['D'].regular                     = FindCommand("DeleteSelection"_str);
     command->map['C'].regular                     = FindCommand("ChangeSelection"_str);
+    command->map[PlatformInputCode_Period].regular = FindCommand("RepeatLastCommand"_str);
 
     BindingMap *text = &editor_state->bindings[EditMode_Text];
     text->text_command = FindCommand("WriteText"_str);
@@ -456,6 +465,51 @@ GetGlyphBitmap(Font *font, Glyph glyph)
 }
 
 static inline void
+ExecuteCommand(View *view, Command *command, bool shift_down)
+{
+    Buffer *buffer = GetBuffer(view);
+    switch (command->kind)
+    {
+        case Command_Basic:
+        {
+            int64_t mark = GetMark(buffer);
+            command->command(editor_state);
+            if (mark == GetMark(buffer))
+            {
+                SetMark(buffer, GetCursor(buffer));
+            }
+        } break;
+
+        case Command_Text:
+        {
+            INVALID_CODE_PATH;
+        } break;
+
+        case Command_Movement:
+        {
+            Range range = command->movement(editor_state);
+            if (!shift_down)
+            {
+                buffer->mark.pos = range.start;
+            }
+            SetCursorPos(view, range.end);
+        } break;
+
+        case Command_Change:
+        {
+            int64_t mark = GetMark(buffer);
+            Range mark_range = MakeSanitaryRange(buffer->cursor.pos, buffer->mark.pos);
+            mark_range.end += 1;
+            command->change(editor_state, mark_range);
+            if (mark == GetMark(buffer))
+            {
+                SetMark(buffer, GetCursor(buffer));
+            }
+        } break;
+    }
+}
+
+static inline void
 HandleViewEvents(View *view)
 {
     Buffer *buffer = GetBuffer(view);
@@ -496,32 +550,27 @@ HandleViewEvents(View *view)
 
             if (command)
             {
-                switch (command->kind)
+                if (AreEqual(command->name, "RepeatLastCommand"_str))
                 {
-                    case Command_Basic:
+                    if (buffer->cursor.pos > buffer->mark.pos)
                     {
-                        int64_t mark = GetMark(buffer);
-                        command->command(editor_state);
-                        if (mark == GetMark(buffer))
+                        Swap(buffer->cursor, buffer->mark);
+                    }
+                    ExecuteCommand(view, editor_state->last_movement_for_change, shift_down);
+                    ExecuteCommand(view, editor_state->last_change, shift_down);
+                }
+                else
+                {
+                    ExecuteCommand(view, command, shift_down);
+                    switch (command->kind)
+                    {
+                        case Command_Movement: { editor_state->last_movement = command; } break;
+                        case Command_Change:
                         {
-                            SetMark(buffer, GetCursor(buffer));
-                        }
-                    } break;
-
-                    case Command_Text:
-                    {
-                        INVALID_CODE_PATH;
-                    } break;
-
-                    case Command_Movement:
-                    {
-                        Range range = command->movement(editor_state);
-                        if (!shift_down)
-                        {
-                            buffer->mark.pos = range.start;
-                        }
-                        SetCursorPos(view, range.end);
-                    } break;
+                            editor_state->last_movement_for_change = editor_state->last_movement;
+                            editor_state->last_change = command;
+                        } break;
+                    }
                 }
             }
         }

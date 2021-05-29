@@ -405,6 +405,31 @@ Win32_ReportError(PlatformErrorType type, char *error, ...)
 }
 
 static size_t
+Win32_GetFileSize(String filename)
+{
+    size_t result = 0;
+
+    ScopedMemory filename_temp_memory(&win32_state.temp_arena);
+    wchar_t *file_wide = Win32_Utf8ToUtf16(&win32_state.temp_arena, (char *)filename.data, (int)filename.size);
+
+    HANDLE handle = CreateFileW(file_wide, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    if (handle != INVALID_HANDLE_VALUE)
+    {
+        DWORD file_size_high;
+        DWORD file_size_low = GetFileSize(handle, &file_size_high);
+        CloseHandle(handle);
+
+        LARGE_INTEGER large;
+        large.LowPart = file_size_low;
+        large.HighPart = file_size_high;
+
+        result = large.QuadPart;
+    }
+
+    return result;
+}
+
+static size_t
 Win32_ReadFileInto(size_t buffer_size, void *buffer, String filename)
 {
     Assert((buffer_size == 0) || buffer);
@@ -445,6 +470,7 @@ Win32_ReadFileInto(size_t buffer_size, void *buffer, String filename)
                 Win32_DebugPrint("Could not read file '%s'\n", filename);
             }
         }
+        CloseHandle(handle);
     }
     else
     {
@@ -492,6 +518,7 @@ Win32_ReadFile(Arena *arena, String filename)
                 Win32_DebugPrint("Could not read file '%s'\n", filename);
             }
         }
+        CloseHandle(handle);
     }
     else
     {
@@ -1069,6 +1096,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
     platform->WaitForJobs = Win32_WaitForJobs;
     platform->ReadFile = Win32_ReadFile;
     platform->ReadFileInto = Win32_ReadFileInto;
+    platform->GetFileSize = Win32_GetFileSize;
     platform->GetTime = Win32_GetTime;
     platform->SecondsElapsed = Win32_SecondsElapsed;
     platform->SleepThread = Win32_SleepThread;

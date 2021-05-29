@@ -10,25 +10,32 @@ enum CommandKind
     Command_Basic,
     Command_Text,
     Command_Movement,
+    Command_Change,
 };
 
 typedef void (*CommandProc)(EditorState *editor);
-#define COMMAND_PROC(name, ...)                                                                                    \
-    static void Paste(CMD_, name)(EditorState *editor);                                                       \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), Paste(CMD_, name), ##__VA_ARGS__);    \
+#define COMMAND_PROC(name, ...)                                                                                           \
+    static void Paste(CMD_, name)(EditorState *editor);                                                                   \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), Paste(CMD_, name), ##__VA_ARGS__); \
     static void Paste(CMD_, name)(EditorState *editor)
 
 typedef void (*TextCommandProc)(EditorState *editor, String text);
-#define TEXT_COMMAND_PROC(name)                                                                               \
-    static void Paste(CMD_, name)(EditorState *editor, String text);                                          \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), Paste(CMD_, name));     \
+#define TEXT_COMMAND_PROC(name)                                                                                           \
+    static void Paste(CMD_, name)(EditorState *editor, String text);                                                      \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), Paste(CMD_, name));                 \
     static void Paste(CMD_, name)(EditorState *editor, String text)
 
 typedef Range (*MovementProc)(EditorState *editor);
-#define MOVEMENT_PROC(name)                                                                               \
-    static Range Paste(MOV_, name)(EditorState *editor);                                          \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), Paste(MOV_, name)); \
+#define MOVEMENT_PROC(name)                                                                                               \
+    static Range Paste(MOV_, name)(EditorState *editor);                                                                  \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), Paste(MOV_, name));             \
     static Range Paste(MOV_, name)(EditorState *editor)
+
+typedef void (*ChangeProc)(EditorState *editor, Range range);
+#define CHANGE_PROC(name)                                                                                                 \
+    static void Paste(CHG_, name)(EditorState *editor, Range range);                                                      \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), Paste(CHG_, name));               \
+    static void Paste(CHG_, name)(EditorState *editor, Range range)
 
 struct Command
 {
@@ -41,6 +48,7 @@ struct Command
         CommandProc command;
         TextCommandProc text;
         MovementProc movement;
+        ChangeProc change;
     };
 };
 

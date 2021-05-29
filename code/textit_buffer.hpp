@@ -62,7 +62,7 @@ enum BufferFlags_ENUM : BufferFlags
     Buffer_ReadOnly = 0x2,
 };
 
-#define TEXTIT_BUFFER_SIZE Megabytes(1)
+#define TEXTIT_BUFFER_SIZE Megabytes(128)
 struct Buffer
 {
     BufferID id;
@@ -85,7 +85,9 @@ struct Buffer
     BufferCursor mark;
 
     int64_t count;
-    uint8_t text[TEXTIT_BUFFER_SIZE];
+    int64_t committed;
+    int64_t capacity;
+    uint8_t *text;
 };
 
 static inline Buffer *GetBuffer(BufferID id);

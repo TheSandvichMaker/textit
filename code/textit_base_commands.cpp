@@ -167,19 +167,25 @@ COMMAND_PROC(SplitWindowVertical)
     SplitWindow(window, WindowSplit_Vert);
 }
 
-COMMAND_PROC(DeleteSelection)
+CHANGE_PROC(DeleteSelection)
 {
     Buffer *buffer = CurrentBuffer(editor);
-    Range mark_range = MakeSanitaryRange(buffer->cursor.pos, buffer->mark.pos);
-    mark_range.end += 1;
-    int64_t pos = BufferReplaceRange(buffer, mark_range, ""_str);
+    // Range mark_range = MakeSanitaryRange(buffer->cursor.pos, buffer->mark.pos);
+    // mark_range.end += 1;
+    int64_t pos = BufferReplaceRange(buffer, range, ""_str);
     SetCursor(buffer, pos);
 }
 
-COMMAND_PROC(ChangeSelection)
+CHANGE_PROC(ChangeSelection)
 {
-    CMD_DeleteSelection(editor);
+    CHG_DeleteSelection(editor, range);
     CMD_EnterTextMode(editor);
+}
+
+COMMAND_PROC(RepeatLastCommand)
+{
+    UNUSED_VARIABLE(editor);
+    // dummy command
 }
 
 TEXT_COMMAND_PROC(WriteText)

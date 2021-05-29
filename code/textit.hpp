@@ -118,12 +118,18 @@ struct EditorState
     V2i screen_mouse_p;
     V2i text_mouse_p;
 
+    Command *last_movement;
+    Command *last_movement_for_change;
+    Command *last_change;
+
     uint64_t enter_text_mode_undo_ordinal;
 
     int debug_delay;
     int debug_delay_frame_count;
 };
 static EditorState *editor_state;
+
+static inline void ExecuteCommand(View *view, Command *command, bool shift_down);
 
 struct BufferIterator
 {
