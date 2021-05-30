@@ -123,41 +123,6 @@ DrawTextArea(View *view, Rect2i bounds)
             }
         }
 
-        if (block)
-        {
-            while (!token)
-            {
-                while (!token && token_index < block->count)
-                {
-                    Token *t = &block->tokens[token_index];
-                    if (pos >= t->pos + t->length)
-                    {
-                        token_index += 1;
-                    }
-                    else
-                    {
-                        token = t;
-                        break;
-                    }
-                }
-                if (token_index >= block->count)
-                {
-                    block = block->next;
-                    token_index = 0;
-
-                    if (!block)
-                    {
-                        token = &null_token;
-                        break;
-                    }
-                }
-            }
-        }
-        else
-        {
-            token = &null_token;
-        }
-
         Color color = GetThemeColor(TokenThemeName(token->kind));
         if ((token->kind == Token_Identifier) &&
             HasFlag(token->flags, TokenFlag_IsPreprocessor))
