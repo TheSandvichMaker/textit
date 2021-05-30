@@ -27,7 +27,18 @@ static const String cpp_keywords[] =
 {
     "static"_str, "inline"_str, "operator"_str, "volatile"_str, "unsigned"_str,
     "signed"_str, "register"_str, "extern"_str, "const"_str, "struct"_str, "enum"_str,
-    "class"_str, "public"_str, "private"_str,
+    "class"_str, "public"_str, "private"_str, "return"_str,
+};
+
+static const String cpp_flow_control_keywords[] =
+{
+    "case"_str, "continue"_str, "break"_str, "if"_str, "for"_str, "switch"_str,
+    "while"_str, "do"_str,
+};
+
+static const String cpp_literals[] =
+{
+    "true"_str, "false"_str,
 };
 
 static const String cpp_builtin_types[] =

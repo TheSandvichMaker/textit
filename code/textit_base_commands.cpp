@@ -59,6 +59,20 @@ COMMAND_PROC(MoveUp)
     MoveCursorRelative(view, MakeV2i(0, -1));
 }
 
+COMMAND_PROC(PageUp)
+{
+    View *view = CurrentView(editor);
+    int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
+    MoveCursorRelative(view, MakeV2i(0, -Max(0, viewport_height - 4)));
+}
+
+COMMAND_PROC(PageDown)
+{
+    View *view = CurrentView(editor);
+    int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
+    MoveCursorRelative(view, MakeV2i(0, Max(0, viewport_height - 4)));
+}
+
 MOVEMENT_PROC(MoveLeftIdentifier)
 {
     View *view = CurrentView(editor);

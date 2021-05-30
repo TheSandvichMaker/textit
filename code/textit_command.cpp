@@ -42,6 +42,8 @@ LoadDefaultBindings()
     command->map['C'].regular                      = FindCommand("ChangeSelection"_str);
     command->map['Q'].regular                      = FindCommand("ToUppercase"_str);
     command->map['X'].regular                      = FindCommand("EncloseLine"_str);
+    command->map['F'].ctrl                         = FindCommand("PageDown"_str);
+    command->map['B'].ctrl                         = FindCommand("PageUp"_str);
     command->map[PlatformInputCode_Period].regular = FindCommand("RepeatLastCommand"_str);
 
     BindingMap *text = &editor_state->bindings[EditMode_Text];

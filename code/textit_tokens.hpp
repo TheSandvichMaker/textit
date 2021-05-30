@@ -7,9 +7,14 @@ enum TokenKind : uint32_t
 
     Token_Identifier = 128,
     Token_Keyword,
+    Token_FlowControl,
     Token_Preprocessor,
     Token_String,
+    Token_Number,
+    Token_Literal,
     Token_LineComment,
+    Token_OpenBlockComment,
+    Token_CloseBlockComment,
     Token_Type,
 
     Token_LeftParen,
@@ -25,9 +30,14 @@ TokenThemeName(TokenKind kind)
     {
         case Token_Identifier: return "text_identifier"_str;
         case Token_Keyword: return "text_keyword"_str;
+        case Token_FlowControl: return "text_flowcontrol"_str;
         case Token_Preprocessor: return "text_preprocessor"_str;
         case Token_String: return "text_string"_str;
+        case Token_Number: return "text_number"_str;
+        case Token_Literal: return "text_literal"_str;
         case Token_LineComment: return "text_line_comment"_str;
+        case Token_OpenBlockComment: return "text_line_comment"_str;
+        case Token_CloseBlockComment: return "text_line_comment"_str;
         case Token_Type: return "text_type"_str;
     }
     if (kind < 128               ||

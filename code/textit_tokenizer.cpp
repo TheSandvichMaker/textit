@@ -132,6 +132,14 @@ TokenizeBuffer(Buffer *buffer)
                         tok->at += 1;
                     }
                 }
+                else if (IsNumericAscii(c))
+                {
+                    t.kind = Token_Number;
+                    while (CharsLeft(tok) && (IsValidIdentifierAscii(Peek(tok)) || Peek(tok) == '.'))
+                    {
+                        tok->at += 1;
+                    }
+                }
                 else
                 {
                     t.kind = (TokenKind)c;
@@ -156,10 +164,34 @@ TokenizeBuffer(Buffer *buffer)
 
             case '/':
             {
-                if (CharsLeft(tok) && tok->at[0] == '/')
+                if (CharsLeft(tok) && Peek(tok) == '/')
                 {
                     t.kind = Token_LineComment;
                     tok->in_line_comment = true;
+                }
+                if (CharsLeft(tok) && Peek(tok) == '*')
+                {
+                    t.kind = Token_OpenBlockComment;
+                    tok->at += 1;
+                    tok->block_comment_count += 1;
+                }
+            } break;
+
+            case '*':
+            {
+                if (CharsLeft(tok) && Peek(tok) == '/')
+                {
+                    tok->at += 1;
+                    if (tok->block_comment_count > 0)
+                    {
+                        tok->block_comment_count -= 1;
+                    }
+                    t.kind = Token_CloseBlockComment;
+                    t.flags |= TokenFlag_IsComment;
+                }
+                else
+                {
+                    t.kind = (TokenKind)c;
                 }
             } break;
 
@@ -204,11 +236,35 @@ TokenizeBuffer(Buffer *buffer)
 
         if (t.kind == Token_Identifier)
         {
-            for (size_t i = 0; i < ArrayCount(cpp_builtin_types); i += 1)
+            for (size_t i = 0; i < ArrayCount(cpp_flow_control_keywords); i += 1)
             {
-                if (AreEqual(string, cpp_builtin_types[i]))
+                if (AreEqual(string, cpp_flow_control_keywords[i]))
                 {
-                    t.kind = Token_Type;
+                    t.kind = Token_FlowControl;
+                    break;
+                }
+            }
+        }
+
+        if (t.kind == Token_Identifier)
+        {
+            for (size_t i = 0; i < ArrayCount(cpp_literals); i += 1)
+            {
+                if (AreEqual(string, cpp_literals[i]))
+                {
+                    t.kind = Token_Literal;
+                    break;
+                }
+            }
+        }
+
+        if (t.kind == Token_Identifier)
+        {
+            for (size_t i = 0; i < ArrayCount(cpp_keywords); i += 1)
+            {
+                if (AreEqual(string, cpp_keywords[i]))
+                {
+                    t.kind = Token_Keyword;
                     break;
                 }
             }

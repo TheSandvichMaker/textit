@@ -80,7 +80,7 @@ DrawTextArea(View *view, Rect2i bounds)
     while (token_index < block->count)
     {
         Token *t = &block->tokens[token_index];
-        if (pos < t->pos)
+        if (pos >= t->pos + t->length)
         {
             token_index += 1;
         }
@@ -123,15 +123,19 @@ DrawTextArea(View *view, Rect2i bounds)
             }
         }
 
-        Color color = GetThemeColor(TokenThemeName(token->kind));
-        if ((token->kind == Token_Identifier) &&
+        Color color = text_foreground;
+        if (HasFlag(token->flags, TokenFlag_IsComment))
+        {
+            color = text_comment;
+        }
+        else if ((token->kind == Token_Identifier) &&
             HasFlag(token->flags, TokenFlag_IsPreprocessor))
         {
             color = text_preprocessor;
         }
-        if (HasFlag(token->flags, TokenFlag_IsComment))
+        else
         {
-            color = text_comment;
+            color = GetThemeColor(TokenThemeName(token->kind));
         }
 
         if (pos == cursor_pos)
@@ -169,6 +173,9 @@ DrawTextArea(View *view, Rect2i bounds)
                     (pos >= mark_range.start && pos <= mark_range.end))
                 {
                     sprite.background = selection_background;
+                    sprite.foreground.r = 255 - selection_background.r;
+                    sprite.foreground.g = 255 - selection_background.g;
+                    sprite.foreground.b = 255 - selection_background.b;
                 }
                 if (pos == cursor_pos)
                 {
