@@ -63,6 +63,7 @@ enum BufferFlags_ENUM : BufferFlags
 };
 
 #define TEXTIT_BUFFER_SIZE Megabytes(128)
+#define BUFFER_ASYNC_THRESHOLD Megabytes(2)
 struct Buffer
 {
     BufferID id;
@@ -83,10 +84,13 @@ struct Buffer
 
     BufferCursor cursor;
     BufferCursor mark;
+    
+    bool dirty;
+    volatile bool tokenizing;
 
-    int64_t token_count;
-    TokenBlock *first_token_block;
-    TokenBlock *last_token_block;
+    volatile TokenList *tokens;
+    TokenList *prev_tokens;
+    TokenList tokens_[2];
 
     int64_t count;
     int64_t committed;

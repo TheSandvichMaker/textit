@@ -117,6 +117,13 @@ AtomicExchange(volatile uint32_t *dest, uint32_t value)
     return result;
 }
 
+static inline void *
+AtomicExchange(void *volatile *dest, void *value)
+{
+    void *result = InterlockedExchangePointer(dest, value);
+    return result;
+}
+
 static inline uint32_t
 GetThreadID()
 {

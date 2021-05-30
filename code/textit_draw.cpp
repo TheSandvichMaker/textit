@@ -50,7 +50,9 @@ DrawTextArea(View *view, Rect2i bounds)
 
     Range mark_range = MakeSanitaryRange(cursor_pos, mark_pos);
 
-    TokenBlock *block = buffer->first_token_block;
+    volatile TokenList *list = buffer->tokens;
+    TokenBlock *block = list->first;
+
     int64_t token_index = 0;
 
     int64_t scan_line = 0;
@@ -68,25 +70,28 @@ DrawTextArea(View *view, Rect2i bounds)
         {
             pos += 1;
         }
-        if (pos >= block->max_pos)
+        if (block)
         {
-            if (block)
+            if (pos >= block->max_pos)
             {
-                block = block->next;
+                    block = block->next;
             }
         }
     }
 
-    while (token_index < block->count)
+    if (block)
     {
-        Token *t = &block->tokens[token_index];
-        if (pos >= t->pos + t->length)
+        while (token_index < block->count)
         {
-            token_index += 1;
-        }
-        else
-        {
-            break;
+            Token *t = &block->tokens[token_index];
+            if (pos >= t->pos + t->length)
+            {
+                token_index += 1;
+            }
+            else
+            {
+                break;
+            }
         }
     }
 
@@ -94,7 +99,7 @@ DrawTextArea(View *view, Rect2i bounds)
     null_token.kind = Token_Identifier;
     null_token.pos  = INT64_MAX;
 
-    Token *token = &block->tokens[token_index];
+    Token *token = (block ? &block->tokens[token_index] : &null_token);
     while (pos < buffer->count)
     {
         if (at_p.y <= bounds.min.y)

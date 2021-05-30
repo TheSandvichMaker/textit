@@ -36,6 +36,9 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->capacity = TEXTIT_BUFFER_SIZE;
     result->text = (uint8_t *)platform->ReserveMemory((int64_t)result->capacity, 0, LOCATION_STRING("buffer storage"));
 
+    result->tokens = &result->tokens_[0];
+    result->prev_tokens = &result->tokens_[1];
+
     editor->buffers[result->id.index] = result;
 
     return result;
@@ -53,7 +56,9 @@ OpenBufferFromFile(String filename)
     }
     result->count = (int64_t)file_size;
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
-    TokenizeBuffer(result);
+
+    platform->AddJob(platform->low_priority_queue, result, TokenizeBufferJob);
+
     return result;
 }
 
@@ -484,6 +489,19 @@ HandleViewEvents(View *view)
                     }
                 }
             }
+        }
+    }
+
+    if (buffer->dirty && !buffer->tokenizing)
+    {
+        buffer->dirty = false;
+        if (buffer->count < BUFFER_ASYNC_THRESHOLD)
+        {
+            TokenizeBuffer(buffer);
+        }
+        else
+        {
+            platform->AddJob(platform->low_priority_queue, buffer, TokenizeBufferJob);
         }
     }
 }

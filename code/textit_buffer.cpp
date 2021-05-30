@@ -378,8 +378,7 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
         edit_end += delta;
     }
 
-    TokenizeBuffer(buffer);
-
+    buffer->dirty = true;
     return edit_end;
 }
 

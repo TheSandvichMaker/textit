@@ -14,6 +14,8 @@ struct Tokenizer
 
     TokenizeFlags flags;
 
+    TokenList *tokens;
+
     bool continue_next_line;
     bool in_line_comment;
     bool in_preprocessor;
@@ -49,5 +51,6 @@ static const String cpp_builtin_types[] =
 };
 
 static inline void TokenizeBuffer(Buffer *buffer);
+static PLATFORM_JOB(TokenizeBufferJob);
 
 #endif /* TEXTIT_TOKENIZER_HPP */

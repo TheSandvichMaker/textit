@@ -43,7 +43,7 @@ LoadDefaultTheme()
     SetThemeColor("text_number"_str, MakeColor(64, 192, 255));
     SetThemeColor("text_literal"_str, MakeColor(64, 128, 255));
     SetThemeColor("text_line_comment"_str, MakeColor(0, 192, 0));
-    SetThemeColor("text_type"_str, MakeColor(0, 192, 255));
+    SetThemeColor("text_type"_str, MakeColor(64, 255, 192));
     SetThemeColor("text_comment"_str, MakeColor(0, 192, 0));
     SetThemeColor("text_foreground"_str, MakeColor(255, 255, 255));
     SetThemeColor("text_foreground_dim"_str, MakeColor(192, 192, 192));

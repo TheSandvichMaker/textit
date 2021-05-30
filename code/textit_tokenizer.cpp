@@ -18,20 +18,18 @@ AllocateTokenBlock(void)
 static inline void
 PushToken(Tokenizer *tok, const Token &t)
 {
-    Buffer *buf = tok->buffer;
-
-    if (!buf->first_token_block ||
-        buf->last_token_block->count >= ArrayCount(buf->last_token_block->tokens))
+    TokenList *list = tok->tokens;
+    if (!list->first ||
+        list->last->count >= ArrayCount(list->last->tokens))
     {
         TokenBlock *block = AllocateTokenBlock();
-        SllQueuePush(buf->first_token_block, buf->last_token_block, block);
+        SllQueuePush(list->first, list->last, block);
     }
-    TokenBlock *block = tok->buffer->last_token_block;
+    TokenBlock *block = list->last;
 
     if (t.pos < block->min_pos) block->min_pos = t.pos;
     if (t.pos + t.length > block->max_pos) block->max_pos = t.pos + t.length;
 
-    buf->token_count += 1;
     block->tokens[block->count++] = t;
 }
 
@@ -63,6 +61,21 @@ Peek(Tokenizer *tok, int64_t index = 0)
 }
 
 static inline void
+FreeTokens(TokenList *list)
+{
+    TokenBlock *first = list->first;
+    TokenBlock *last = list->last;
+    if (last)
+    {
+        last->next = editor_state->first_free_token_block;
+    }
+    editor_state->first_free_token_block = first;
+
+    list->first = nullptr;
+    list->last = nullptr;
+}
+
+static inline void
 TokenizeBuffer(Buffer *buffer)
 {
     Tokenizer tok_ = {};
@@ -72,15 +85,8 @@ TokenizeBuffer(Buffer *buffer)
     tok->at = buffer->text;
     tok->end = buffer->text + buffer->count;
 
-    if (buffer->last_token_block)
-    {
-        buffer->last_token_block->next = editor_state->first_free_token_block;
-    }
-    editor_state->first_free_token_block = buffer->first_token_block;
-    
-    buffer->token_count = 0;
-    buffer->first_token_block = nullptr;
-    buffer->last_token_block = nullptr;
+    FreeTokens(buffer->prev_tokens);
+    tok->tokens = buffer->prev_tokens;
 
     while (CharsLeft(tok))
     {
@@ -260,11 +266,11 @@ TokenizeBuffer(Buffer *buffer)
 
         if (t.kind == Token_Identifier)
         {
-            for (size_t i = 0; i < ArrayCount(cpp_keywords); i += 1)
+            for (size_t i = 0; i < ArrayCount(cpp_builtin_types); i += 1)
             {
-                if (AreEqual(string, cpp_keywords[i]))
+                if (AreEqual(string, cpp_builtin_types[i]))
                 {
-                    t.kind = Token_Keyword;
+                    t.kind = Token_Type;
                     break;
                 }
             }
@@ -272,4 +278,17 @@ TokenizeBuffer(Buffer *buffer)
 
         PushToken(tok, t);
     }
+
+    TokenList *tokens = (TokenList *)buffer->tokens;
+    AtomicExchange((void *volatile*)&buffer->tokens, buffer->prev_tokens);
+    buffer->prev_tokens = tokens;
+}
+
+static
+PLATFORM_JOB(TokenizeBufferJob)
+{
+    Buffer *buffer = (Buffer *)userdata;
+    buffer->tokenizing = true;
+    TokenizeBuffer(buffer);
+    buffer->tokenizing = false;
 }

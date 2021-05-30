@@ -77,4 +77,10 @@ struct TokenBlock
     Token tokens[TOKEN_BLOCK_SIZE];
 };
 
+struct TokenList
+{
+    TokenBlock *first;
+    TokenBlock *last;
+};
+
 #endif /* TEXTIT_TOKENS_HPP */
