@@ -305,6 +305,7 @@ static inline void
 MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
 {
     Assert(last_ordinal >= first_ordinal);
+
     UndoNode *node = buffer->undo.at;
     while (node && node->ordinal > last_ordinal)
     {
@@ -377,6 +378,9 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     {
         edit_end += delta;
     }
+
+    TokenizeBuffer(buffer);
+
     return edit_end;
 }
 

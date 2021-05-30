@@ -3,6 +3,30 @@
 
 #define MAX_BUFFER_COUNT 1024
 
+enum TokenKind : uint32_t
+{
+    Token_Identifier,
+    Token_Keyword,
+    Token_Preprocessor,
+    Token_String,
+    Token_LineComment,
+};
+
+typedef uint32_t TokenFlags;
+enum TokenFlags_ENUM : TokenFlags
+{
+    TokenFlag_IsComment = 0x1,
+};
+
+struct Token
+{
+    TokenKind kind;
+    TokenFlags flags;
+
+    int64_t pos;
+    int64_t length;
+};
+
 enum LineEndKind
 {
     LineEnd_LF,
@@ -83,6 +107,9 @@ struct Buffer
 
     BufferCursor cursor;
     BufferCursor mark;
+
+    int64_t token_count;
+    Token tokens[4096];
 
     int64_t count;
     int64_t committed;

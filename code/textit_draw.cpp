@@ -7,7 +7,7 @@ DrawLine(V2i p, String line, Color foreground, Color background)
         if (IsUtf8Byte(line.data[i]))
         {
             ParseUtf8Result unicode = ParseUtf8Codepoint(&line.data[i]);
-            String string = FormatTempString("\\u%x", unicode.codepoint);
+            String string = PushTempStringF("\\u%x", unicode.codepoint);
             at_p = DrawLine(at_p, string, foreground, background);
             i += unicode.advance;
         }
@@ -21,7 +21,7 @@ DrawLine(V2i p, String line, Color foreground, Color background)
         }
         else
         {
-            String string = FormatTempString("\\x%02hhx", line.data[i]);
+            String string = PushTempStringF("\\x%02hhx", line.data[i]);
             at_p = DrawLine(at_p, string, foreground, background);
             i += 1;
         }
@@ -40,6 +40,10 @@ DrawTextArea(View *view, Rect2i bounds)
     int64_t left = bounds.min.x + 2;
     V2i at_p = MakeV2i(left, bounds.max.y - 2);
 
+    Color text_keyword = MakeColor(255, 192, 0);
+    Color text_preprocessor = MakeColor(255, 192, 255);
+    Color text_string = MakeColor(255, 192, 128);
+    Color text_comment = MakeColor(64, 255, 64);
     Color text_foreground = GetThemeColor("text_foreground"_str);
     Color text_background = GetThemeColor("text_background"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
@@ -72,6 +76,36 @@ DrawTextArea(View *view, Rect2i bounds)
             break;
         }
 
+        Token *token = &buffer->tokens[0];
+        for (int64_t i = 0; i < buffer->token_count; i += 1)
+        {
+            token = &buffer->tokens[i];
+            if ((pos >= token->pos) &&
+                (pos < (token->pos + token->length)))
+            {
+                break;
+            }
+        }
+
+        Color color = text_foreground;
+        if (token->kind == Token_Keyword)
+        {
+            color = text_keyword;
+        }
+        else if (token->kind == Token_Preprocessor)
+        {
+            color = text_preprocessor;
+        }
+        else if (token->kind == Token_String)
+        {
+            color = text_string;
+        }
+
+        if (token->flags & TokenFlag_IsComment)
+        {
+            color = text_comment;
+        }
+
         if (pos == cursor_pos)
         {
             PushTile(Layer_Text, at_p, MakeSprite('\0', text_background, text_foreground));
@@ -102,7 +136,7 @@ DrawTextArea(View *view, Rect2i bounds)
             uint8_t b = buffer->text[pos];
             if (IsAsciiByte(b))
             {
-                Sprite sprite = MakeSprite(buffer->text[pos], text_foreground, text_background);
+                Sprite sprite = MakeSprite(buffer->text[pos], color, text_background);
                 if ((editor_state->edit_mode == EditMode_Command) &&
                     (pos >= mark_range.start && pos <= mark_range.end))
                 {
@@ -125,7 +159,7 @@ DrawTextArea(View *view, Rect2i bounds)
                     Swap(foreground, background);
                 }
                 ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
-                String string = FormatTempString("\\u%x", unicode.codepoint);
+                String string = PushTempStringF("\\u%x", unicode.codepoint);
                 for (size_t i = 0; i < string.size; ++i)
                 {
                     PushTile(Layer_Text, at_p, MakeSprite(string.data[i], foreground, background));
@@ -165,7 +199,7 @@ DrawView(View *view)
 
     PushRectOutline(Layer_Background, bounds, text_foreground, text_background);
     DrawLine(MakeV2i(bounds.min.x + 2, bounds.max.y - 1),
-             FormatTempString("%hd:%.*s - scroll: %d", buffer->id.index, StringExpand(buffer->name), view->scroll_at),
+             PushTempStringF("%hd:%.*s - scroll: %d", buffer->id.index, StringExpand(buffer->name), view->scroll_at),
              filebar_text_foreground, filebar_text_background);
 
     DrawTextArea(view, bounds);
@@ -175,10 +209,10 @@ DrawView(View *view)
     V2i at_p = MakeV2i(right.min.x + 2, right.max.y - 2);
 
     UndoNode *current = CurrentUndoNode(buffer);
-    DrawLine(at_p, FormatTempString("At level: %llu", buffer->undo.depth), text_foreground, text_background); at_p.y -= 1;
-    DrawLine(at_p, FormatTempString("Ordinal: %llu, Pos: %lld", current->ordinal, current->pos), text_foreground, text_background); at_p.y -= 1;
-    DrawLine(at_p, FormatTempString("Forward: \"%.*s\"", StringExpand(current->forward)), text_foreground, text_background); at_p.y -= 1;
-    DrawLine(at_p, FormatTempString("Backward: \"%.*s\"", StringExpand(current->backward)), text_foreground, text_background); at_p.y -= 1;
+    DrawLine(at_p, PushTempStringF("At level: %llu", buffer->undo.depth), text_foreground, text_background); at_p.y -= 1;
+    DrawLine(at_p, PushTempStringF("Ordinal: %llu, Pos: %lld", current->ordinal, current->pos), text_foreground, text_background); at_p.y -= 1;
+    DrawLine(at_p, PushTempStringF("Forward: \"%.*s\"", StringExpand(current->forward)), text_foreground, text_background); at_p.y -= 1;
+    DrawLine(at_p, PushTempStringF("Backward: \"%.*s\"", StringExpand(current->backward)), text_foreground, text_background); at_p.y -= 1;
     at_p.y -= 1;
 
     uint32_t branch_index = 0;
@@ -186,10 +220,10 @@ DrawView(View *view)
          child;
          child = child->next_child)
     {
-        DrawLine(at_p, FormatTempString("Branch %d%s", branch_index, (branch_index == current->selected_branch ? " (NEXT)" : "")), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, FormatTempString("Ordinal: %llu, Pos: %lld", child->ordinal, child->pos), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, FormatTempString("Forward: \"%.*s\"", StringExpand(child->forward)), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, FormatTempString("Backward: \"%.*s\"", StringExpand(child->backward)), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, PushTempStringF("Branch %d%s", branch_index, (branch_index == current->selected_branch ? " (NEXT)" : "")), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, PushTempStringF("Ordinal: %llu, Pos: %lld", child->ordinal, child->pos), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, PushTempStringF("Forward: \"%.*s\"", StringExpand(child->forward)), text_foreground, text_background); at_p.y -= 1;
+        DrawLine(at_p, PushTempStringF("Backward: \"%.*s\"", StringExpand(child->backward)), text_foreground, text_background); at_p.y -= 1;
         branch_index += 1;
         at_p.y -= 1;
     }

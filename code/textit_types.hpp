@@ -43,6 +43,20 @@ MakeString(size_t size, uint8_t *text)
     return result;
 }
 
+struct StringNode
+{
+    StringNode *next;
+    String string;
+};
+
+struct StringList
+{
+    StringNode *first = nullptr;
+    StringNode *last = nullptr;
+    size_t total_size = 0;
+    size_t node_count = 0;
+};
+
 struct StringContainer
 {
     union

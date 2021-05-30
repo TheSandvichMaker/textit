@@ -1,6 +1,13 @@
 #ifndef TEXTIT_STRING_HPP
 #define TEXTIT_STRING_HPP
 
+typedef uint32_t StringSeparatorFlags;
+enum
+{
+    StringSeparator_BeforeFirst = 0x1,
+    StringSeparator_AfterLast = 0x2,
+};
+
 typedef uint32_t CharacterClassFlags;
 enum CharacterClassFlags_ENUM : CharacterClassFlags
 {

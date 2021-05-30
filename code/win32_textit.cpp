@@ -1124,7 +1124,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
      platform->exe_reloaded = true;
 
     HCURSOR arrow_cursor = LoadCursorW(nullptr, IDC_ARROW);
-    HWND window = Win32_CreateWindow(instance, 32, 32, 720, 480, L"Dungeons");
+    HWND window = Win32_CreateWindow(instance, 32, 32, 720, 480, L"Textit");
     if (!window)
     {
         platform->ReportError(PlatformError_Fatal, "Could not create window");
@@ -1305,7 +1305,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
         Swap(frame_start_time, frame_end_time);
 
         smooth_frametime = 0.9f*smooth_frametime + 0.1f*seconds_elapsed;
-        wchar_t *title = FormatWString(&win32_state.temp_arena, L"Dungeons - frame time: %fms, fps: %f\n",
+        wchar_t *title = FormatWString(&win32_state.temp_arena, L"Textit - frame time: %fms, fps: %f\n",
                                        1000.0*smooth_frametime,
                                        1.0 / smooth_frametime);
         SetWindowTextW(window, title);

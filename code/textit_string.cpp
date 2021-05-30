@@ -244,7 +244,18 @@ AreEqual(const String &a, const String &b)
 }
 
 static inline String
-FormatStringV(Arena *arena, char *fmt, va_list args_init)
+PushString(Arena *arena, String string)
+{
+    String result = {};
+    result.size = string.size;
+    result.data = PushArray(arena, result.size + 1, uint8_t);
+    CopySize(result.size, string.data, result.data);
+    result.data[result.size] = 0;
+    return result;
+}
+
+static inline String
+PushStringFV(Arena *arena, const char *fmt, va_list args_init)
 {
     va_list args_size;
     va_copy(args_size, args_init);
@@ -265,31 +276,193 @@ FormatStringV(Arena *arena, char *fmt, va_list args_init)
 }
 
 static inline String
-FormatString(Arena *arena, char *fmt, ...)
+PushStringF(Arena *arena, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    String result = FormatStringV(arena, fmt, args);
+    String result = PushStringFV(arena, fmt, args);
     va_end(args);
     return result;
 }
 
 static inline String
-FormatTempString(char *fmt, ...)
+PushTempStringF(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    String result = FormatStringV(platform->GetTempArena(), fmt, args);
+    String result = PushStringFV(platform->GetTempArena(), fmt, args);
     va_end(args);
     return result;
 }
 
-static inline String
-PushString(Arena *arena, String string)
+static inline bool
+IsEmpty(StringList *list)
 {
+    bool result = !list->first;
+    return result;
+}
+
+static inline StringNode
+MakeStringNode(String string)
+{
+    StringNode result = {};
+    result.string = string;
+    return result;
+}
+
+static inline void
+AddNode(StringList *list, StringNode *node)
+{
+    SllQueuePush(list->first, list->last, node);
+
+    list->node_count += 1;
+    list->total_size += node->string.size;
+}
+
+static inline void
+PushStringNoCopy(StringList *list, Arena *arena, String string)
+{
+    StringNode *node = PushStruct(arena, StringNode);
+    node->string = string;
+    AddNode(list, node);
+}
+
+static inline void
+PushString(StringList *list, Arena *arena, String string)
+{
+    StringNode *node = PushStruct(arena, StringNode);
+    node->string = PushString(arena, string);
+    AddNode(list, node);
+}
+
+static inline void
+PushStringFV(StringList *list, Arena *arena, const char *fmt, va_list args)
+{
+    StringNode *node = PushStruct(arena, StringNode);
+    node->string = PushStringFV(arena, fmt, args);
+    AddNode(list, node);
+}
+
+static inline void
+PushStringF(StringList *list, Arena *arena, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    PushStringFV(list, arena, fmt, args);
+    va_end(args);
+}
+
+static inline void
+PushTempStringF(StringList *list, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    PushStringFV(list, platform->GetTempArena(), fmt, args);
+    va_end(args);
+}
+
+static inline void
+InsertSeparators(StringList *list, Arena *arena, String separator, StringSeparatorFlags flags = 0)
+{
+    // I hate inserting in the middle of linked lists with tail pointers,
+    // maybe that's just because I've never thought about how to really do
+    // it properly, but whatever. We'll just make a new list with the same
+    // nodes. Inefficient? Yeah!!!! Whatever!!!!!
+
+    bool separator_before_first = !!(flags & StringSeparator_BeforeFirst);
+    bool separator_after_last = !!(flags & StringSeparator_AfterLast);
+
+    StringList new_list = {};
+
+    if (separator_before_first)
+    {
+        PushString(&new_list, arena, separator);
+    }
+
+    for (StringNode *node = list->first;
+         node;
+         )
+    {
+        StringNode *next_node = node->next;
+
+        AddNode(&new_list, node);
+        if (next_node)
+        {
+            PushString(&new_list, arena, separator);
+        }
+
+        node = next_node;
+    }
+
+    if (separator_after_last)
+    {
+        PushString(&new_list, arena, separator);
+    }
+
+    *list = new_list;
+}
+
+static inline String
+PushFlattenedString(StringList *list, Arena *arena, String separator = {}, StringSeparatorFlags flags = 0)
+{
+    size_t total_size = list->total_size;
+
+    bool separator_before_first = !!(flags & StringSeparator_BeforeFirst);
+    bool separator_after_last = !!(flags & StringSeparator_AfterLast);
+
+    size_t separator_count = 0;
+    if (list->node_count > 0)
+    {
+        separator_count = list->node_count - 1;
+        if (separator_before_first) separator_count += 1;
+        if (separator_after_last) separator_count += 1;
+    }
+
+    if (separator_count > 0)
+    {
+        total_size += separator_count*separator.size;
+    }
+
     String result = {};
-    result.size = string.size;
-    result.data = PushArrayNoClear(arena, result.size, uint8_t);
-    CopyArray(string.size, string.data, result.data);
+    result.size = total_size;
+    result.data = PushArray(arena, result.size + 1, uint8_t);
+
+    auto Append = [](uint8_t **dest, String string)
+    {
+        CopySize(string.size, string.data, *dest);
+        *dest += string.size;
+    };
+
+    uint8_t *dest = result.data;
+    if (separator_before_first)
+    {
+        Append(&dest, separator);
+    }
+    
+    for (StringNode *node = list->first;
+         node;
+         node = node->next)
+    {
+        Append(&dest, node->string);
+        if (node->next)
+        {
+            Append(&dest, separator);
+        }
+    }
+
+    if (separator_after_last)
+    {
+        Append(&dest, separator);
+    }
+
+    result.data[result.size] = 0;
+
+    Assert(dest == (result.data + result.size));
     return result;
+}
+
+static inline String
+PushFlattenedTempString(StringList *list, String separator = {}, StringSeparatorFlags flags = 0)
+{
+    return PushFlattenedString(list, platform->GetTempArena(), separator, flags);
 }

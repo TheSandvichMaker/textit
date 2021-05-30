@@ -5,6 +5,7 @@
 #include "textit_image.cpp"
 #include "textit_render.cpp"
 #include "textit_buffer.cpp"
+#include "textit_tokenizer.cpp"
 #include "textit_view.cpp"
 #include "textit_command.cpp"
 #include "textit_base_commands.cpp"
@@ -51,6 +52,7 @@ OpenBufferFromFile(String filename)
     }
     result->count = (int64_t)file_size;
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
+    TokenizeBuffer(result);
     return result;
 }
 

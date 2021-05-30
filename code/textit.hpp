@@ -17,6 +17,7 @@
 #include "textit_command.hpp"
 #include "textit_render.hpp"
 #include "textit_buffer.hpp"
+#include "textit_tokenizer.hpp"
 #include "textit_view.hpp"
 
 enum EditMode
@@ -88,6 +89,7 @@ struct EditorState
 
     Arena permanent_arena;
     Arena transient_arena;
+    Arena undo_scratch;
 
     Theme theme;
 
