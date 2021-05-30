@@ -71,7 +71,7 @@ TokenizeBuffer(Buffer *buffer)
         if (IsValidIdentifierAscii(c))
         {
             t->kind = Token_Identifier;
-            while (CharsLeft(tok) && !IsWhitespaceAscii(*tok->at))
+            while (CharsLeft(tok) && IsValidIdentifierAscii(*tok->at))
             {
                 tok->at += 1;
             }
@@ -117,6 +117,14 @@ TokenizeBuffer(Buffer *buffer)
         else if (AreEqual(string, "inline"_str))
         {
             t->kind = Token_Keyword;
+        }
+        else if (AreEqual(string, "void"_str))
+        {
+            t->kind = Token_Type;
+        }
+        else if (AreEqual(string, "int"_str))
+        {
+            t->kind = Token_Type;
         }
     }
 }

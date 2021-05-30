@@ -390,6 +390,13 @@ GetThemeColor(String name)
 static inline void
 LoadDefaultTheme()
 {
+    SetThemeColor("text_identifier"_str, MakeColor(255, 255, 255));
+    SetThemeColor("text_keyword"_str, MakeColor(255, 192, 0));
+    SetThemeColor("text_preprocessor"_str, MakeColor(255, 192, 255));
+    SetThemeColor("text_string"_str, MakeColor(255, 192, 64));
+    SetThemeColor("text_line_comment"_str, MakeColor(0, 192, 0));
+    SetThemeColor("text_type"_str, MakeColor(0, 192, 255));
+    SetThemeColor("text_comment"_str, MakeColor(0, 192, 0));
     SetThemeColor("text_foreground"_str, MakeColor(255, 255, 255));
     SetThemeColor("text_background"_str, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_foreground"_str, MakeColor(0, 0, 0));

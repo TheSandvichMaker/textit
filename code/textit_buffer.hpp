@@ -10,6 +10,17 @@ enum TokenKind : uint32_t
     Token_Preprocessor,
     Token_String,
     Token_LineComment,
+    Token_Type,
+};
+
+static const String g_token_theme_names[] =
+{
+    "text_identifier"_str,
+    "text_keyword"_str,
+    "text_preprocessor"_str,
+    "text_string"_str,
+    "text_line_comment"_str,
+    "text_type"_str,
 };
 
 typedef uint32_t TokenFlags;

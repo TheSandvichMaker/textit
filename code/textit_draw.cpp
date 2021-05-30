@@ -40,10 +40,7 @@ DrawTextArea(View *view, Rect2i bounds)
     int64_t left = bounds.min.x + 2;
     V2i at_p = MakeV2i(left, bounds.max.y - 2);
 
-    Color text_keyword = MakeColor(255, 192, 0);
-    Color text_preprocessor = MakeColor(255, 192, 255);
-    Color text_string = MakeColor(255, 192, 128);
-    Color text_comment = MakeColor(64, 255, 64);
+    Color text_comment = GetThemeColor("text_comment"_str);
     Color text_foreground = GetThemeColor("text_foreground"_str);
     Color text_background = GetThemeColor("text_background"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
@@ -87,20 +84,7 @@ DrawTextArea(View *view, Rect2i bounds)
             }
         }
 
-        Color color = text_foreground;
-        if (token->kind == Token_Keyword)
-        {
-            color = text_keyword;
-        }
-        else if (token->kind == Token_Preprocessor)
-        {
-            color = text_preprocessor;
-        }
-        else if (token->kind == Token_String)
-        {
-            color = text_string;
-        }
-
+        Color color = GetThemeColor(g_token_theme_names[token->kind]);
         if (token->flags & TokenFlag_IsComment)
         {
             color = text_comment;
