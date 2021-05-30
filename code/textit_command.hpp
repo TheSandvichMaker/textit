@@ -94,6 +94,12 @@ struct CommandRegisterHelper
 };
 #define REGISTER_COMMAND(name) CommandRegisterHelper Paste(command_, __COUNTER__)(StringLiteral(#name), name);
 
+enum BindingModifier
+{
+    BindMod_None,
+    BindMod_Ctrl,
+};
+
 struct Binding
 {
     Command *regular;
@@ -101,6 +107,21 @@ struct Binding
     Command *shift;
     Command *ctrl_shift;
 };
+
+struct BindingKey
+{
+    PlatformInputCode code;
+    BindingModifier mod;
+};
+
+static inline BindingKey
+MakeBindingKey(PlatformInputCode code, BindingModifier mod = BindMod_None)
+{
+    BindingKey result;
+    result.code = code;
+    result.mod = mod;
+    return result;
+}
 
 struct BindingMap
 {

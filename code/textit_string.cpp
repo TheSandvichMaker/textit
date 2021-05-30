@@ -17,6 +17,16 @@ IsAlphabeticAscii(uint8_t c)
     return result;
 }
 
+static inline uint8_t
+ToUpperAscii(uint8_t c)
+{
+    if ((c >= 'a') && (c <= 'z'))
+    {
+        c = 'A' + (c - 'a');
+    }
+    return c;
+}
+
 static inline bool
 IsNumericAscii(uint8_t c)
 {

@@ -8,6 +8,7 @@
 #include "textit_tokenizer.cpp"
 #include "textit_view.cpp"
 #include "textit_command.cpp"
+#include "textit_theme.cpp"
 #include "textit_base_commands.cpp"
 #include "textit_draw.cpp"
 
@@ -248,51 +249,6 @@ DrawWindows(Window *window)
     }
 }
 
-static inline void
-LoadDefaultBindings()
-{
-    BindingMap *command = &editor_state->bindings[EditMode_Command];
-    command->text_command = nullptr;
-    command->map[PlatformInputCode_Left].regular  = FindCommand("MoveLeft"_str);
-    command->map[PlatformInputCode_Right].regular = FindCommand("MoveRight"_str);
-    command->map[PlatformInputCode_Left].ctrl     = FindCommand("MoveLeftIdentifier"_str);
-    command->map[PlatformInputCode_Right].ctrl    = FindCommand("MoveRightIdentifier"_str);
-    command->map[PlatformInputCode_Up].regular    = FindCommand("MoveUp"_str);
-    command->map[PlatformInputCode_Down].regular  = FindCommand("MoveDown"_str);
-    command->map[PlatformInputCode_Up].ctrl       = FindCommand("MoveUp"_str);
-    command->map[PlatformInputCode_Down].ctrl     = FindCommand("MoveDown"_str);
-    command->map['H'].regular                     = FindCommand("MoveLeft"_str);
-    command->map['J'].regular                     = FindCommand("MoveDown"_str);
-    command->map['K'].regular                     = FindCommand("MoveUp"_str);
-    command->map['L'].regular                     = FindCommand("MoveRight"_str);
-    command->map['W'].regular                     = FindCommand("MoveRightIdentifier"_str);
-    command->map['B'].regular                     = FindCommand("MoveLeftIdentifier"_str);
-    command->map['I'].regular                     = FindCommand("EnterTextMode"_str);
-    command->map['X'].regular                     = FindCommand("DeleteChar"_str);
-    command->map['U'].regular                     = FindCommand("UndoOnce"_str);
-    command->map['R'].ctrl                        = FindCommand("RedoOnce"_str);
-    command->map['V'].ctrl                        = FindCommand("SplitWindowVertical"_str);
-    command->map['D'].regular                     = FindCommand("DeleteSelection"_str);
-    command->map['C'].regular                     = FindCommand("ChangeSelection"_str);
-    command->map[PlatformInputCode_Period].regular = FindCommand("RepeatLastCommand"_str);
-
-    BindingMap *text = &editor_state->bindings[EditMode_Text];
-    text->text_command = FindCommand("WriteText"_str);
-    text->map[PlatformInputCode_Left].regular     = FindCommand("MoveLeft"_str);
-    text->map[PlatformInputCode_Right].regular    = FindCommand("MoveRight"_str);
-    text->map[PlatformInputCode_Left].ctrl        = FindCommand("MoveLeftIdentifier"_str);
-    text->map[PlatformInputCode_Right].ctrl       = FindCommand("MoveRightIdentifier"_str);
-    text->map[PlatformInputCode_Up].regular       = FindCommand("MoveUp"_str);
-    text->map[PlatformInputCode_Down].regular     = FindCommand("MoveDown"_str);
-    text->map[PlatformInputCode_Up].ctrl          = FindCommand("MoveUp"_str);
-    text->map[PlatformInputCode_Down].ctrl        = FindCommand("MoveDown"_str);
-    text->map[PlatformInputCode_Escape].regular   = FindCommand("EnterCommandMode"_str);
-    text->map[PlatformInputCode_Back].regular     = FindCommand("BackspaceChar"_str);
-    text->map[PlatformInputCode_Back].ctrl        = FindCommand("BackspaceWord"_str);
-    text->map[PlatformInputCode_Delete].regular   = FindCommand("DeleteChar"_str);
-    text->map[PlatformInputCode_Delete].ctrl      = FindCommand("DeleteWord"_str);
-}
-
 static inline StringMap *
 PushStringMap(Arena *arena, size_t size)
 {
@@ -351,60 +307,6 @@ StringMapInsert(StringMap *map, String string, void *data)
         map->nodes[slot] = node;
     }
     node->data = data;
-}
-
-static inline void
-SetThemeColor(String name, Color color)
-{
-    Theme *theme = &editor_state->theme;
-    if (theme->color_count < MAX_THEME_COLORS)
-    {
-        ThemeColor *theme_color = &theme->colors[theme->color_count++];
-        theme_color->name = name;
-        theme_color->color = color;
-    }
-    else
-    {
-        INVALID_CODE_PATH;
-    }
-}
-
-static inline Color
-GetThemeColor(String name)
-{
-    Color result = MakeColor(255, 0, 255);
-
-    Theme *theme = &editor_state->theme;
-    for (size_t i = 0; i < theme->color_count; ++i)
-    {
-        ThemeColor *theme_color = &theme->colors[i];
-        if (AreEqual(name, theme_color->name))
-        {
-            result = theme_color->color;
-        }
-    }
-
-    return result;
-}
-
-static inline void
-LoadDefaultTheme()
-{
-    SetThemeColor("text_identifier"_str, MakeColor(255, 255, 255));
-    SetThemeColor("text_keyword"_str, MakeColor(255, 192, 0));
-    SetThemeColor("text_preprocessor"_str, MakeColor(255, 192, 255));
-    SetThemeColor("text_string"_str, MakeColor(255, 192, 64));
-    SetThemeColor("text_line_comment"_str, MakeColor(0, 192, 0));
-    SetThemeColor("text_type"_str, MakeColor(0, 192, 255));
-    SetThemeColor("text_comment"_str, MakeColor(0, 192, 0));
-    SetThemeColor("text_foreground"_str, MakeColor(255, 255, 255));
-    SetThemeColor("text_background"_str, MakeColor(0, 0, 0));
-    SetThemeColor("filebar_text_foreground"_str, MakeColor(0, 0, 0));
-    SetThemeColor("filebar_text_background"_str, MakeColor(192, 255, 128));
-    SetThemeColor("filebar_text_background_text_mode"_str, MakeColor(255, 192, 128));
-    SetThemeColor("unrenderable_text_foreground"_str, MakeColor(255, 255, 255));
-    SetThemeColor("unrenderable_text_background"_str, MakeColor(192, 0, 0));
-    SetThemeColor("selection_background"_str, MakeColor(64, 128, 255));
 }
 
 // Ryan's text controls example: https://hatebin.com/ovcwtpsfmj

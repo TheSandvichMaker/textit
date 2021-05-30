@@ -359,19 +359,18 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     EnsureSpace(buffer, delta);
     // TODO: Decommit behaviour
 
-    uint8_t *source = (delta > 0
-                       ? buffer->text + range.start
-                       : buffer->text + range.end);
-    uint8_t *dest   = source + delta;
-    uint8_t *end    = buffer->text + buffer->count;
-    memmove(dest, source, end - source);
-
-    buffer->count += delta;
-
-    for (size_t i = 0; i < text.size; i += 1)
+    if (delta != 0)
     {
-        buffer->text[range.start + i] = text.data[i];
+        uint8_t *source = (delta > 0
+                           ? buffer->text + range.start
+                           : buffer->text + range.end);
+        uint8_t *dest   = source + delta;
+        uint8_t *end    = buffer->text + buffer->count;
+        memmove(dest, source, end - source);
+
+        buffer->count += delta;
     }
+    memcpy(buffer->text + range.start, text.data, text.size);
 
     int64_t edit_end = range.start;
     if (delta > 0)

@@ -41,6 +41,7 @@ DrawTextArea(View *view, Rect2i bounds)
     V2i at_p = MakeV2i(left, bounds.max.y - 2);
 
     Color text_comment = GetThemeColor("text_comment"_str);
+    Color text_preprocessor = GetThemeColor("text_preprocessor"_str);
     Color text_foreground = GetThemeColor("text_foreground"_str);
     Color text_background = GetThemeColor("text_background"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
@@ -73,19 +74,36 @@ DrawTextArea(View *view, Rect2i bounds)
             break;
         }
 
-        Token *token = &buffer->tokens[0];
-        for (int64_t i = 0; i < buffer->token_count; i += 1)
+        Token null_token = {};
+        null_token.kind = Token_Identifier;
+
+        Token *token = &null_token;
+        for (TokenBlock *block = buffer->first_token_block;
+             block;
+             block = block->next)
         {
-            token = &buffer->tokens[i];
-            if ((pos >= token->pos) &&
-                (pos < (token->pos + token->length)))
+            if (pos >= block->min_pos &&
+                pos <  block->max_pos)
             {
-                break;
+                for (int64_t i = 0; i < block->count; i += 1)
+                {
+                    token = &block->tokens[i];
+                    if ((pos >= token->pos) &&
+                        (pos < (token->pos + token->length)))
+                    {
+                        break;
+                    }
+                }
             }
         }
 
-        Color color = GetThemeColor(g_token_theme_names[token->kind]);
-        if (token->flags & TokenFlag_IsComment)
+        Color color = GetThemeColor(TokenThemeName(token->kind));
+        if ((token->kind == Token_Identifier) &&
+            HasFlag(token->flags, TokenFlag_IsPreprocessor))
+        {
+            color = text_preprocessor;
+        }
+        if (HasFlag(token->flags, TokenFlag_IsComment))
         {
             color = text_comment;
         }

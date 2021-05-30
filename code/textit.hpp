@@ -15,7 +15,9 @@
 #include "textit_resources.hpp"
 #include "textit_image.hpp"
 #include "textit_command.hpp"
+#include "textit_theme.hpp"
 #include "textit_render.hpp"
+#include "textit_tokens.hpp"
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
 #include "textit_view.hpp"
@@ -45,23 +47,6 @@ struct StringMap
 static inline StringMap *PushStringMap(Arena *arena, size_t size);
 static inline void *StringMapFind(StringMap *map, String string);
 static inline void StringMapInsert(StringMap *map, String string, void *data);
-
-struct ThemeColor
-{
-    String name;
-    Color color;
-};
-
-#define MAX_THEME_COLORS 256
-struct Theme
-{
-    size_t color_count;
-    ThemeColor colors[MAX_THEME_COLORS];
-};
-
-static inline void LoadDefaultTheme();
-static inline void SetThemeColor(String name, Color color);
-static inline Color GetThemeColor(String name);
 
 enum WindowSplitKind
 {
@@ -125,6 +110,8 @@ struct EditorState
     Command *last_change;
 
     uint64_t enter_text_mode_undo_ordinal;
+
+    TokenBlock *first_free_token_block;
 
     int debug_delay;
     int debug_delay_frame_count;

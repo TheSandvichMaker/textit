@@ -37,6 +37,16 @@ MOVEMENT_PROC(MoveRight)
     return MakeRange(pos);
 }
 
+MOVEMENT_PROC(EncloseLine)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = GetCursor(buffer);
+    Range line_range = EncloseLine(buffer, pos);
+    return line_range;
+}
+
 COMMAND_PROC(MoveDown)
 {
     View *view = CurrentView(editor);
@@ -180,6 +190,17 @@ CHANGE_PROC(ChangeSelection)
 {
     CHG_DeleteSelection(editor, range);
     CMD_EnterTextMode(editor);
+}
+
+CHANGE_PROC(ToUppercase)
+{
+    Buffer *buffer = CurrentBuffer(editor);
+    String string = BufferPushRange(platform->GetTempArena(), buffer, range);
+    for (size_t i = 0; i < string.size; i += 1)
+    {
+        string.data[i] = ToUpperAscii(string.data[i]);
+    }
+    BufferReplaceRange(buffer, range, string);
 }
 
 COMMAND_PROC(RepeatLastCommand)

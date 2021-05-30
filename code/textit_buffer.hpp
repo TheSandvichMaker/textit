@@ -3,41 +3,6 @@
 
 #define MAX_BUFFER_COUNT 1024
 
-enum TokenKind : uint32_t
-{
-    Token_Identifier,
-    Token_Keyword,
-    Token_Preprocessor,
-    Token_String,
-    Token_LineComment,
-    Token_Type,
-};
-
-static const String g_token_theme_names[] =
-{
-    "text_identifier"_str,
-    "text_keyword"_str,
-    "text_preprocessor"_str,
-    "text_string"_str,
-    "text_line_comment"_str,
-    "text_type"_str,
-};
-
-typedef uint32_t TokenFlags;
-enum TokenFlags_ENUM : TokenFlags
-{
-    TokenFlag_IsComment = 0x1,
-};
-
-struct Token
-{
-    TokenKind kind;
-    TokenFlags flags;
-
-    int64_t pos;
-    int64_t length;
-};
-
 enum LineEndKind
 {
     LineEnd_LF,
@@ -120,7 +85,8 @@ struct Buffer
     BufferCursor mark;
 
     int64_t token_count;
-    Token tokens[4096];
+    TokenBlock *first_token_block;
+    TokenBlock *last_token_block;
 
     int64_t count;
     int64_t committed;

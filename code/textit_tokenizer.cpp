@@ -1,13 +1,38 @@
-static inline Token *
-PushToken(Tokenizer *tok)
+static inline TokenBlock *
+AllocateTokenBlock(void)
 {
-    Buffer *buffer = tok->buffer;
-    Token *result = &tok->null_token;
-    if (buffer->token_count < ArrayCount(buffer->tokens))
+    if (!editor_state->first_free_token_block)
     {
-        result = &buffer->tokens[buffer->token_count++];
+        editor_state->first_free_token_block = PushStructNoClear(&editor_state->transient_arena, TokenBlock);
+        editor_state->first_free_token_block->next = nullptr;
     }
+    TokenBlock *result = editor_state->first_free_token_block;
+    editor_state->first_free_token_block = result->next;
+
+    ZeroStruct(result);
+    result->min_pos = INT64_MAX;
+    result->max_pos = INT64_MIN;
     return result;
+}
+
+static inline void
+PushToken(Tokenizer *tok, const Token &t)
+{
+    Buffer *buf = tok->buffer;
+
+    if (!buf->first_token_block ||
+        buf->last_token_block->count >= ArrayCount(buf->last_token_block->tokens))
+    {
+        TokenBlock *block = AllocateTokenBlock();
+        SllQueuePush(buf->first_token_block, buf->last_token_block, block);
+    }
+    TokenBlock *block = tok->buffer->last_token_block;
+
+    if (t.pos < block->min_pos) block->min_pos = t.pos;
+    if (t.pos + t.length > block->max_pos) block->max_pos = t.pos + t.length;
+
+    buf->token_count += 1;
+    block->tokens[block->count++] = t;
 }
 
 static inline int64_t
@@ -23,6 +48,20 @@ CharsLeft(Tokenizer *tok)
     return (int64_t)(tok->end - tok->at);
 }
 
+static inline uint8_t
+Peek(Tokenizer *tok, int64_t index = 0)
+{
+    if (((tok->at + index) >= tok->buffer->text) &&
+        ((tok->at + index) < tok->end))
+    {
+        return tok->at[index];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
 static inline void
 TokenizeBuffer(Buffer *buffer)
 {
@@ -33,9 +72,15 @@ TokenizeBuffer(Buffer *buffer)
     tok->at = buffer->text;
     tok->end = buffer->text + buffer->count;
 
+    if (buffer->last_token_block)
+    {
+        buffer->last_token_block->next = editor_state->first_free_token_block;
+    }
+    editor_state->first_free_token_block = buffer->first_token_block;
+    
     buffer->token_count = 0;
-
-    TokenFlags flags = 0;
+    buffer->first_token_block = nullptr;
+    buffer->last_token_block = nullptr;
 
     while (CharsLeft(tok))
     {
@@ -46,7 +91,12 @@ TokenizeBuffer(Buffer *buffer)
             {
                 if (HasFlag(c_class, Character_VerticalWhitespace))
                 {
-                    flags &= ~TokenFlag_IsComment;
+                    if (!tok->continue_next_line)
+                    {
+                        tok->in_line_comment = false;
+                        tok->in_preprocessor = false;
+                    }
+                    tok->continue_next_line = false;
                 }
                 tok->at += 1;
             }
@@ -59,72 +109,111 @@ TokenizeBuffer(Buffer *buffer)
         {
             break;
         }
+        
+        tok->continue_next_line = false;
 
-        Token *t = PushToken(tok);
-        t->kind = Token_Identifier;
+        Token t = {};
+        t.kind = Token_Identifier;
 
         uint8_t *start = tok->at;
 
         uint8_t c = tok->at[0];
         tok->at += 1;
 
-        if (IsValidIdentifierAscii(c))
+        switch (c)
         {
-            t->kind = Token_Identifier;
-            while (CharsLeft(tok) && IsValidIdentifierAscii(*tok->at))
+            default:
             {
-                tok->at += 1;
-            }
-        }
-        else if (c == '#')
-        {
-            t->kind = Token_Preprocessor;
-            while (CharsLeft(tok) && !IsWhitespaceAscii(*tok->at))
+                if (IsAlphabeticAscii(c) || c == '_')
+                {
+                    t.kind = Token_Identifier;
+                    while (CharsLeft(tok) && IsValidIdentifierAscii(Peek(tok)))
+                    {
+                        tok->at += 1;
+                    }
+                }
+                else
+                {
+                    t.kind = (TokenKind)c;
+                }
+            } break;
+
+            case '#':
             {
-                tok->at += 1;
-            }
-        }
-        else if (c == '"')
-        {
-            t->kind = Token_String;
-            while (CharsLeft(tok) && *tok->at++ != '"');
-        }
-        else if (c == '/')
-        {
-            if (CharsLeft(tok) && tok->at[0] == '/')
+                t.kind = Token_Preprocessor;
+                while (CharsLeft(tok) && !IsWhitespaceAscii(Peek(tok)))
+                {
+                    tok->at += 1;
+                }
+                tok->in_preprocessor = true;
+            } break;
+
+            case '"':
             {
-                t->kind = Token_LineComment;
-                flags |= TokenFlag_IsComment;
-            }
+                t.kind = Token_String;
+                while (CharsLeft(tok) && *tok->at++ != '"');
+            } break;
+
+            case '/':
+            {
+                if (CharsLeft(tok) && tok->at[0] == '/')
+                {
+                    t.kind = Token_LineComment;
+                    tok->in_line_comment = true;
+                }
+            } break;
+
+            case '\\':
+            {
+                t.kind = (TokenKind)c;
+                tok->continue_next_line = true;
+            } break;
+
+            case '(': { t.kind = Token_LeftParen; } break;
+            case ')': { t.kind = Token_RightParen; } break;
+            case '{': { t.kind = Token_LeftScope; } break;
+            case '}': { t.kind = Token_RightScope; } break;
+        }
+
+        if (tok->in_line_comment || tok->block_comment_count > 0)
+        {
+            t.flags |= TokenFlag_IsComment;
+        }
+        if (tok->in_preprocessor)
+        {
+            t.flags |= TokenFlag_IsPreprocessor;
         }
 
         uint8_t *end = tok->at;
 
-        t->pos = (int64_t)(start - buffer->text);
-        t->length = (int64_t)(end - start);
-
-        t->flags = flags;
+        t.pos = (int64_t)(start - buffer->text);
+        t.length = (int64_t)(end - start);
 
         String string = MakeString((size_t)(end - start), start);
-        if (AreEqual(string, "if"_str))
+        if (t.kind == Token_Identifier)
         {
-            t->kind = Token_Keyword;
+            for (size_t i = 0; i < ArrayCount(cpp_keywords); i += 1)
+            {
+                if (AreEqual(string, cpp_keywords[i]))
+                {
+                    t.kind = Token_Keyword;
+                    break;
+                }
+            }
         }
-        else if (AreEqual(string, "static"_str))
+
+        if (t.kind == Token_Identifier)
         {
-            t->kind = Token_Keyword;
+            for (size_t i = 0; i < ArrayCount(cpp_builtin_types); i += 1)
+            {
+                if (AreEqual(string, cpp_builtin_types[i]))
+                {
+                    t.kind = Token_Type;
+                    break;
+                }
+            }
         }
-        else if (AreEqual(string, "inline"_str))
-        {
-            t->kind = Token_Keyword;
-        }
-        else if (AreEqual(string, "void"_str))
-        {
-            t->kind = Token_Type;
-        }
-        else if (AreEqual(string, "int"_str))
-        {
-            t->kind = Token_Type;
-        }
+
+        PushToken(tok, t);
     }
 }
