@@ -50,6 +50,9 @@ DrawTextArea(View *view, Rect2i bounds)
 
     Range mark_range = MakeSanitaryRange(cursor_pos, mark_pos);
 
+    TokenBlock *block = buffer->first_token_block;
+    int64_t token_index = 0;
+
     int64_t scan_line = 0;
     int64_t pos = 0;
     while ((scan_line < view->scroll_at) &&
@@ -65,8 +68,33 @@ DrawTextArea(View *view, Rect2i bounds)
         {
             pos += 1;
         }
+        if (pos >= block->max_pos)
+        {
+            if (block)
+            {
+                block = block->next;
+            }
+        }
     }
 
+    while (token_index < block->count)
+    {
+        Token *t = &block->tokens[token_index];
+        if (pos < t->pos)
+        {
+            token_index += 1;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    Token null_token = {};
+    null_token.kind = Token_Identifier;
+    null_token.pos  = INT64_MAX;
+
+    Token *token = &block->tokens[token_index];
     while (pos < buffer->count)
     {
         if (at_p.y <= bounds.min.y)
@@ -74,27 +102,60 @@ DrawTextArea(View *view, Rect2i bounds)
             break;
         }
 
-        Token null_token = {};
-        null_token.kind = Token_Identifier;
-
-        Token *token = &null_token;
-        for (TokenBlock *block = buffer->first_token_block;
-             block;
-             block = block->next)
+        if (pos >= token->pos + token->length)
         {
-            if (pos >= block->min_pos &&
-                pos <  block->max_pos)
+            token_index += 1;
+
+            if (block &&
+                token_index >= block->count)
             {
-                for (int64_t i = 0; i < block->count; i += 1)
+                block = block->next;
+                token_index = 0;
+            }
+
+            if (block)
+            {
+                token = &block->tokens[token_index];
+            }
+            else
+            {
+                token = &null_token;
+            }
+        }
+
+        if (block)
+        {
+            while (!token)
+            {
+                while (!token && token_index < block->count)
                 {
-                    token = &block->tokens[i];
-                    if ((pos >= token->pos) &&
-                        (pos < (token->pos + token->length)))
+                    Token *t = &block->tokens[token_index];
+                    if (pos >= t->pos + t->length)
                     {
+                        token_index += 1;
+                    }
+                    else
+                    {
+                        token = t;
+                        break;
+                    }
+                }
+                if (token_index >= block->count)
+                {
+                    block = block->next;
+                    token_index = 0;
+
+                    if (!block)
+                    {
+                        token = &null_token;
                         break;
                     }
                 }
             }
+        }
+        else
+        {
+            token = &null_token;
         }
 
         Color color = GetThemeColor(TokenThemeName(token->kind));
