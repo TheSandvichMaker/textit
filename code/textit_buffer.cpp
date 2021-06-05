@@ -185,8 +185,8 @@ ScanWordForward(Buffer *buffer, int64_t pos)
         pos += 1;
     }
 
-    while (IsInBufferRange(buffer, pos + 1) &&
-           IsHorizontalWhitespaceAscii(ReadBufferByte(buffer, pos + 1)))
+    while (IsInBufferRange(buffer, pos) &&
+           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
         pos += 1;
     }
@@ -208,7 +208,7 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
     Range result = MakeRange(pos);
 
     while (IsInBufferRange(buffer, pos) &&
-           IsHorizontalWhitespaceAscii(ReadBufferByte(buffer, pos)))
+           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
         pos -= 1;
     }
@@ -226,16 +226,30 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
 }
 
 static inline Range
-EncloseLine(Buffer *buffer, int64_t pos)
+EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
 {
-    Range result = MakeRange(pos, pos + 1);
-    while (IsInBufferRange(buffer, result.start) && !PeekNewlineBackward(buffer, result.start))
+    Range result = MakeRange(pos, pos);
+    while (IsInBufferRange(buffer, result.start - 1) && !PeekNewlineBackward(buffer, result.start - 1))
     {
         result.start -= 1;
     }
-    while (IsInBufferRange(buffer, result.end) && !PeekNewline(buffer, result.end))
+
+    int64_t newline_length = 0;
+    while (IsInBufferRange(buffer, result.end + 1))
     {
-        result.end += 1;
+        newline_length = PeekNewline(buffer, result.end + 1);
+        if (newline_length)
+        {
+            if (including_newline)
+            {
+                result.end += newline_length;
+            }
+            break;
+        }
+        else
+        {
+            result.end += 1;
+        }
     }
     return result;
 }

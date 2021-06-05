@@ -68,6 +68,12 @@ struct Window
     };
 };
 
+struct CoreConfig
+{
+    bool visualize_newlines = false;
+};
+GLOBAL_STATE(CoreConfig, core_config);
+
 struct EditorState
 {
     GlobalState global_state;

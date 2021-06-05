@@ -233,19 +233,46 @@ DrawWindows(Window *window)
     {
         View *view = GetView(window->view);
 
-        int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
-        int64_t top = view->scroll_at;
-        int64_t bot = view->scroll_at + viewport_height;
-        if (view->cursor.y < top)
+        int64_t estimated_viewport_height = view->actual_viewport_line_height;
+        if (!estimated_viewport_height)
         {
-            view->scroll_at += view->cursor.y - top;
-        }
-        if (view->cursor.y > bot)
-        {
-            view->scroll_at += view->cursor.y - bot;
+            estimated_viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
         }
 
-        DrawView(view);
+        {
+            int64_t top = view->scroll_at;
+            int64_t bot = view->scroll_at + estimated_viewport_height;
+            if (view->cursor.y < top)
+            {
+                view->scroll_at += view->cursor.y - top;
+            }
+            if (view->cursor.y > bot)
+            {
+                view->scroll_at += view->cursor.y - bot;
+            }
+        }
+
+        view->actual_viewport_line_height = DrawView(view);
+
+        {
+            int64_t viewport_height = view->actual_viewport_line_height;
+            if (viewport_height != estimated_viewport_height)
+            {
+                int64_t top = view->scroll_at;
+                int64_t bot = view->scroll_at + viewport_height;
+                if (view->cursor.y < top)
+                {
+                    view->scroll_at += view->cursor.y - top;
+                }
+                if (view->cursor.y > bot)
+                {
+                    view->scroll_at += view->cursor.y - bot;
+                }
+
+                PushRect(Layer_Text, view->viewport, COLOR_BLACK);
+                DrawView(view);
+            }
+        }
     }
     else
     {
@@ -404,7 +431,11 @@ ExecuteCommand(View *view, Command *command, bool shift_down)
         case Command_Movement:
         {
             Range range = command->movement(editor_state);
-            if (!shift_down)
+            if (shift_down)
+            {
+                buffer->mark.pos = Min(range.start, buffer->mark.pos);
+            }
+            else
             {
                 buffer->mark.pos = range.start;
             }

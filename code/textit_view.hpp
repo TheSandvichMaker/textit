@@ -13,6 +13,7 @@ struct View
     V2i cursor;
 
     Rect2i viewport;
+    int64_t actual_viewport_line_height;
     int64_t scroll_at;
 };
 

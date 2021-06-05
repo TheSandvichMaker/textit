@@ -44,7 +44,13 @@ LoadDefaultBindings()
     command->map['X'].regular                      = FindCommand("EncloseLine"_str);
     command->map['F'].ctrl                         = FindCommand("PageDown"_str);
     command->map['B'].ctrl                         = FindCommand("PageUp"_str);
+    command->map['Z'].regular                      = FindCommand("CenterView"_str);
+    command->map['G'].regular                      = FindCommand("JumpToBufferStart"_str);
+    command->map['G'].shift                        = FindCommand("JumpToBufferEnd"_str);
+    command->map['0'].regular                      = FindCommand("MoveLineStart"_str);
+    command->map['4'].shift                        = FindCommand("MoveLineEnd"_str);
     command->map[PlatformInputCode_Period].regular = FindCommand("RepeatLastCommand"_str);
+    command->map[PlatformInputCode_F1].regular     = FindCommand("ToggleVisualizeNewlines"_str);
 
     BindingMap *text = &editor_state->bindings[EditMode_Text];
     text->text_command = FindCommand("WriteText"_str);

@@ -128,8 +128,8 @@ MakeRangeStartLength(int64_t start, int64_t length)
 static inline int64_t
 ClampToRange(int64_t value, Range bounds)
 {
-    if (value <  bounds.start) value = bounds.start;
-    if (value >= bounds.end  ) value = bounds.end - 1;
+    if (value < bounds.start) value = bounds.start;
+    if (value > bounds.end  ) value = bounds.end;
     return value;
 }
 
@@ -137,6 +137,8 @@ static inline Range
 ClampRange(Range range, Range bounds)
 {
     if (range.start < bounds.start) range.start = bounds.start;
+    if (range.start > bounds.end  ) range.start = bounds.end;
+    if (range.end   < bounds.start) range.end   = bounds.start;
     if (range.end   > bounds.end  ) range.end   = bounds.end;
     return range;
 }

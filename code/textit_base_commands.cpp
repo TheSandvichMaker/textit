@@ -1,3 +1,9 @@
+COMMAND_PROC(ToggleVisualizeNewlines)
+{
+    UNUSED_VARIABLE(editor);
+    core_config->visualize_newlines = !core_config->visualize_newlines;
+}
+
 COMMAND_PROC(EnterTextMode,
              "Enter Text Input Mode"_str)
 {
@@ -13,6 +19,27 @@ COMMAND_PROC(EnterCommandMode,
     Buffer *buffer = CurrentBuffer(editor);
     uint64_t current_undo_ordinal = CurrentUndoOrdinal(buffer);
     MergeUndoHistory(buffer, editor->enter_text_mode_undo_ordinal, current_undo_ordinal);
+}
+
+COMMAND_PROC(CenterView,
+             "Center the view around the cursor"_str)
+{
+    View *view = CurrentView(editor);
+    int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
+    view->scroll_at = view->cursor.y - viewport_height / 2;
+}
+
+COMMAND_PROC(JumpToBufferStart)
+{
+    View *view = CurrentView(editor);
+    SetCursorPos(view, 0);
+}
+
+COMMAND_PROC(JumpToBufferEnd)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+    SetCursorPos(view, buffer->count - 1);
 }
 
 MOVEMENT_PROC(MoveLeft)
@@ -37,13 +64,55 @@ MOVEMENT_PROC(MoveRight)
     return MakeRange(pos);
 }
 
+MOVEMENT_PROC(MoveLeftIdentifier)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = GetCursor(buffer);
+    Range result = ScanWordBackward(buffer, pos);
+
+    return result;
+}
+
+MOVEMENT_PROC(MoveRightIdentifier)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = GetCursor(buffer);
+    Range result = ScanWordForward(buffer, pos);
+
+    return result;
+}
+
+MOVEMENT_PROC(MoveLineStart)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = GetCursor(buffer);
+    Range line_range = EncloseLine(buffer, pos, true);
+    return MakeRange(pos, line_range.start);
+}
+
+MOVEMENT_PROC(MoveLineEnd)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = GetCursor(buffer);
+    Range line_range = EncloseLine(buffer, pos, true);
+    return MakeRange(pos, line_range.end);
+}
+
 MOVEMENT_PROC(EncloseLine)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
     int64_t pos = GetCursor(buffer);
-    Range line_range = EncloseLine(buffer, pos);
+    Range line_range = EncloseLine(buffer, pos, true);
     return line_range;
 }
 
@@ -71,32 +140,6 @@ COMMAND_PROC(PageDown)
     View *view = CurrentView(editor);
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
     MoveCursorRelative(view, MakeV2i(0, Max(0, viewport_height - 4)));
-}
-
-MOVEMENT_PROC(MoveLeftIdentifier)
-{
-    View *view = CurrentView(editor);
-    Buffer *buffer = GetBuffer(view);
-
-    int64_t pos = GetCursor(buffer);
-    Range line_range = EncloseLine(buffer, pos);
-
-    Range result = ScanWordBackward(buffer, pos);
-    result = ClampRange(result, line_range);
-    return result;
-}
-
-MOVEMENT_PROC(MoveRightIdentifier)
-{
-    View *view = CurrentView(editor);
-    Buffer *buffer = GetBuffer(view);
-
-    int64_t pos = GetCursor(buffer);
-    Range line_range = EncloseLine(buffer, pos);
-
-    Range result = ScanWordForward(buffer, pos);
-    result = ClampRange(result, line_range);
-    return result;
 }
 
 COMMAND_PROC(BackspaceChar)

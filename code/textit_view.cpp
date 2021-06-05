@@ -29,8 +29,8 @@ ViewCursorToBufferLocation(Buffer *buffer, V2i cursor)
         }
     }
     line_end = line_start;
-    while ((line_end < buffer->count) &&
-           !PeekNewline(buffer, line_end))
+    while (((line_end + 1) < buffer->count) &&
+           !PeekNewline(buffer, line_end + 1))
     {
         line_end += 1;
     }
@@ -108,7 +108,7 @@ MoveCursorRelative(View *view, V2i delta)
 
     V2i new_cursor = view->cursor + delta;
 
-    int64_t line_length = loc.line_range.end - loc.line_range.start;
+    int64_t line_length = (loc.line_range.end - loc.line_range.start) + 1;
     new_cursor.y = ClampToRange(new_cursor.y, MakeRange(0, loc.line_number + 1));
 
     if (delta.x != 0)

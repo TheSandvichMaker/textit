@@ -34,7 +34,7 @@ static const String cpp_keywords[] =
 
 static const String cpp_flow_control_keywords[] =
 {
-    "case"_str, "continue"_str, "break"_str, "if"_str, "for"_str, "switch"_str,
+    "case"_str, "continue"_str, "break"_str, "if"_str, "else"_str, "for"_str, "switch"_str,
     "while"_str, "do"_str,
 };
 

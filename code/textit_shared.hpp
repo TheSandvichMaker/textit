@@ -248,4 +248,37 @@ SafeTruncateI64(int64_t value)
     return (int32_t)value;
 }
 
+static inline uint32_t
+Permute(uint32_t index, uint32_t len, uint32_t seed)
+{
+    // SOURCE: https://andrew-helmer.github.io/permute/
+
+    uint32_t mask = len - 1;
+    mask |= mask >> 1;
+    mask |= mask >> 2;
+    mask |= mask >> 4;
+    mask |= mask >> 8;
+    mask |= mask >> 16;
+
+    do
+    {
+        index ^= seed; index *= 0xe170893d;
+        index ^= seed >> 16;
+        index ^= (index & mask) >> 4;
+        index ^= seed >> 8; index *= 0x0929eb3f;
+        index ^= seed >> 23;
+        index ^= (index & mask) >> 1; index *= 1 | seed >> 27;
+        index *= 0x6935fa69;
+        index ^= (index & mask) >> 11; index *= 0x74dcb303;
+        index ^= (index & mask) >> 2; index *= 0x9e501cc3;
+        index ^= (index & mask) >> 2; index *= 0xc860a3df;
+        index &= mask;
+        index ^= index >> 5;
+    }
+    while (index >= len);
+
+    uint32_t result = (index + seed) % len;
+    return result;
+}
+
 #endif /* TEXTIT_SHARED_HPP */

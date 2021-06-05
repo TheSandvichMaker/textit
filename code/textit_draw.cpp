@@ -29,7 +29,7 @@ DrawLine(V2i p, String line, Color foreground, Color background)
     return at_p;
 }
 
-static inline void
+static inline int64_t
 DrawTextArea(View *view, Rect2i bounds)
 {
     Buffer *buffer = GetBuffer(view);
@@ -47,6 +47,18 @@ DrawTextArea(View *view, Rect2i bounds)
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
     Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
     Color selection_background = GetThemeColor("selection_background"_str);
+
+    int64_t actual_line_height = 0;
+
+    if (view->scroll_at < 0)
+    {
+        at_p.y += view->scroll_at;
+        PushRect(Layer_Text,
+                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, at_p.y + 1),
+                                  MakeV2i(bounds.max.x - 1, bounds.max.y - 1)),
+                 MakeColor(32, 32, 32));
+        actual_line_height += ((bounds.max.y - 1) - at_p.y);
+    }
 
     Range mark_range = MakeSanitaryRange(cursor_pos, mark_pos);
 
@@ -102,11 +114,6 @@ DrawTextArea(View *view, Rect2i bounds)
     Token *token = (block ? &block->tokens[token_index] : &null_token);
     while (pos < buffer->count)
     {
-        if (at_p.y <= bounds.min.y)
-        {
-            break;
-        }
-
         if (pos >= token->pos + token->length)
         {
             token_index += 1;
@@ -153,15 +160,28 @@ DrawTextArea(View *view, Rect2i bounds)
             break;
         }
 
+#if 0
         int64_t newline_length = PeekNewline(buffer, pos);
         if (newline_length)
         {
+            if ((editor_state->edit_mode == EditMode_Command) &&
+                (pos >= mark_range.start && pos <= mark_range.end))
+            {
+                Sprite sprite = {};
+                sprite.background = selection_background;
+                sprite.foreground.r = 255 - selection_background.r;
+                sprite.foreground.g = 255 - selection_background.g;
+                sprite.foreground.b = 255 - selection_background.b;
+                PushTile(Layer_Text, at_p, sprite);
+            }
+
             at_p.x = left;
             at_p.y -= 1;
 
             pos += newline_length;
         }
         else
+#endif
         {
             if (at_p.x >= (bounds.max.x - 2))
             {
@@ -171,7 +191,7 @@ DrawTextArea(View *view, Rect2i bounds)
             }
 
             uint8_t b = buffer->text[pos];
-            if (IsAsciiByte(b))
+            if (b == ' ' || IsPrintableAscii(b))
             {
                 Sprite sprite = MakeSprite(buffer->text[pos], color, text_background);
                 if ((editor_state->edit_mode == EditMode_Command) &&
@@ -198,8 +218,23 @@ DrawTextArea(View *view, Rect2i bounds)
                 {
                     Swap(foreground, background);
                 }
-                ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
-                String string = PushTempStringF("\\u%x", unicode.codepoint);
+
+                int64_t advance = 1;
+                String string = {};
+                if (b == '\r')
+                {
+                    if (core_config->visualize_newlines) string = PushTempStringF("\\r");
+                }
+                else if (b == '\n')
+                {
+                    if (core_config->visualize_newlines) string = PushTempStringF("\\n");
+                }
+                else
+                {
+                    ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
+                    string = PushTempStringF("\\u%x", unicode.codepoint);
+                    advance = unicode.advance;
+                }
                 for (size_t i = 0; i < string.size; ++i)
                 {
                     PushTile(Layer_Text, at_p, MakeSprite(string.data[i], foreground, background));
@@ -207,17 +242,54 @@ DrawTextArea(View *view, Rect2i bounds)
                     if (at_p.x >= (bounds.max.x - 2))
                     {
                         PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
+
                         at_p.x = left - 1;
                         at_p.y -= 1;
+
+                        if (at_p.y > bounds.min.y)
+                        {
+                            actual_line_height += 1;
+                        }
+                        else
+                        {
+                            return actual_line_height;
+                        }
                     }
                 }
-                pos += unicode.advance;
+                pos += advance;
+            }
+
+            if (b == '\n')
+            {
+                at_p.x = left;
+                at_p.y -= 1;
+
+                if (at_p.y > bounds.min.y)
+                {
+                    actual_line_height += 1;
+                }
+                else
+                {
+                    return actual_line_height;
+                }
             }
         }
     }
+
+    if (at_p.y > bounds.min.y)
+    {
+        PushRect(Layer_Text,
+                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, bounds.min.y + 1),
+                                  MakeV2i(bounds.max.x - 1, at_p.y + 1)),
+                 MakeColor(32, 32, 32));
+        actual_line_height += (at_p.y - bounds.min.y);
+    }
+
+
+    return actual_line_height;
 }
 
-static inline void
+static inline int64_t
 DrawView(View *view)
 {
     Buffer *buffer = GetBuffer(view);
@@ -237,35 +309,13 @@ DrawView(View *view)
     }
     Color filebar_text_background = GetThemeColor(filebar_text_background_str);
 
-    PushRectOutline(Layer_Background, bounds, text_foreground, text_background);
+    PushRectOutline(Layer_Text, bounds, text_foreground, text_background);
     DrawLine(MakeV2i(bounds.min.x + 2, bounds.max.y - 1),
-             PushTempStringF("%hd:%.*s - scroll: %d", buffer->id.index, StringExpand(buffer->name), view->scroll_at),
+             PushTempStringF("%hd:%.*s - scroll: %d, view cursor: { %lld, %lld }",
+                             buffer->id.index, StringExpand(buffer->name),
+                             view->scroll_at,
+                             view->cursor.x, view->cursor.y),
              filebar_text_foreground, filebar_text_background);
 
-    DrawTextArea(view, bounds);
-#if 0
-    PushRectOutline(Layer_Background, right, text_foreground, text_background);
-
-    V2i at_p = MakeV2i(right.min.x + 2, right.max.y - 2);
-
-    UndoNode *current = CurrentUndoNode(buffer);
-    DrawLine(at_p, PushTempStringF("At level: %llu", buffer->undo.depth), text_foreground, text_background); at_p.y -= 1;
-    DrawLine(at_p, PushTempStringF("Ordinal: %llu, Pos: %lld", current->ordinal, current->pos), text_foreground, text_background); at_p.y -= 1;
-    DrawLine(at_p, PushTempStringF("Forward: \"%.*s\"", StringExpand(current->forward)), text_foreground, text_background); at_p.y -= 1;
-    DrawLine(at_p, PushTempStringF("Backward: \"%.*s\"", StringExpand(current->backward)), text_foreground, text_background); at_p.y -= 1;
-    at_p.y -= 1;
-
-    uint32_t branch_index = 0;
-    for (UndoNode *child = current->first_child;
-         child;
-         child = child->next_child)
-    {
-        DrawLine(at_p, PushTempStringF("Branch %d%s", branch_index, (branch_index == current->selected_branch ? " (NEXT)" : "")), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, PushTempStringF("Ordinal: %llu, Pos: %lld", child->ordinal, child->pos), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, PushTempStringF("Forward: \"%.*s\"", StringExpand(child->forward)), text_foreground, text_background); at_p.y -= 1;
-        DrawLine(at_p, PushTempStringF("Backward: \"%.*s\"", StringExpand(child->backward)), text_foreground, text_background); at_p.y -= 1;
-        branch_index += 1;
-        at_p.y -= 1;
-    }
-#endif
+    return DrawTextArea(view, bounds);
 }
