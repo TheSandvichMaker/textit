@@ -90,6 +90,8 @@ struct EditorState
 
     Font font;
 
+    LanguageSpec *cpp_spec;
+
     uint32_t buffer_count;
     Buffer *buffers[MAX_BUFFER_COUNT];
     BufferID used_buffer_ids[MAX_BUFFER_COUNT];

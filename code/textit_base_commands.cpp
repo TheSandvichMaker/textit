@@ -144,8 +144,6 @@ MOVEMENT_PROC(EncloseNextScope)
             if (opening_kind == Token_RightParen) { seek_forward = false; closing_kind = Token_LeftParen; Prev(&it); }
             if (opening_kind == Token_RightScope) { seek_forward = false; closing_kind = Token_LeftScope; Prev(&it); }
 
-            result.start = (seek_forward ? t->pos : (t->pos + t->length - 1));
-
             depth = 1;
             break;
         }

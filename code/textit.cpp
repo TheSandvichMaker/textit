@@ -56,6 +56,7 @@ OpenBufferFromFile(String filename)
     }
     result->count = (int64_t)file_size;
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
+    result->language = editor_state->cpp_spec;
 
     platform->AddJob(platform->low_priority_queue, result, TokenizeBufferJob);
 
@@ -571,6 +572,8 @@ AppUpdateAndRender(Platform *platform_)
         {
             editor_state->free_view_ids[i].index = MAX_VIEW_COUNT - i - 1;
         }
+
+        editor_state->cpp_spec = PushCppLanguageSpec(&editor_state->transient_arena);
 
         editor_state->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
         editor_state->message_buffer = OpenNewBuffer("messages"_str, Buffer_Indestructible|Buffer_ReadOnly);

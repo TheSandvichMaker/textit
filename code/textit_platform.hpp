@@ -84,6 +84,9 @@
                                                     prev_##it = prev_##it->next, it = prev_##it->next)
 #define ForDll(it, sentinel) ForDllUnique(it, sentinel, next, prev)
 
+#define IntToPointer(i) (void *)(intptr_t)(i)
+#define PointerToInt(i) (intptr_t)(i)
+
 #include "textit_types.hpp"
 #include "textit_intrinsics.hpp"
 

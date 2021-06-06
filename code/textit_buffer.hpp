@@ -82,6 +82,8 @@ struct Buffer
         UndoNode *at;
     } undo;
 
+    struct LanguageSpec *language;
+
     BufferCursor cursor;
     BufferCursor mark;
     

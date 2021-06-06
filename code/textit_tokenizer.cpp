@@ -95,6 +95,11 @@ TokenizeBuffer(Buffer *buffer)
     FreeTokens(buffer->prev_tokens);
     tok->tokens = buffer->prev_tokens;
 
+    LanguageSpec *language = buffer->language;
+
+    double total_matching_time = 0.0;
+    int64_t tokens_matched = 0;
+
     while (CharsLeft(tok))
     {
         while (CharsLeft(tok))
@@ -234,57 +239,31 @@ TokenizeBuffer(Buffer *buffer)
         t.pos = (int64_t)(start - buffer->text);
         t.length = (int64_t)(end - start);
 
+        PlatformHighResTime start_time = platform->GetTime();
+
         String string = MakeString((size_t)(end - start), start);
         if (t.kind == Token_Identifier)
         {
-            for (size_t i = 0; i < ArrayCount(cpp_keywords); i += 1)
+            TokenKind kind = (TokenKind)PointerToInt(StringMapFind(language->idents, string));
+            if (kind)
             {
-                if (AreEqual(string, cpp_keywords[i]))
-                {
-                    t.kind = Token_Keyword;
-                    break;
-                }
+                t.kind = kind;
             }
         }
 
-        if (t.kind == Token_Identifier)
-        {
-            for (size_t i = 0; i < ArrayCount(cpp_flow_control_keywords); i += 1)
-            {
-                if (AreEqual(string, cpp_flow_control_keywords[i]))
-                {
-                    t.kind = Token_FlowControl;
-                    break;
-                }
-            }
-        }
+        PlatformHighResTime end_time = platform->GetTime();
+        double time = platform->SecondsElapsed(start_time, end_time);
 
-        if (t.kind == Token_Identifier)
-        {
-            for (size_t i = 0; i < ArrayCount(cpp_literals); i += 1)
-            {
-                if (AreEqual(string, cpp_literals[i]))
-                {
-                    t.kind = Token_Literal;
-                    break;
-                }
-            }
-        }
-
-        if (t.kind == Token_Identifier)
-        {
-            for (size_t i = 0; i < ArrayCount(cpp_builtin_types); i += 1)
-            {
-                if (AreEqual(string, cpp_builtin_types[i]))
-                {
-                    t.kind = Token_Type;
-                    break;
-                }
-            }
-        }
+        total_matching_time += time;
+        tokens_matched += 1;
 
         PushToken(tok, t);
     }
+
+    platform->DebugPrint("Total matching time: %fms for %lld tokens (%fns/tok).\n",
+                         1000.0*total_matching_time,
+                         tokens_matched,
+                         1000000000.0*total_matching_time / (double)tokens_matched);
 
     TokenList *tokens = (TokenList *)buffer->tokens;
     AtomicExchange((void *volatile*)&buffer->tokens, buffer->prev_tokens);
@@ -298,4 +277,59 @@ PLATFORM_JOB(TokenizeBufferJob)
     buffer->tokenizing = true;
     TokenizeBuffer(buffer);
     buffer->tokenizing = false;
+}
+
+static inline LanguageSpec *
+PushCppLanguageSpec(Arena *arena)
+{
+    LanguageSpec *result = PushStruct(arena, LanguageSpec);
+    result->idents = PushStringMap(arena, 128);
+
+    StringMapInsert(result->idents, "static"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "static"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "inline"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "operator"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "volatile"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "unsigned"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "signed"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "register"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "extern"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "const"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "struct"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "enum"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "class"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "public"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "private"_str, IntToPointer(Token_Keyword));
+    StringMapInsert(result->idents, "return"_str, IntToPointer(Token_Keyword));
+
+    StringMapInsert(result->idents, "case"_str, IntToPointer(Token_FlowControl));
+    StringMapInsert(result->idents, "continue"_str, IntToPointer(Token_FlowControl));
+    StringMapInsert(result->idents, "break"_str, IntToPointer(Token_FlowControl));
+    StringMapInsert(result->idents, "if"_str, IntToPointer(Token_FlowControl));
+    StringMapInsert(result->idents, "else"_str, IntToPointer(Token_FlowControl));
+    StringMapInsert(result->idents, "for"_str, IntToPointer(Token_FlowControl));
+    StringMapInsert(result->idents, "switch"_str, IntToPointer(Token_FlowControl));
+    StringMapInsert(result->idents, "while"_str, IntToPointer(Token_FlowControl));
+    StringMapInsert(result->idents, "do"_str, IntToPointer(Token_FlowControl));
+
+    StringMapInsert(result->idents, "true"_str, IntToPointer(Token_Literal));
+    StringMapInsert(result->idents, "false"_str, IntToPointer(Token_Literal));
+
+    StringMapInsert(result->idents, "void"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "char"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "short"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "int"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "long"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "float"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "double"_str, IntToPointer(Token_Type));
+    StringMapInsert(result->idents, "int8_t"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "int16_t"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "int32_t"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "int64_t"_str, IntToPointer(Token_Type));
+    StringMapInsert(result->idents, "uint8_t"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "uint16_t"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "uint32_t"_str, IntToPointer(Token_Type)); 
+    StringMapInsert(result->idents, "uint64_t"_str, IntToPointer(Token_Type));
+
+    return result;
 }
