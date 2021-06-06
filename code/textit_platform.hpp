@@ -378,6 +378,7 @@ struct PlatformEvent
     bool shift_down;
 
     bool pressed;
+    bool repeat;
     PlatformInputCode input_code;
 
     int text_length;

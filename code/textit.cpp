@@ -58,7 +58,14 @@ OpenBufferFromFile(String filename)
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
     result->language = editor_state->cpp_spec;
 
-    platform->AddJob(platform->low_priority_queue, result, TokenizeBufferJob);
+    if (result->count < BUFFER_ASYNC_THRESHOLD)
+    {
+        TokenizeBuffer(result);
+    }
+    else
+    {
+        platform->AddJob(platform->low_priority_queue, result, TokenizeBufferJob);
+    }
 
     return result;
 }
@@ -409,7 +416,7 @@ GetGlyphBitmap(Font *font, Glyph glyph)
 }
 
 static inline void
-ExecuteCommand(View *view, Command *command, bool shift_down)
+ExecuteCommand(View *view, Command *command)
 {
     Buffer *buffer = GetBuffer(view);
     switch (command->kind)
@@ -432,9 +439,9 @@ ExecuteCommand(View *view, Command *command, bool shift_down)
         case Command_Movement:
         {
             Range range = command->movement(editor_state);
-            if (shift_down)
+            if (editor_state->clutch)
             {
-                buffer->mark.pos = Min(range.start, buffer->mark.pos);
+                buffer->mark.pos = buffer->mark.pos;
             }
             else
             {
@@ -481,6 +488,29 @@ HandleViewEvents(View *view)
             bool shift_down = event->shift_down;
             bool ctrl_shift_down = ctrl_down && shift_down;
 
+#if 0
+            if (event->input_code == PlatformInputCode_Shift)
+            {
+                editor_state->clutch = !editor_state->clutch;
+                if (!editor_state->clutch)
+                {
+                    buffer->mark = buffer->cursor;
+                }
+            }
+            else if (shift_down)
+            {
+                editor_state->clutch = true;
+            }
+
+            if (event->input_code == PlatformInputCode_Escape)
+            {
+                editor_state->clutch = false;
+                buffer->mark = buffer->cursor;
+            }
+#else
+            editor_state->clutch = shift_down;
+#endif
+
             Binding *binding = &bindings->map[event->input_code];
             Command *command = binding->regular;
             if (ctrl_shift_down && binding->ctrl_shift)
@@ -504,12 +534,12 @@ HandleViewEvents(View *view)
                     {
                         Swap(buffer->cursor, buffer->mark);
                     }
-                    ExecuteCommand(view, editor_state->last_movement_for_change, shift_down);
-                    ExecuteCommand(view, editor_state->last_change, shift_down);
+                    ExecuteCommand(view, editor_state->last_movement_for_change);
+                    ExecuteCommand(view, editor_state->last_change);
                 }
                 else
                 {
-                    ExecuteCommand(view, command, shift_down);
+                    ExecuteCommand(view, command);
                     switch (command->kind)
                     {
                         case Command_Movement: { editor_state->last_movement = command; } break;

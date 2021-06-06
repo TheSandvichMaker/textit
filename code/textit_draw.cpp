@@ -317,7 +317,16 @@ DrawView(View *view)
         {
             filebar_text_background_str = "filebar_text_background_text_mode"_str;
         } break;
+
+        default:
+        {
+            if (editor_state->clutch)
+            {
+                filebar_text_background_str = "filebar_text_background_clutch"_str;
+            }
+        } break;
     }
+
     Color filebar_text_background = GetThemeColor(filebar_text_background_str);
 
     PushRectOutline(Layer_Text, bounds, text_foreground, text_background);

@@ -1185,6 +1185,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
                         PlatformEvent *event = PushEvent();
                         event->type = (pressed ? PlatformEvent_KeyDown : PlatformEvent_KeyUp);
                         event->pressed = pressed;
+                        // TODO: event->repeat
                         event->alt_down = alt_down;
                         event->ctrl_down = ctrl_down;
                         event->shift_down = shift_down;

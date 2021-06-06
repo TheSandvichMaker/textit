@@ -116,6 +116,7 @@ struct EditorState
     Command *last_movement;
     Command *last_movement_for_change;
     Command *last_change;
+    bool clutch;
 
     uint64_t enter_text_mode_undo_ordinal;
 
@@ -126,7 +127,7 @@ struct EditorState
 };
 static EditorState *editor_state;
 
-static inline void ExecuteCommand(View *view, Command *command, bool shift_down);
+static inline void ExecuteCommand(View *view, Command *command);
 
 struct BufferIterator
 {

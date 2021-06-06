@@ -51,6 +51,7 @@ LoadDefaultTheme()
     SetThemeColor("filebar_text_foreground"_str, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_background"_str, MakeColor(192, 255, 128));
     SetThemeColor("filebar_text_background_text_mode"_str, MakeColor(255, 192, 128));
+    SetThemeColor("filebar_text_background_clutch"_str, MakeColor(64, 128, 255));
     SetThemeColor("unrenderable_text_foreground"_str, MakeColor(255, 255, 255));
     SetThemeColor("unrenderable_text_background"_str, MakeColor(192, 0, 0));
     SetThemeColor("selection_background"_str, MakeColor(64, 128, 255));
