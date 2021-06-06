@@ -49,6 +49,7 @@ LoadDefaultBindings()
     command->map['G'].shift                        = FindCommand("JumpToBufferEnd"_str);
     command->map['0'].regular                      = FindCommand("MoveLineStart"_str);
     command->map['4'].shift                        = FindCommand("MoveLineEnd"_str);
+    command->map['S'].regular                      = FindCommand("EncloseNextScope"_str);
     command->map[PlatformInputCode_Period].regular = FindCommand("RepeatLastCommand"_str);
     command->map[PlatformInputCode_F1].regular     = FindCommand("ToggleVisualizeNewlines"_str);
 

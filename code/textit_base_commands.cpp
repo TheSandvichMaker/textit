@@ -116,6 +116,64 @@ MOVEMENT_PROC(EncloseLine)
     return line_range;
 }
 
+MOVEMENT_PROC(EncloseNextScope)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t pos = GetCursor(buffer);
+    Range result = MakeRange(pos);
+
+    TokenIterator it = MakeTokenIterator(buffer, pos);
+
+    TokenKind opening_kind = Token_None;
+    TokenKind closing_kind = Token_None;
+    bool seek_forward = true;
+    int depth = 0;
+    while (IsValid(&it))
+    {
+        Token *t = Next(&it);
+        if ((t->kind == Token_LeftParen) ||
+            (t->kind == Token_LeftScope) ||
+            (t->kind == Token_RightParen) ||
+            (t->kind == Token_RightScope))
+        {
+            opening_kind = t->kind;
+            if (opening_kind == Token_LeftParen)  { seek_forward = true;  closing_kind = Token_RightParen; }
+            if (opening_kind == Token_LeftScope)  { seek_forward = true;  closing_kind = Token_RightScope; }
+            if (opening_kind == Token_RightParen) { seek_forward = false; closing_kind = Token_LeftParen; Prev(&it); }
+            if (opening_kind == Token_RightScope) { seek_forward = false; closing_kind = Token_LeftScope; Prev(&it); }
+
+            result.start = (seek_forward ? t->pos : (t->pos + t->length - 1));
+
+            depth = 1;
+            break;
+        }
+    }
+    if (opening_kind)
+    {
+        while (IsValid(&it))
+        {
+            Token *t = (seek_forward ? Next(&it) : Prev(&it));
+            if (t->kind == opening_kind)
+            {
+                depth += 1;
+            }
+            else if (t->kind == closing_kind)
+            {
+                depth -= 1;
+                if (depth <= 0)
+                {
+                    result.end = (seek_forward ? (t->pos + t->length - 1) : t->pos);
+                    break;
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
 COMMAND_PROC(MoveDown)
 {
     View *view = CurrentView(editor);

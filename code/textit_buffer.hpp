@@ -100,4 +100,10 @@ struct Buffer
 
 static inline Buffer *GetBuffer(BufferID id);
 
+static inline TokenIterator
+MakeTokenIterator(Buffer *buffer, int64_t start_pos = 0)
+{
+    return MakeTokenIterator((TokenList *)buffer->tokens, start_pos);
+}
+
 #endif /* TEXTIT_BUFFER_HPP */

@@ -3,6 +3,8 @@
 
 enum TokenKind : uint32_t
 {
+    Token_None = 0,
+
     /* ascii */
 
     Token_Identifier = 128,
@@ -67,20 +69,106 @@ struct Token
     int64_t length;
 };
 
-#define TOKEN_BLOCK_SIZE 512
-struct TokenBlock
-{
-    TokenBlock *next;
-    int64_t min_pos;
-    int64_t max_pos;
-    int64_t count;
-    Token tokens[TOKEN_BLOCK_SIZE];
-};
+struct TokenBlock;
 
 struct TokenList
 {
     TokenBlock *first;
     TokenBlock *last;
 };
+
+#define TOKEN_BLOCK_SIZE 512
+struct TokenBlock
+{
+    TokenBlock *next;
+    TokenBlock *prev;
+    int64_t min_pos;
+    int64_t max_pos;
+    int64_t count;
+    Token tokens[TOKEN_BLOCK_SIZE];
+};
+
+struct TokenIterator
+{
+    TokenBlock *block;
+    int64_t index;
+    Token *token;
+};
+
+static inline TokenIterator
+MakeTokenIterator(TokenList *list, int64_t start_pos = 0)
+{
+    TokenIterator result = {};
+    result.block = list->first;
+    while (result.block && (start_pos >= result.block->max_pos))
+    {
+        result.block = result.block->next;
+    }
+    if (result.block)
+    {
+        for (;;)
+        {
+            Token *t = &result.block->tokens[result.index];
+            if (start_pos >= (t->pos + t->length))
+            {
+                result.index += 1;
+            }
+            else
+            {
+                break;
+            }
+        }
+        result.token = &result.block->tokens[result.index];
+    }
+    return result;
+}
+
+static inline bool
+IsValid(TokenIterator *it)
+{
+    return !!it->block;
+}
+
+static inline Token *
+Next(TokenIterator *it)
+{
+    Token *result = nullptr;
+    if (it->block)
+    {
+        result = &it->block->tokens[it->index];
+        it->token = result;
+
+        it->index += 1;
+        if (it->index >= it->block->count)
+        {
+            it->index = 0;
+            it->block = it->block->next;
+        }
+    }
+    return result;
+}
+
+static inline Token *
+Prev(TokenIterator *it)
+{
+    Token *result = nullptr;
+    if (it->block)
+    {
+        it->index -= 1;
+
+        result = &it->block->tokens[it->index];
+        it->token = result;
+
+        if (it->index <= 0)
+        {
+            it->block = it->block->next;
+            if (it->block)
+            {
+                it->index = it->block->count;
+            }
+        }
+    }
+    return result;
+}
 
 #endif /* TEXTIT_TOKENS_HPP */

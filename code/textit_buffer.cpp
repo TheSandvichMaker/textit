@@ -170,6 +170,11 @@ ScanWordEndForward(Buffer *buffer, int64_t pos)
 static inline Range
 ScanWordForward(Buffer *buffer, int64_t pos)
 {
+    if (PeekNewline(buffer, pos + 1))
+    {
+        return MakeRange(pos + 1 + PeekNewline(buffer, pos + 1));
+    }
+
     CharacterClassFlags p0_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
     CharacterClassFlags p1_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos + 1));
     if (p0_class != p1_class)
@@ -185,8 +190,8 @@ ScanWordForward(Buffer *buffer, int64_t pos)
         pos += 1;
     }
 
-    while (IsInBufferRange(buffer, pos) &&
-           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    while (IsInBufferRange(buffer, pos + 1) &&
+           IsHorizontalWhitespaceAscii(ReadBufferByte(buffer, pos + 1)))
     {
         pos += 1;
     }
@@ -198,6 +203,16 @@ ScanWordForward(Buffer *buffer, int64_t pos)
 static inline Range
 ScanWordBackward(Buffer *buffer, int64_t pos)
 {
+    if (PeekNewlineBackward(buffer, pos - 1))
+    {
+        pos -= PeekNewlineBackward(buffer, pos - 1);
+        if (!PeekNewlineBackward(buffer, pos - 1))
+        {
+            pos -= 1;
+        }
+        return MakeRange(pos);
+    }
+
     CharacterClassFlags p0_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
     CharacterClassFlags p1_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos - 1));
     if (!HasFlag(p0_class, Character_Whitespace) && (p0_class != p1_class))
@@ -208,7 +223,7 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
     Range result = MakeRange(pos);
 
     while (IsInBufferRange(buffer, pos) &&
-           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+           IsHorizontalWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
         pos -= 1;
     }

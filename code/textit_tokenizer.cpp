@@ -5,6 +5,7 @@ AllocateTokenBlock(void)
     {
         editor_state->first_free_token_block = PushStructNoClear(&editor_state->transient_arena, TokenBlock);
         editor_state->first_free_token_block->next = nullptr;
+        editor_state->first_free_token_block->prev = nullptr;
     }
     TokenBlock *result = editor_state->first_free_token_block;
     editor_state->first_free_token_block = result->next;
@@ -23,7 +24,15 @@ PushToken(Tokenizer *tok, const Token &t)
         list->last->count >= ArrayCount(list->last->tokens))
     {
         TokenBlock *block = AllocateTokenBlock();
-        SllQueuePush(list->first, list->last, block);
+        if (list->first)
+        {
+            block->prev = list->last;
+            list->last = list->last->next = block;
+        }
+        else
+        {
+            list->first = list->last = block;
+        }
     }
     TokenBlock *block = list->last;
 
@@ -63,16 +72,14 @@ Peek(Tokenizer *tok, int64_t index = 0)
 static inline void
 FreeTokens(TokenList *list)
 {
-    TokenBlock *first = list->first;
-    TokenBlock *last = list->last;
-    if (last)
+    if (list->last)
     {
-        last->next = editor_state->first_free_token_block;
+        list->last->next = editor_state->first_free_token_block;
     }
-    editor_state->first_free_token_block = first;
+    editor_state->first_free_token_block = list->first;
 
     list->first = nullptr;
-    list->last = nullptr;
+    list->last  = nullptr;
 }
 
 static inline void

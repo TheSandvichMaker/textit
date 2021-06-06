@@ -86,7 +86,7 @@ DrawTextArea(View *view, Rect2i bounds)
         {
             if (pos >= block->max_pos)
             {
-                    block = block->next;
+                block = block->next;
             }
         }
     }
@@ -186,8 +186,14 @@ DrawTextArea(View *view, Rect2i bounds)
             if (at_p.x >= (bounds.max.x - 2))
             {
                 PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
+
                 at_p.x = left - 1;
                 at_p.y -= 1;
+
+                if (at_p.y <= bounds.min.y)
+                {
+                    return actual_line_height;
+                }
             }
 
             uint8_t b = buffer->text[pos];
@@ -219,6 +225,15 @@ DrawTextArea(View *view, Rect2i bounds)
                     Swap(foreground, background);
                 }
 
+                if ((editor_state->edit_mode == EditMode_Command) &&
+                    (pos >= mark_range.start && pos <= mark_range.end))
+                {
+                    background = selection_background;
+                    foreground.r = 255 - selection_background.r;
+                    foreground.g = 255 - selection_background.g;
+                    foreground.b = 255 - selection_background.b;
+                }
+
                 int64_t advance = 1;
                 String string = {};
                 if (b == '\r')
@@ -246,11 +261,7 @@ DrawTextArea(View *view, Rect2i bounds)
                         at_p.x = left - 1;
                         at_p.y -= 1;
 
-                        if (at_p.y > bounds.min.y)
-                        {
-                            actual_line_height += 1;
-                        }
-                        else
+                        if (at_p.y <= bounds.min.y)
                         {
                             return actual_line_height;
                         }
