@@ -147,8 +147,6 @@ ParseUtf8Codepoint(uint8_t *text)
 {
     // TODO: This is adapted old code, I can't guarantee its quality, but I think it is at least correct
 
-    ParseUtf8Result result = {};
-
     uint32_t num_bytes = 0;
 
     uint8_t *at = text;
@@ -223,10 +221,7 @@ ParseUtf8Codepoint(uint8_t *text)
         }
     }
 
-    result.codepoint = codepoint;
-    result.advance = num_bytes;
-
-    return result;
+    return { codepoint, num_bytes };
 }
 
 static bool

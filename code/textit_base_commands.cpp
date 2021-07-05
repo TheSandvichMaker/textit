@@ -25,29 +25,34 @@ COMMAND_PROC(CenterView,
              "Center the view around the cursor"_str)
 {
     View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
-    view->scroll_at = view->cursor.y - viewport_height / 2;
+    view->scroll_at = loc.line - viewport_height / 2;
 }
 
 COMMAND_PROC(JumpToBufferStart)
 {
     View *view = CurrentView(editor);
-    SetCursorPos(view, 0);
+    SetCursor(view, 0);
 }
 
 COMMAND_PROC(JumpToBufferEnd)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
-    SetCursorPos(view, buffer->count - 1);
+    SetCursor(view, buffer->count - 1);
 }
 
 MOVEMENT_PROC(MoveLeft)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     Range line_range = EncloseLine(buffer, pos);
     pos = ClampToRange(pos - 1, line_range);
     return MakeRange(pos);
@@ -57,8 +62,9 @@ MOVEMENT_PROC(MoveRight)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     Range line_range = EncloseLine(buffer, pos);
     pos = ClampToRange(pos + 1, line_range);
     return MakeRange(pos);
@@ -68,8 +74,9 @@ MOVEMENT_PROC(MoveLeftIdentifier)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     Range result = ScanWordBackward(buffer, pos);
 
     return result;
@@ -79,8 +86,9 @@ MOVEMENT_PROC(MoveRightIdentifier)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     Range result = ScanWordForward(buffer, pos);
 
     return result;
@@ -90,8 +98,9 @@ MOVEMENT_PROC(MoveLineStart)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     Range line_range = EncloseLine(buffer, pos, true);
     return MakeRange(pos, line_range.start);
 }
@@ -100,8 +109,9 @@ MOVEMENT_PROC(MoveLineEnd)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     Range line_range = EncloseLine(buffer, pos, true);
     return MakeRange(pos, line_range.end);
 }
@@ -110,8 +120,9 @@ MOVEMENT_PROC(EncloseLine)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     Range line_range = EncloseLine(buffer, pos, true);
     return line_range;
 }
@@ -120,8 +131,9 @@ MOVEMENT_PROC(EncloseNextScope)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     Range result = MakeRange(pos);
 
     TokenIterator it = MakeTokenIterator(buffer, pos);
@@ -202,8 +214,9 @@ COMMAND_PROC(BackspaceChar)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     int64_t newline_length = PeekNewlineBackward(buffer, pos - 1);
     int64_t to_delete = 1;
     if (newline_length)
@@ -211,27 +224,29 @@ COMMAND_PROC(BackspaceChar)
         to_delete = newline_length;
     }
     pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos - to_delete, to_delete), ""_str);
-    SetCursorPos(view, pos);
+    SetCursor(view, pos);
 }
 
 COMMAND_PROC(BackspaceWord)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     int64_t start_pos = pos;
     int64_t end_pos = ScanWordBackward(buffer, pos).end;
     int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
-    SetCursorPos(view, final_pos);
+    SetCursor(view, final_pos);
 }
 
 COMMAND_PROC(DeleteChar)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
     int64_t newline_length = PeekNewline(buffer, pos);
     int64_t to_delete = 1;
     if (newline_length)
@@ -239,43 +254,42 @@ COMMAND_PROC(DeleteChar)
         to_delete = newline_length;
     }
     pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos, to_delete), ""_str);
-    SetCursorPos(view, pos);
+    SetCursor(view, pos);
 }
 
 COMMAND_PROC(DeleteWord)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
 
     int64_t start_pos = pos;
     int64_t end_pos = ScanWordEndForward(buffer, pos);
     int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
-    SetCursorPos(view, final_pos);
+    SetCursor(view, final_pos);
 }
 
 COMMAND_PROC(UndoOnce)
 {
     View *view = CurrentView(editor);
-    Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = UndoOnce(buffer);
+    int64_t pos = UndoOnce(view);
     if (pos >= 0)
     {
-        SetCursorPos(view, pos);
+        SetCursor(view, pos);
     }
 }
 
 COMMAND_PROC(RedoOnce)
 {
     View *view = CurrentView(editor);
-    Buffer *buffer = GetBuffer(view);
 
-    int64_t pos = RedoOnce(buffer);
+    int64_t pos = RedoOnce(view);
     if (pos >= 0)
     {
-        SetCursorPos(view, pos);
+        SetCursor(view, pos);
     }
 }
 
@@ -292,11 +306,12 @@ COMMAND_PROC(SplitWindowVertical)
 
 CHANGE_PROC(DeleteSelection)
 {
-    Buffer *buffer = CurrentBuffer(editor);
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
     // Range mark_range = MakeSanitaryRange(buffer->cursor.pos, buffer->mark.pos);
     // mark_range.end += 1;
     int64_t pos = BufferReplaceRange(buffer, range, ""_str);
-    SetCursor(buffer, pos);
+    SetCursor(view, pos);
 }
 
 CHANGE_PROC(ChangeSelection)
@@ -326,8 +341,9 @@ TEXT_COMMAND_PROC(WriteText)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = GetCursor(buffer);
+    int64_t pos = cursor->pos;
 
     uint64_t start_ordinal = CurrentUndoOrdinal(buffer);
     bool should_merge = false;
@@ -358,7 +374,7 @@ TEXT_COMMAND_PROC(WriteText)
     if (text.data[0] == '\n' || IsPrintableAscii(text.data[0]) || IsUtf8Byte(text.data[0]))
     {
         int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), text);
-        SetCursorPos(view, new_pos);
+        SetCursor(view, new_pos);
     }
     if (should_merge)
     {

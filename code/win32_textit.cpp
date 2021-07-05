@@ -263,6 +263,7 @@ Win32_DebugPrint(char *fmt, ...)
 
     wchar_t *fmt_wide = Win32_Utf8ToUtf16(arena, formatted);
 
+    wprintf(fmt_wide);
     OutputDebugStringW(fmt_wide);
 }
 
@@ -561,16 +562,16 @@ static inline void
 Win32_ResizeOffscreenBuffer(Bitmap *buffer, int32_t w, int32_t h)
 {
     if (buffer->data &&
-        w != buffer->w &&
-        h != buffer->h)
+        (w != buffer->w) &&
+        (h != buffer->h))
     {
         Win32_Deallocate(buffer->data);
         ZeroStruct(buffer);
     }
 
     if (!buffer->data &&
-        w > 0 &&
-        h > 0)
+        (w > 0) &&
+        (h > 0))
     {
         buffer->data = (Color *)Win32_Allocate(Align16(sizeof(Color)*w*h), 0, LOCATION_STRING("Win32OffscreenBuffer"));
         buffer->w = w;
@@ -1055,10 +1056,13 @@ Win32_CloseJobQueue(PlatformJobQueue *queue)
 }
 
 int
-WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int show_cmd)
+main(int, char **)
+// WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int show_cmd)
 {
-    UNUSED_VARIABLE(command_line);
-    UNUSED_VARIABLE(prev_instance);
+    // UNUSED_VARIABLE(command_line);
+    // UNUSED_VARIABLE(prev_instance);
+
+    HINSTANCE instance = NULL;
 
     platform = &platform_;
 
@@ -1130,7 +1134,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
         platform->ReportError(PlatformError_Fatal, "Could not create window");
     }
 
-    ShowWindow(window, show_cmd);
+    ShowWindow(window, SW_SHOW);
 
     BOOL composition_enabled;
     if (DwmIsCompositionEnabled(&composition_enabled) != S_OK)
@@ -1156,6 +1160,8 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
 
         bool exit_requested = false;
         platform->first_event = platform->last_event = nullptr;
+
+        wchar_t last_char = 0;
 
         MSG message;
         while (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
@@ -1242,13 +1248,38 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int sho
                 case WM_CHAR:
                 {
                     PlatformEvent *event = PushEvent();
-                    wchar_t buf[] = { (wchar_t)message.wParam, 0 };
-                    if (buf[0] == L'\r')
+
+                    wchar_t chars[3] = {};
+
+                    wchar_t curr_char = (wchar_t)message.wParam;
+                    if (IS_HIGH_SURROGATE(curr_char))
                     {
-                        buf[0] = L'\n';
+                        last_char = curr_char;
+                    }
+                    else if (IS_LOW_SURROGATE(curr_char))
+                    {
+                        if (IS_SURROGATE_PAIR(last_char, curr_char))
+                        {
+                            chars[0] = last_char;
+                            chars[1] = curr_char;
+                        }
+                        last_char = 0;
+                    }
+                    else
+                    {
+                        chars[0] = curr_char;
+                        if (chars[0] == L'\r')
+                        {
+                            chars[0] = L'\n';
+                        }
                     }
                     event->type = PlatformEvent_Text;
-                    event->text = Win32_Utf16ToUtf8(&win32_state.temp_arena, buf, &event->text_length);
+                    event->text = Win32_Utf16ToUtf8(&win32_state.temp_arena, chars, &event->text_length);
+                } break;
+
+                case WM_IME_CHAR:
+                {
+                    platform->DebugPrint("Got WM_IME_CHAR:\n");
                 } break;
 
                 default:

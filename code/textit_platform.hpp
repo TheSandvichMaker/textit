@@ -87,6 +87,8 @@
 #define IntToPointer(i) (void *)(intptr_t)(i)
 #define PointerToInt(i) (intptr_t)(i)
 
+#define function static inline
+
 #include "textit_types.hpp"
 #include "textit_intrinsics.hpp"
 

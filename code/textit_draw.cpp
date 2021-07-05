@@ -33,9 +33,10 @@ static inline int64_t
 DrawTextArea(View *view, Rect2i bounds)
 {
     Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
 
-    int64_t cursor_pos = buffer->cursor.pos;
-    int64_t mark_pos = buffer->mark.pos;
+    int64_t cursor_pos = cursor->pos;
+    int64_t mark_pos = cursor->mark;
 
     int64_t left = bounds.min.x + 2;
     V2i at_p = MakeV2i(left, bounds.max.y - 2);
@@ -329,12 +330,15 @@ DrawView(View *view)
 
     Color filebar_text_background = GetThemeColor(filebar_text_background_str);
 
+    Cursor *cursor = GetCursor(view);
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+
     PushRectOutline(Layer_Text, bounds, text_foreground, text_background);
     DrawLine(MakeV2i(bounds.min.x + 2, bounds.max.y - 1),
-             PushTempStringF("%hd:%.*s - scroll: %d, view cursor: { %lld, %lld }",
+             PushTempStringF("%hd:%.*s - scroll: %d, line: %lld, col: %lld",
                              buffer->id.index, StringExpand(buffer->name),
                              view->scroll_at,
-                             view->cursor.x, view->cursor.y),
+                             loc.line, loc.col),
              filebar_text_foreground, filebar_text_background);
 
     return DrawTextArea(view, bounds);

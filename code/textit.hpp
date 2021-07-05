@@ -22,6 +22,8 @@
 #include "textit_tokenizer.hpp"
 #include "textit_view.hpp"
 
+#define CURSOR_HASH_SIZE 512
+
 enum EditMode
 {
     EditMode_Command,
@@ -74,6 +76,37 @@ struct CoreConfig
 };
 GLOBAL_STATE(CoreConfig, core_config);
 
+struct Cursor
+{
+    Cursor *next;
+    int64_t sticky_col;
+    int64_t pos;
+    int64_t mark;
+};
+
+function Range GetEditRange(View *view, Buffer *buffer, Cursor *cursor);
+
+struct CursorHashKey
+{
+    union
+    {
+        struct
+        {
+            ViewID view;
+            BufferID buffer;
+        };
+
+        uint64_t value;
+    };
+};
+
+struct CursorHashEntry
+{
+    CursorHashEntry *next_in_hash;
+    CursorHashKey key;
+    Cursor cursor;
+};
+
 struct EditorState
 {
     GlobalState global_state;
@@ -107,6 +140,9 @@ struct EditorState
 
     View *null_view;
 
+    CursorHashEntry *first_free_cursor_hash_entry;
+    CursorHashEntry *cursor_hash[CURSOR_HASH_SIZE];
+
     ViewID active_view;
     Window root_window;
 
@@ -128,6 +164,9 @@ struct EditorState
 static EditorState *editor_state;
 
 static inline void ExecuteCommand(View *view, Command *command);
+
+function Cursor *GetCursor(ViewID view, BufferID buffer);
+function Cursor *GetCursor(View *view);
 
 struct BufferIterator
 {
@@ -156,6 +195,36 @@ Next(BufferIterator *iter)
     if (iter->index < editor_state->buffer_count)
     {
         iter->buffer = GetBuffer(editor_state->used_buffer_ids[iter->index]);
+    }
+}
+
+struct ViewIterator
+{
+    size_t index;
+    View *view;
+};
+
+static inline ViewIterator
+IterateViews(void)
+{
+    ViewIterator result = {};
+    result.view = GetView(editor_state->used_view_ids[0]);
+    return result;
+}
+
+static inline bool
+IsValid(ViewIterator *iter)
+{
+    return (iter->index < editor_state->view_count);
+}
+
+static inline void
+Next(ViewIterator *iter)
+{
+    iter->index += 1;
+    if (iter->index < editor_state->view_count)
+    {
+        iter->view = GetView(editor_state->used_view_ids[iter->index]);
     }
 }
 

@@ -43,15 +43,11 @@ struct UndoState
     UndoNode *at;
 };
 
-struct BufferCursor
-{
-    int64_t pos;
-};
-
 struct BufferLocation
 {
     int64_t pos;
-    int64_t line_number;
+    int64_t col;
+    int64_t line;
     Range line_range;
 };
 
@@ -63,7 +59,7 @@ enum BufferFlags_ENUM : BufferFlags
 };
 
 #define TEXTIT_BUFFER_SIZE Megabytes(128)
-#define BUFFER_ASYNC_THRESHOLD Megabytes(2)
+#define BUFFER_ASYNC_THRESHOLD Megabytes(4)
 struct Buffer
 {
     BufferID id;
@@ -84,9 +80,6 @@ struct Buffer
 
     struct LanguageSpec *language;
 
-    BufferCursor cursor;
-    BufferCursor mark;
-    
     bool dirty;
     volatile bool tokenizing;
 

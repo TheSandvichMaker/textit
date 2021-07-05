@@ -376,7 +376,13 @@ SafeRatio1(float numerator, float divisor)
 TEXTIT_INLINE float
 SignOf(float a)
 {
-    return (a >= 0.0f ? 1.0f : 0.0f);
+    return (a >= 0.0f ? 1.0f : -1.0f);
+}
+
+TEXTIT_INLINE int64_t
+SignOf(int64_t a)
+{
+    return (a >= 0 ? 1 : -1);
 }
 
 TEXTIT_INLINE float

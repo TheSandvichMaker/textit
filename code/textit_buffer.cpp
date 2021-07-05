@@ -30,18 +30,6 @@ GuessLineEndKind(String string)
     return result;
 }
 
-static inline int64_t
-GetCursor(Buffer *buffer)
-{
-    return buffer->cursor.pos;
-}
-
-static inline int64_t
-GetMark(Buffer *buffer)
-{
-    return buffer->mark.pos;
-}
-
 static inline bool
 IsInBufferRange(Buffer *buffer, int64_t pos)
 {
@@ -55,20 +43,6 @@ ClampToBufferRange(Buffer *buffer, int64_t pos)
     if (pos >= buffer->count) pos = buffer->count - 1;
     if (pos < 0) pos = 0;
     return pos;
-}
-
-static inline void
-SetCursor(Buffer *buffer, int64_t pos)
-{
-    pos = ClampToBufferRange(buffer, pos);
-    buffer->cursor.pos = pos;
-}
-
-static inline void
-SetMark(Buffer *buffer, int64_t pos)
-{
-    pos = ClampToBufferRange(buffer, pos);
-    buffer->mark.pos = pos;
 }
 
 static inline Range
@@ -101,6 +75,23 @@ PeekNewline(Buffer *buffer, int64_t pos)
         return 1;
     }
     return 0;
+}
+
+static inline bool
+AdvanceOverNewline(Buffer *buffer, int64_t *pos)
+{
+    int64_t length = PeekNewline(buffer, *pos);
+
+    bool result = (length > 0);
+    if (result)
+    {
+        *pos = *pos + length;
+    }
+    else
+    {
+        *pos = *pos + 1;
+    }
+    return result;
 }
 
 static inline int64_t
@@ -435,70 +426,3 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
     return result;
 }
 
-static inline int64_t
-UndoOnce(Buffer *buffer)
-{
-    int64_t pos = -1;
-
-    auto undo = &buffer->undo;
-
-    UndoNode *node = undo->at;
-    while (node->parent)
-    {
-        undo->depth -= 1;
-        undo->at = node->parent;
-
-        Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
-        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
-        pos = node->pos;
-
-        SetCursor(buffer, pos);
-        SetMark(buffer, pos + node->backward.size - 1);
-
-        if (node->parent->ordinal == node->ordinal)
-        {
-            node = node->parent;
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    return pos;
-}
-
-static inline int64_t
-RedoOnce(Buffer *buffer)
-{
-    int64_t pos = -1;
-
-    auto undo = &buffer->undo;
-    
-    UndoNode *node = NextChild(undo->at);
-    while (node)
-    {
-        undo->depth += 1;
-        undo->at = node;
-
-        Range remove_range = MakeRangeStartLength(node->pos, node->backward.size);
-        BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
-
-        pos = node->pos;
-
-        SetCursor(buffer, pos);
-        SetMark(buffer, pos + node->forward.size - 1);
-
-        UndoNode *next_node = NextChild(node);
-        if (next_node && next_node->ordinal == node->ordinal)
-        {
-            node = next_node;
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    return pos;
-}

@@ -97,8 +97,8 @@ TokenizeBuffer(Buffer *buffer)
 
     LanguageSpec *language = buffer->language;
 
-    double total_matching_time = 0.0;
-    int64_t tokens_matched = 0;
+    int64_t token_count = 0;
+    PlatformHighResTime start_time = platform->GetTime();
 
     while (CharsLeft(tok))
     {
@@ -153,7 +153,11 @@ TokenizeBuffer(Buffer *buffer)
                 else if (IsNumericAscii(c))
                 {
                     t.kind = Token_Number;
-                    while (CharsLeft(tok) && (IsValidIdentifierAscii(Peek(tok)) || Peek(tok) == '.'))
+                    // TODO: Correct numeric literal rules
+                    while (CharsLeft(tok) &&
+                           (IsValidIdentifierAscii(Peek(tok)) ||
+                            Peek(tok) == '.' ||
+                            Peek(tok) == '\''))
                     {
                         tok->at += 1;
                     }
@@ -239,8 +243,6 @@ TokenizeBuffer(Buffer *buffer)
         t.pos = (int64_t)(start - buffer->text);
         t.length = (int64_t)(end - start);
 
-        PlatformHighResTime start_time = platform->GetTime();
-
         String string = MakeString((size_t)(end - start), start);
         if (t.kind == Token_Identifier)
         {
@@ -251,19 +253,23 @@ TokenizeBuffer(Buffer *buffer)
             }
         }
 
-        PlatformHighResTime end_time = platform->GetTime();
-        double time = platform->SecondsElapsed(start_time, end_time);
-
-        total_matching_time += time;
-        tokens_matched += 1;
+        token_count += 1;
 
         PushToken(tok, t);
     }
 
-    platform->DebugPrint("Total matching time: %fms for %lld tokens (%fns/tok).\n",
-                         1000.0*total_matching_time,
-                         tokens_matched,
-                         1000000000.0*total_matching_time / (double)tokens_matched);
+    PlatformHighResTime end_time = platform->GetTime();
+    double total_time = platform->SecondsElapsed(start_time, end_time);
+
+    platform->DebugPrint("Total time: %fms for %lld tokens, %lld characters (%fns/tok, %fns/char).\n",
+                         1000.0*total_time,
+                         token_count,
+                         buffer->count,
+                         1'000'000'000.0*total_time / (double)token_count,
+                         1'000'000'000.0*total_time / (double)buffer->count);
+    platform->DebugPrint("%f megatokens, %f megachars per second\n", 
+                         (double)token_count / (1'000'000.0*total_time),
+                         (double)buffer->count / (1'000'000.0*total_time));
 
     TokenList *tokens = (TokenList *)buffer->tokens;
     AtomicExchange((void *volatile*)&buffer->tokens, buffer->prev_tokens);

@@ -12,6 +12,56 @@
 #include "textit_base_commands.cpp"
 #include "textit_draw.cpp"
 
+function Cursor *
+GetCursor(ViewID view, BufferID buffer)
+{
+    CursorHashKey key;
+    key.view   = view;
+    key.buffer = buffer;
+    uint64_t hash = HashIntegers(key.value);
+    uint64_t slot = hash % ArrayCount(editor_state->cursor_hash);
+
+    CursorHashEntry *entry = editor_state->cursor_hash[slot];
+
+    while (entry &&
+           (entry->key.value != key.value))
+    {
+        entry = entry->next_in_hash;
+    }
+
+    if (!entry)
+    {
+        if (!editor_state->first_free_cursor_hash_entry)
+        {
+            editor_state->first_free_cursor_hash_entry = PushStructNoClear(&editor_state->transient_arena, CursorHashEntry);
+            editor_state->first_free_cursor_hash_entry->next_in_hash = nullptr;
+        }
+        entry = editor_state->first_free_cursor_hash_entry;
+        editor_state->first_free_cursor_hash_entry = entry->next_in_hash;
+
+        entry->next_in_hash = editor_state->cursor_hash[slot];
+        editor_state->cursor_hash[slot] = entry;
+
+        entry->key = key;
+        ZeroStruct(&entry->cursor);
+    }
+
+    return &entry->cursor;
+}
+
+function Cursor *
+GetCursor(View *view)
+{
+    return GetCursor(view->id, view->buffer);
+}
+
+function Range
+GetEditRange(Cursor *cursor)
+{
+    Range result = MakeSanitaryRange(cursor->pos, cursor->mark);
+    return result;
+}
+
 static inline Buffer *
 OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
 {
@@ -181,7 +231,10 @@ DuplicateView(ViewID id)
     if (view != editor_state->null_view)
     {
         View *new_view = OpenNewView(view->buffer);
-        new_view->cursor = view->cursor;
+
+        Cursor *cursor = GetCursor(view);
+        SetCursor(new_view, cursor->pos, cursor->mark);
+
         new_view->scroll_at = view->scroll_at;
         result = new_view->id;
     }
@@ -250,13 +303,17 @@ DrawWindows(Window *window)
         {
             int64_t top = view->scroll_at;
             int64_t bot = view->scroll_at + estimated_viewport_height;
-            if (view->cursor.y < top)
+
+            Cursor *cursor = GetCursor(view);
+            BufferLocation loc = CalculateBufferLocationFromPos(GetBuffer(view), cursor->pos);
+
+            if (loc.line < top)
             {
-                view->scroll_at += view->cursor.y - top;
+                view->scroll_at += loc.line - top;
             }
-            if (view->cursor.y > bot)
+            if (loc.line > bot)
             {
-                view->scroll_at += view->cursor.y - bot;
+                view->scroll_at += loc.line - bot;
             }
         }
 
@@ -268,13 +325,17 @@ DrawWindows(Window *window)
             {
                 int64_t top = view->scroll_at;
                 int64_t bot = view->scroll_at + viewport_height;
-                if (view->cursor.y < top)
+
+                Cursor *cursor = GetCursor(view);
+                BufferLocation loc = CalculateBufferLocationFromPos(GetBuffer(view), cursor->pos);
+
+                if (loc.line < top)
                 {
-                    view->scroll_at += view->cursor.y - top;
+                    view->scroll_at += loc.line - top;
                 }
-                if (view->cursor.y > bot)
+                if (loc.line > bot)
                 {
-                    view->scroll_at += view->cursor.y - bot;
+                    view->scroll_at += loc.line - bot;
                 }
 
                 PushRect(Layer_Text, view->viewport, COLOR_BLACK);
@@ -418,16 +479,18 @@ GetGlyphBitmap(Font *font, Glyph glyph)
 static inline void
 ExecuteCommand(View *view, Command *command)
 {
-    Buffer *buffer = GetBuffer(view);
     switch (command->kind)
     {
         case Command_Basic:
         {
-            int64_t mark = GetMark(buffer);
+            Cursor *cursor = GetCursor(view);
+
+            int64_t mark = cursor->mark;
             command->command(editor_state);
-            if (mark == GetMark(buffer))
+
+            if (mark == cursor->mark)
             {
-                SetMark(buffer, GetCursor(buffer));
+                cursor->mark = cursor->pos;
             }
         } break;
 
@@ -441,24 +504,28 @@ ExecuteCommand(View *view, Command *command)
             Range range = command->movement(editor_state);
             if (editor_state->clutch)
             {
-                buffer->mark.pos = buffer->mark.pos;
+                SetCursor(view, range.end);
             }
             else
             {
-                buffer->mark.pos = range.start;
+                SetCursor(view, range.end, range.start);
             }
-            SetCursorPos(view, range.end);
         } break;
 
         case Command_Change:
         {
-            int64_t mark = GetMark(buffer);
-            Range mark_range = MakeSanitaryRange(buffer->cursor.pos, buffer->mark.pos);
-            mark_range.end += 1;
-            command->change(editor_state, mark_range);
-            if (mark == GetMark(buffer))
+            Cursor *cursor = GetCursor(view);
+
+            int64_t mark = cursor->mark;
+
+            Range edit_range = GetEditRange(cursor);
+            edit_range.end += 1; // Why?
+
+            command->change(editor_state, edit_range);
+
+            if (mark == cursor->mark)
             {
-                SetMark(buffer, GetCursor(buffer));
+                cursor->mark = cursor->pos;
             }
         } break;
     }
@@ -475,7 +542,8 @@ HandleViewEvents(View *view)
     {
         BindingMap *bindings = &editor_state->bindings[editor_state->edit_mode];
 
-        BufferLocation loc = ViewCursorToBufferLocation(buffer, view->cursor);
+        Cursor *cursor = GetCursor(view);
+        BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
         if ((event->type == PlatformEvent_Text) && bindings->text_command)
         {
             String text = MakeString(event->text_length, event->text);
@@ -530,9 +598,9 @@ HandleViewEvents(View *view)
             {
                 if (AreEqual(command->name, "RepeatLastCommand"_str))
                 {
-                    if (buffer->cursor.pos > buffer->mark.pos)
+                    if (cursor->mark > cursor->mark)
                     {
-                        Swap(buffer->cursor, buffer->mark);
+                        Swap(cursor->pos, cursor->mark);
                     }
                     ExecuteCommand(view, editor_state->last_movement_for_change);
                     ExecuteCommand(view, editor_state->last_change);

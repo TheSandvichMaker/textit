@@ -10,7 +10,7 @@ struct View
     Arena arena;
     BufferID buffer;
 
-    V2i cursor;
+    int64_t sticky_col;
 
     Rect2i viewport;
     int64_t actual_viewport_line_height;
