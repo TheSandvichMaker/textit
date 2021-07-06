@@ -1,5 +1,7 @@
 #include "win32_textit.hpp"
 
+#include "textit_string.cpp"
+
 //
 // TODO: Run game on separate thread from the windows guff
 // Presumably this requires no longer relying on Dwm for vsync which is fine
@@ -20,7 +22,7 @@ __declspec(dllexport) unsigned long NvOptimusEnablement        = 1;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
-static inline bool
+function bool
 Win32_NextEvent(PlatformEvent **out_event, PlatformEventFilter filter)
 {
     bool result = false;
@@ -111,7 +113,7 @@ Win32_Deallocate(void *pointer)
     }
 }
 
-static inline wchar_t *
+function wchar_t *
 Win32_FormatLastError(void)
 {
     wchar_t *message = NULL;
@@ -129,7 +131,7 @@ Win32_FormatLastError(void)
     return message;
 }
 
-static inline void
+function void
 Win32_DisplayLastError(void)
 {
     wchar_t *message = Win32_FormatLastError();
@@ -137,14 +139,14 @@ Win32_DisplayLastError(void)
     LocalFree(message);
 }
 
-static inline void
+function void
 Win32_ExitWithLastError(int exit_code = -1)
 {
     Win32_DisplayLastError();
     ExitProcess(exit_code);
 }
 
-static inline wchar_t *
+function wchar_t *
 Win32_Utf8ToUtf16(Arena *arena, const char *utf8, int length = -1)
 {
     wchar_t *result = nullptr;
@@ -167,7 +169,7 @@ Win32_Utf8ToUtf16(Arena *arena, const char *utf8, int length = -1)
     return result;
 }
 
-static inline uint8_t *
+function uint8_t *
 Win32_Utf16ToUtf8(Arena *arena, const wchar_t *utf16, int *out_length = nullptr)
 {
     uint8_t *result = nullptr;
@@ -192,7 +194,7 @@ Win32_Utf16ToUtf8(Arena *arena, const wchar_t *utf16, int *out_length = nullptr)
     return result;
 }
 
-static inline wchar_t *
+function wchar_t *
 FormatWStringV(Arena *arena, wchar_t *fmt, va_list args_init)
 {
     va_list args_size;
@@ -211,7 +213,7 @@ FormatWStringV(Arena *arena, wchar_t *fmt, va_list args_init)
     return result;
 }
 
-static inline wchar_t *
+function wchar_t *
 FormatWString(Arena *arena, wchar_t *fmt, ...)
 {
     va_list args;
@@ -221,7 +223,7 @@ FormatWString(Arena *arena, wchar_t *fmt, ...)
     return result;
 }
 
-static inline char *
+function char *
 FormatStringV(Arena *arena, char *fmt, va_list args_init)
 {
     va_list args_size;
@@ -240,7 +242,7 @@ FormatStringV(Arena *arena, char *fmt, va_list args_init)
     return result;
 }
 
-static inline char *
+function char *
 FormatString(Arena *arena, char *fmt, ...)
 {
     va_list args;
@@ -250,7 +252,7 @@ FormatString(Arena *arena, char *fmt, ...)
     return result;
 }
 
-static inline void
+function void
 Win32_DebugPrint(char *fmt, ...)
 {
     Arena *arena = platform->GetTempArena();
@@ -267,7 +269,7 @@ Win32_DebugPrint(char *fmt, ...)
     OutputDebugStringW(fmt_wide);
 }
 
-static inline void
+function void
 Win32_LogPrint(PlatformLogLevel level, char *fmt, ...)
 {
     Win32State *state = &win32_state;
@@ -324,21 +326,21 @@ Win32_LogPrint(PlatformLogLevel level, char *fmt, ...)
     }
 }
 
-static inline PlatformLogLine *
+function PlatformLogLine *
 Win32_GetFirstLogLine(void)
 {
     PlatformLogLine *result = &win32_state.log_lines[win32_state.log_line_first];
     return result;
 }
 
-static inline PlatformLogLine *
+function PlatformLogLine *
 Win32_GetLatestLogLine(void)
 {
     PlatformLogLine *result = &win32_state.log_lines[(win32_state.log_line_first + win32_state.log_line_count - 1) % PLATFORM_MAX_LOG_LINES];
     return result;
 }
 
-static inline PlatformLogLine *
+function PlatformLogLine *
 Win32_GetNextLogLine(PlatformLogLine *line)
 {
     Assert((line >= win32_state.log_lines) &&
@@ -358,7 +360,7 @@ Win32_GetNextLogLine(PlatformLogLine *line)
     return next;
 }
 
-static inline PlatformLogLine *
+function PlatformLogLine *
 Win32_GetPrevLogLine(PlatformLogLine *line)
 {
     Assert((line >= win32_state.log_lines) &&
@@ -378,7 +380,7 @@ Win32_GetPrevLogLine(PlatformLogLine *line)
     return prev;
 }
 
-static inline void
+function void
 Win32_ReportError(PlatformErrorType type, char *error, ...)
 {
     Arena *arena = platform->GetTempArena();
@@ -403,6 +405,141 @@ Win32_ReportError(PlatformErrorType type, char *error, ...)
         ExitProcess(1);
 #endif
     }
+}
+
+function bool
+Win32_WriteClipboard(String text)
+{
+    bool result = false;
+
+    if (text.size <= (size_t)INT32_MAX)
+    {
+        if (OpenClipboard(win32_state.window))
+        {
+            if (EmptyClipboard())
+            {
+                int wchar_count = MultiByteToWideChar(CP_UTF8, 0, (char *)text.data, (int)text.size, nullptr, 0);
+                int null_terminated_count = wchar_count + 1;
+
+                HGLOBAL handle = GlobalAlloc(GMEM_MOVEABLE, sizeof(wchar_t)*null_terminated_count);
+
+                wchar_t *memory = (wchar_t *)GlobalLock(handle);
+                if (memory)
+                {
+                    if (!MultiByteToWideChar(CP_UTF8, 0, (char *)text.data, (int)text.size, memory, wchar_count))
+                    {
+                        Win32_DisplayLastError();
+                    }
+
+                    memory[wchar_count] = 0;
+
+                    GlobalUnlock(handle);
+
+                    if (SetClipboardData(CF_UNICODETEXT, handle))
+                    {
+                        result = true;
+                    }
+                    else
+                    {
+                        Win32_DisplayLastError();
+                    }
+                }
+            }
+            else
+            {
+                Win32_DisplayLastError();
+            }
+
+            if (!CloseClipboard())
+            {
+                Win32_DisplayLastError();
+            }
+        }
+        else
+        {
+            Win32_DisplayLastError();
+        }
+    }
+
+    return result;
+}
+
+function String
+Win32_ReadClipboard(Arena *arena)
+{
+    String result = {};
+
+    if (OpenClipboard(NULL))
+    {
+        UINT format = 0;
+        for (;;)
+        {
+            format = EnumClipboardFormats(format);
+
+            if (!format)
+            {
+                if (GetLastError() != ERROR_SUCCESS)
+                {
+                    Win32_DisplayLastError();
+                }
+
+                break;
+            }
+
+            if (format == CF_TEXT ||
+                format == CF_UNICODETEXT)
+            {
+                break;
+            }
+        }
+
+        if (format)
+        {
+            HANDLE handle = GetClipboardData(format);
+            if (handle)
+            {
+                SIZE_T data_size = GlobalSize(handle);
+                wchar_t *data = (wchar_t *)GlobalLock(handle);
+                if (data)
+                {
+                    switch (format)
+                    {
+                        case CF_TEXT:
+                        {
+                            result = PushString(arena, MakeString(data_size, (uint8_t *)data));
+                        } break;
+
+                        case CF_UNICODETEXT:
+                        {
+                            int result_size;
+                            result.data = Win32_Utf16ToUtf8(arena, (wchar_t *)data, &result_size);
+                            result.size = (size_t)result_size;
+                        } break;
+                    }
+                    GlobalUnlock(handle);
+                }
+                else
+                {
+                    Win32_DisplayLastError();
+                }
+            }
+            else
+            {
+                Win32_DisplayLastError();
+            }
+        }
+
+        if (!CloseClipboard())
+        {
+            Win32_DisplayLastError();
+        }
+    }
+    else
+    {
+        Win32_DisplayLastError();
+    }
+
+    return result;
 }
 
 static size_t
@@ -529,7 +666,7 @@ Win32_ReadFile(Arena *arena, String filename)
     return result;
 }
 
-static inline void
+function void
 Win32_ToggleFullscreen(HWND window)
 {
     // Raymond Chen's fullscreen toggle recipe:
@@ -558,7 +695,7 @@ Win32_ToggleFullscreen(HWND window)
     }
 }
 
-static inline void
+function void
 Win32_ResizeOffscreenBuffer(Bitmap *buffer, int32_t w, int32_t h)
 {
     if (buffer->data &&
@@ -580,7 +717,7 @@ Win32_ResizeOffscreenBuffer(Bitmap *buffer, int32_t w, int32_t h)
     }
 }
 
-static inline void
+function void
 Win32_DisplayOffscreenBuffer(HWND window, Bitmap *buffer)
 {
     HDC dc = GetDC(window);
@@ -689,7 +826,7 @@ Win32_CreateWindow(HINSTANCE instance, int x, int y, int w, int h, const wchar_t
     return window_handle;
 }
 
-static inline PlatformEvent *
+function PlatformEvent *
 PushEvent()
 {
     PlatformEvent *result = PushStruct(&win32_state.temp_arena, PlatformEvent);
@@ -800,7 +937,7 @@ FindExeFolderLikeAMonkeyInAMonkeySuit(void)
     return exe_path;
 }
 
-static inline bool
+function bool
 Win32_FileExists(wchar_t *path)
 {
     bool result = false;
@@ -814,7 +951,7 @@ Win32_FileExists(wchar_t *path)
     return result;
 }
 
-static inline uint64_t
+function uint64_t
 Win32_GetLastWriteTime(wchar_t *path)
 {
     FILETIME last_write_time = {};
@@ -878,7 +1015,7 @@ Win32_LoadAppCode(Win32AppCode *old_code)
     return result;
 }
 
-static inline void
+function void
 Win32_InitializeTLSForThread(ThreadLocalContext *context)
 {
     if (!TlsSetValue(win32_state.thread_local_index, context))
@@ -919,7 +1056,7 @@ Win32_DestroyThreadLocalContext(void)
     }
 }
 
-static inline Arena *
+function Arena *
 Win32_GetTempArena(void)
 {
     ThreadLocalContext *context = Win32_GetThreadLocalContext();
@@ -1103,6 +1240,8 @@ main(int, char **)
     platform->GetFileSize = Win32_GetFileSize;
     platform->GetTime = Win32_GetTime;
     platform->SecondsElapsed = Win32_SecondsElapsed;
+    platform->WriteClipboard = Win32_WriteClipboard;
+    platform->ReadClipboard = Win32_ReadClipboard;
     platform->SleepThread = Win32_SleepThread;
 
     win32_state.thread_local_index = TlsAlloc();
@@ -1133,6 +1272,8 @@ main(int, char **)
     {
         platform->ReportError(PlatformError_Fatal, "Could not create window");
     }
+
+    win32_state.window = window;
 
     ShowWindow(window, SW_SHOW);
 

@@ -11,6 +11,7 @@
 #include "textit_platform.hpp"
 #include "textit_shared.hpp"
 #include "textit_memory.hpp"
+#include "textit_string.hpp"
 
 struct Win32AllocationHeader
 {
@@ -72,6 +73,8 @@ struct Win32State
 {
     Arena arena;
     Arena temp_arena;
+
+    HWND window;
 
     wchar_t *exe_folder;
     wchar_t *dll_path;

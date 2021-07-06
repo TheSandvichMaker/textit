@@ -300,8 +300,126 @@ COMMAND_PROC(SelectNextUndoBranch)
 
 COMMAND_PROC(SplitWindowVertical)
 {
-    Window *window = &editor->root_window;
+    Window *window = editor->active_window;
     SplitWindow(window, WindowSplit_Vert);
+}
+
+COMMAND_PROC(SplitWindowHorizontal)
+{
+    Window *window = editor->active_window;
+    SplitWindow(window, WindowSplit_Horz);
+}
+
+COMMAND_PROC(FocusWindowLeft)
+{
+    Window *window = editor->active_window;
+
+    Window *prev_window = window;
+    for (;;)
+    {
+        window = window->parent;
+        if (!window ||
+            ((window->split == WindowSplit_Vert) &&
+             (window->left != prev_window)))
+        {
+            break;
+        }
+        prev_window = window;
+    }
+
+    if (window)
+    {
+        window = window->left;
+        while (window->split != WindowSplit_Leaf)
+        {
+            window = window->right;
+        }
+        editor->active_window = window;
+    }
+}
+
+COMMAND_PROC(FocusWindowRight)
+{
+    Window *window = editor->active_window;
+
+    Window *prev_window = window;
+    for (;;)
+    {
+        window = window->parent;
+        if (!window ||
+            ((window->split == WindowSplit_Vert) &&
+             (window->right != prev_window)))
+        {
+            break;
+        }
+        prev_window = window;
+    }
+
+    if (window)
+    {
+        window = window->right;
+        while (window->split != WindowSplit_Leaf)
+        {
+            window = window->left;
+        }
+        editor->active_window = window;
+    }
+}
+
+COMMAND_PROC(FocusWindowUp)
+{
+    Window *window = editor->active_window;
+
+    Window *prev_window = window;
+    for (;;)
+    {
+        window = window->parent;
+        if (!window ||
+            ((window->split == WindowSplit_Horz) &&
+             (window->left != prev_window)))
+        {
+            break;
+        }
+        prev_window = window;
+    }
+
+    if (window)
+    {
+        window = window->left;
+        while (window->split != WindowSplit_Leaf)
+        {
+            window = window->right;
+        }
+        editor->active_window = window;
+    }
+}
+
+COMMAND_PROC(FocusWindowDown)
+{
+    Window *window = editor->active_window;
+
+    Window *prev_window = window;
+    for (;;)
+    {
+        window = window->parent;
+        if (!window ||
+            ((window->split == WindowSplit_Horz) &&
+             (window->right != prev_window)))
+        {
+            break;
+        }
+        prev_window = window;
+    }
+
+    if (window)
+    {
+        window = window->right;
+        while (window->split != WindowSplit_Leaf)
+        {
+            window = window->left;
+        }
+        editor->active_window = window;
+    }
 }
 
 CHANGE_PROC(DeleteSelection)
@@ -335,6 +453,62 @@ COMMAND_PROC(RepeatLastCommand)
 {
     UNUSED_VARIABLE(editor);
     // dummy command
+}
+
+COMMAND_PROC(Copy)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    Range range = GetEditRange(cursor);
+    range.end += 1; // make this an inclusive range
+    String string = BufferSubstring(buffer, range);
+
+    platform->WriteClipboard(string);
+}
+
+COMMAND_PROC(PasteBefore)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    String string = platform->ReadClipboard(platform->GetTempArena());
+
+    int64_t insert_pos = Min(cursor->pos, cursor->mark);
+    int64_t pos = BufferReplaceRange(buffer, MakeRange(insert_pos), string);
+    SetCursor(view, pos);
+}
+
+COMMAND_PROC(PasteAfter)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    String string = platform->ReadClipboard(platform->GetTempArena());
+
+    int64_t insert_pos = Max(cursor->pos, cursor->mark) + 1;
+    int64_t pos = BufferReplaceRange(buffer, MakeRange(insert_pos), string);
+    SetCursor(view, pos);
+}
+
+CHANGE_PROC(PasteReplaceSelection)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+
+    Arena *arena = platform->GetTempArena();
+    ScopedMemory temp_memory(arena);
+
+    String replaced_string = BufferPushRange(arena, buffer, range);
+    String string = platform->ReadClipboard(arena);
+
+    int64_t pos = BufferReplaceRange(buffer, range, string);
+    SetCursor(view, pos);
+
+    platform->WriteClipboard(replaced_string);
 }
 
 TEXT_COMMAND_PROC(WriteText)

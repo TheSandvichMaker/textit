@@ -2,14 +2,14 @@
 // Ascii
 //
 
-static inline bool
+function bool
 IsPrintableAscii(uint8_t c)
 {
     bool result = (c >= ' ' && c <= '~');
     return result;
 }
 
-static inline bool
+function bool
 IsAlphabeticAscii(uint8_t c)
 {
     bool result = ((c >= 'a' && c <= 'z') ||
@@ -17,7 +17,7 @@ IsAlphabeticAscii(uint8_t c)
     return result;
 }
 
-static inline uint8_t
+function uint8_t
 ToUpperAscii(uint8_t c)
 {
     if ((c >= 'a') && (c <= 'z'))
@@ -27,14 +27,14 @@ ToUpperAscii(uint8_t c)
     return c;
 }
 
-static inline bool
+function bool
 IsNumericAscii(uint8_t c)
 {
     bool result = ((c >= '0') && (c <= '9'));
     return result;
 }
 
-static inline bool
+function bool
 IsAlphanumericAscii(uint8_t c)
 {
     bool result = (IsAlphabeticAscii(c) ||
@@ -42,7 +42,7 @@ IsAlphanumericAscii(uint8_t c)
     return result;
 }
 
-static inline bool
+function bool
 IsValidIdentifierAscii(uint8_t c)
 {
     bool result = (IsAlphanumericAscii(c) ||
@@ -50,21 +50,21 @@ IsValidIdentifierAscii(uint8_t c)
     return result;
 }
 
-static inline bool
+function bool
 IsWhitespaceAscii(uint8_t c)
 {
     bool result = ((c == ' ') || (c == '\t') || (c == '\r') || (c == '\n'));
     return result;
 }
 
-static inline bool
+function bool
 IsHorizontalWhitespaceAscii(uint8_t c)
 {
     bool result = ((c == ' ') || (c == '\t'));
     return result;
 }
 
-static inline bool
+function bool
 IsVerticalWhitespaceAscii(uint8_t c)
 {
     bool result ((c == '\r') || (c == '\n'));
@@ -80,14 +80,14 @@ static const uint8_t utf8_mask[]           = { 0x80, 0xE0, 0xF0, 0xF8, };
 static const uint8_t utf8_matching_value[] = { 0x00, 0xC0, 0xE0, 0xF0, };
 */
 
-static inline bool
+function bool
 IsAsciiByte(uint8_t b)
 {
     if ((b & 0x80) == 0x00) return true;
     return false;
 }
 
-static inline int
+function int
 IsHeadUtf8Byte(uint8_t b)
 {
     if ((b & 0xE0) == 0xC0) return true;
@@ -96,7 +96,7 @@ IsHeadUtf8Byte(uint8_t b)
     return false;
 }
 
-static inline bool
+function bool
 IsTrailingUtf8Byte(uint8_t b)
 {
     if ((b & 0xC0) == 0x80)
@@ -109,14 +109,14 @@ IsTrailingUtf8Byte(uint8_t b)
     }
 }
 
-static inline bool
+function bool
 IsUtf8Byte(uint8_t b)
 {
     return (IsHeadUtf8Byte(b) ||
             IsTrailingUtf8Byte(b));
 }
 
-static inline CharacterClassFlags
+function CharacterClassFlags
 CharacterizeByte(uint8_t c)
 {
     CharacterClassFlags result = 0;
@@ -129,7 +129,7 @@ CharacterizeByte(uint8_t c)
     return result;
 }
 
-static inline CharacterClassFlags
+function CharacterClassFlags
 CharacterizeByteLoosely(uint8_t c)
 {
     CharacterClassFlags result = 0;
@@ -142,7 +142,7 @@ CharacterizeByteLoosely(uint8_t c)
     return result;
 }
 
-static inline ParseUtf8Result
+function ParseUtf8Result
 ParseUtf8Codepoint(uint8_t *text)
 {
     // TODO: This is adapted old code, I can't guarantee its quality, but I think it is at least correct
@@ -224,7 +224,7 @@ ParseUtf8Codepoint(uint8_t *text)
     return { codepoint, num_bytes };
 }
 
-static bool
+function bool
 AreEqual(const String &a, const String &b)
 {
     bool result = false;
@@ -248,7 +248,7 @@ AreEqual(const String &a, const String &b)
     return result;
 }
 
-static inline String
+function String
 PushString(Arena *arena, String string)
 {
     String result = {};
@@ -259,7 +259,7 @@ PushString(Arena *arena, String string)
     return result;
 }
 
-static inline String
+function String
 PushStringFV(Arena *arena, const char *fmt, va_list args_init)
 {
     va_list args_size;
@@ -280,7 +280,7 @@ PushStringFV(Arena *arena, const char *fmt, va_list args_init)
     return result;
 }
 
-static inline String
+function String
 PushStringF(Arena *arena, const char *fmt, ...)
 {
     va_list args;
@@ -290,7 +290,7 @@ PushStringF(Arena *arena, const char *fmt, ...)
     return result;
 }
 
-static inline String
+function String
 PushTempStringF(const char *fmt, ...)
 {
     va_list args;
@@ -300,14 +300,14 @@ PushTempStringF(const char *fmt, ...)
     return result;
 }
 
-static inline bool
+function bool
 IsEmpty(StringList *list)
 {
     bool result = !list->first;
     return result;
 }
 
-static inline StringNode
+function StringNode
 MakeStringNode(String string)
 {
     StringNode result = {};
@@ -315,7 +315,7 @@ MakeStringNode(String string)
     return result;
 }
 
-static inline void
+function void
 AddNode(StringList *list, StringNode *node)
 {
     SllQueuePush(list->first, list->last, node);
@@ -324,7 +324,7 @@ AddNode(StringList *list, StringNode *node)
     list->total_size += node->string.size;
 }
 
-static inline void
+function void
 PushStringNoCopy(StringList *list, Arena *arena, String string)
 {
     StringNode *node = PushStruct(arena, StringNode);
@@ -332,7 +332,7 @@ PushStringNoCopy(StringList *list, Arena *arena, String string)
     AddNode(list, node);
 }
 
-static inline void
+function void
 PushString(StringList *list, Arena *arena, String string)
 {
     StringNode *node = PushStruct(arena, StringNode);
@@ -340,7 +340,7 @@ PushString(StringList *list, Arena *arena, String string)
     AddNode(list, node);
 }
 
-static inline void
+function void
 PushStringFV(StringList *list, Arena *arena, const char *fmt, va_list args)
 {
     StringNode *node = PushStruct(arena, StringNode);
@@ -348,7 +348,7 @@ PushStringFV(StringList *list, Arena *arena, const char *fmt, va_list args)
     AddNode(list, node);
 }
 
-static inline void
+function void
 PushStringF(StringList *list, Arena *arena, const char *fmt, ...)
 {
     va_list args;
@@ -357,7 +357,7 @@ PushStringF(StringList *list, Arena *arena, const char *fmt, ...)
     va_end(args);
 }
 
-static inline void
+function void
 PushTempStringF(StringList *list, const char *fmt, ...)
 {
     va_list args;
@@ -366,7 +366,7 @@ PushTempStringF(StringList *list, const char *fmt, ...)
     va_end(args);
 }
 
-static inline void
+function void
 InsertSeparators(StringList *list, Arena *arena, String separator, StringSeparatorFlags flags = 0)
 {
     // I hate inserting in the middle of linked lists with tail pointers,
@@ -407,7 +407,7 @@ InsertSeparators(StringList *list, Arena *arena, String separator, StringSeparat
     *list = new_list;
 }
 
-static inline String
+function String
 PushFlattenedString(StringList *list, Arena *arena, String separator = {}, StringSeparatorFlags flags = 0)
 {
     size_t total_size = list->total_size;
@@ -466,7 +466,7 @@ PushFlattenedString(StringList *list, Arena *arena, String separator = {}, Strin
     return result;
 }
 
-static inline String
+function String
 PushFlattenedTempString(StringList *list, String separator = {}, StringSeparatorFlags flags = 0)
 {
     return PushFlattenedString(list, platform->GetTempArena(), separator, flags);

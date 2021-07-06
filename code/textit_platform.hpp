@@ -484,6 +484,9 @@ struct Platform
     PlatformHighResTime (*GetTime)(void);
     double (*SecondsElapsed)(PlatformHighResTime start, PlatformHighResTime end);
 
+    bool (*WriteClipboard)(String text);
+    String (*ReadClipboard)(Arena *arena);
+
     void (*SleepThread)(int milliseconds);
 };
 

@@ -4,6 +4,7 @@
 #include "textit_global_state.cpp"
 #include "textit_image.cpp"
 #include "textit_render.cpp"
+#include "textit_text_storage.cpp"
 #include "textit_buffer.cpp"
 #include "textit_tokenizer.cpp"
 #include "textit_view.cpp"
@@ -50,9 +51,9 @@ GetCursor(ViewID view, BufferID buffer)
 }
 
 function Cursor *
-GetCursor(View *view)
+GetCursor(View *view, Buffer *buffer)
 {
-    return GetCursor(view->id, view->buffer);
+    return GetCursor(view->id, (buffer ? buffer->id : view->buffer));
 }
 
 function Range
@@ -62,7 +63,7 @@ GetEditRange(Cursor *cursor)
     return result;
 }
 
-static inline Buffer *
+function Buffer *
 OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
 {
     EditorState *editor = editor_state;
@@ -83,8 +84,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->name = PushString(&result->arena, buffer_name);
     result->undo.at = &result->undo.root;
 
-    result->capacity = TEXTIT_BUFFER_SIZE;
-    result->text = (uint8_t *)platform->ReserveMemory((int64_t)result->capacity, 0, LOCATION_STRING("buffer storage"));
+    AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
 
     result->tokens = &result->tokens_[0];
     result->prev_tokens = &result->tokens_[1];
@@ -94,7 +94,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     return result;
 }
 
-static inline Buffer *
+function Buffer *
 OpenBufferFromFile(String filename)
 {
     Buffer *result = OpenNewBuffer(filename);
@@ -120,7 +120,7 @@ OpenBufferFromFile(String filename)
     return result;
 }
 
-static inline Buffer *
+function Buffer *
 GetBuffer(BufferID id)
 {
     Buffer *result = editor_state->buffers[0];
@@ -135,7 +135,7 @@ GetBuffer(BufferID id)
     return result;
 }
 
-static inline void
+function void
 DestroyBuffer(BufferID id)
 {
     Buffer *buffer = GetBuffer(id);
@@ -161,7 +161,7 @@ DestroyBuffer(BufferID id)
     editor_state->buffers[id.index] = nullptr;
 }
 
-static inline View *
+function View *
 OpenNewView(BufferID buffer)
 {
     EditorState *editor = editor_state;
@@ -185,7 +185,7 @@ OpenNewView(BufferID buffer)
     return result;
 }
 
-static inline View *
+function View *
 GetView(ViewID id)
 {
     View *result = editor_state->views[0];
@@ -200,7 +200,7 @@ GetView(ViewID id)
     return result;
 }
 
-static inline void
+function void
 DestroyView(ViewID id)
 {
     View *view = GetView(id);
@@ -222,7 +222,7 @@ DestroyView(ViewID id)
     editor_state->views[id.index] = nullptr;
 }
 
-static inline ViewID
+function ViewID
 DuplicateView(ViewID id)
 {
     ViewID result = ViewID::Null();
@@ -242,28 +242,29 @@ DuplicateView(ViewID id)
     return result;
 }
 
-static inline void
+function void
 SplitWindow(Window *window, WindowSplitKind split)
 {
-    Assert(window->is_leaf);
+    Assert(window->split == WindowSplit_Leaf);
 
     ViewID view = window->view;
-    window->is_leaf = false;
     window->split = split;
 
-    Window *a = window->a = PushStruct(&editor_state->transient_arena, Window);
-    a->is_leaf = true;
-    a->view = view;
+    Window *left = window->left = PushStruct(&editor_state->transient_arena, Window);
+    left->parent = window;
+    left->view = view;
 
-    Window *b = window->b = PushStruct(&editor_state->transient_arena, Window);
-    b->is_leaf = true;
-    b->view = DuplicateView(view);
+    Window *right = window->right = PushStruct(&editor_state->transient_arena, Window);
+    right->parent = window;
+    right->view = DuplicateView(view);
+
+    editor_state->active_window = right;
 }
 
-static inline void
+function void
 RecalculateViewBounds(Window *window, Rect2i rect)
 {
-    if (window->is_leaf)
+    if (window->split == WindowSplit_Leaf)
     {
         View *view = GetView(window->view);
         view->viewport = rect;
@@ -274,7 +275,7 @@ RecalculateViewBounds(Window *window, Rect2i rect)
         if (window->split == WindowSplit_Horz)
         {
             int64_t split = GetHeight(rect) / 2;
-            SplitRect2iHorizontal(rect, split, &a_rect, &b_rect);
+            SplitRect2iHorizontal(rect, split, &b_rect, &a_rect);
         }
         else
         {
@@ -282,15 +283,15 @@ RecalculateViewBounds(Window *window, Rect2i rect)
             int64_t split = GetWidth(rect) / 2;
             SplitRect2iVertical(rect, split, &a_rect, &b_rect);
         }
-        RecalculateViewBounds(window->a, a_rect);
-        RecalculateViewBounds(window->b, b_rect);
+        RecalculateViewBounds(window->left, a_rect);
+        RecalculateViewBounds(window->right, b_rect);
     }
 }
 
-static inline void
+function void
 DrawWindows(Window *window)
 {
-    if (window->is_leaf)
+    if (window->split == WindowSplit_Leaf)
     {
         View *view = GetView(window->view);
 
@@ -317,7 +318,9 @@ DrawWindows(Window *window)
             }
         }
 
-        view->actual_viewport_line_height = DrawView(view);
+        bool is_active_window = (window == editor_state->active_window);
+
+        view->actual_viewport_line_height = DrawView(view, is_active_window);
 
         {
             int64_t viewport_height = view->actual_viewport_line_height;
@@ -339,18 +342,18 @@ DrawWindows(Window *window)
                 }
 
                 PushRect(Layer_Text, view->viewport, COLOR_BLACK);
-                DrawView(view);
+                DrawView(view, is_active_window);
             }
         }
     }
     else
     {
-        DrawWindows(window->a);
-        DrawWindows(window->b);
+        DrawWindows(window->left);
+        DrawWindows(window->right);
     }
 }
 
-static inline StringMap *
+function StringMap *
 PushStringMap(Arena *arena, size_t size)
 {
     StringMap *result = PushStruct(arena, StringMap);
@@ -360,7 +363,7 @@ PushStringMap(Arena *arena, size_t size)
     return result;
 }
 
-static inline void *
+function void *
 StringMapFind(StringMap *map, String string)
 {
     void *result = nullptr;
@@ -380,7 +383,7 @@ StringMapFind(StringMap *map, String string)
     return result;
 }
 
-static inline void
+function void
 StringMapInsert(StringMap *map, String string, void *data)
 {
     uint64_t hash = HashString(string).u64[0];
@@ -412,7 +415,7 @@ StringMapInsert(StringMap *map, String string, void *data)
 
 // Ryan's text controls example: https://hatebin.com/ovcwtpsfmj
 
-static inline void
+function void
 SetDebugDelay(int milliseconds, int frame_count)
 {
     editor_state->debug_delay = milliseconds;
@@ -468,7 +471,7 @@ LoadFontFromDisk(Arena *arena, String filename, int glyph_w, int glyph_h)
     return result;
 }
 
-static inline Bitmap
+function Bitmap
 GetGlyphBitmap(Font *font, Glyph glyph)
 {
     Rect2i rect = GetGlyphRect(font, glyph);
@@ -476,7 +479,7 @@ GetGlyphBitmap(Font *font, Glyph glyph)
     return result;
 }
 
-static inline void
+function void
 ExecuteCommand(View *view, Command *command)
 {
     switch (command->kind)
@@ -531,7 +534,7 @@ ExecuteCommand(View *view, Command *command)
     }
 }
 
-static inline void
+function void
 HandleViewEvents(View *view)
 {
     Buffer *buffer = GetBuffer(view);
@@ -678,14 +681,12 @@ AppUpdateAndRender(Platform *platform_)
 
         editor_state->null_view = OpenNewView(BufferID::Null());
 
-        Buffer *test_buffer = OpenBufferFromFile("test_file.txt"_str);
-        View *view = OpenNewView(test_buffer->id);
+        Buffer *scratch_buffer = OpenBufferFromFile("test_file.txt"_str);
+        View *scratch_view = OpenNewView(scratch_buffer->id);
 
-        editor_state->active_view = view->id;
-
-        editor_state->root_window.is_leaf = true;
-        editor_state->root_window.view = editor_state->active_view;
+        editor_state->root_window.view = scratch_view->id;
         RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
+        editor_state->active_window = &editor_state->root_window;
 
         platform->PushTickEvent();
         platform->app_initialized = true;
@@ -694,7 +695,16 @@ AppUpdateAndRender(Platform *platform_)
     editor_state->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);
     editor_state->text_mouse_p = editor_state->screen_mouse_p / GlyphDim(&editor_state->font);
 
-    HandleViewEvents(GetView(editor_state->active_view));
+    if (editor_state->active_window->split != WindowSplit_Leaf)
+    {
+        platform->ReportError(PlatformError_Nonfatal, "Hey, the active window was not a leaf window, that's busted.");
+        while (!editor_state->active_window->split != WindowSplit_Leaf)
+        {
+            editor_state->active_window = editor_state->active_window->left;
+        }
+    }
+
+    HandleViewEvents(GetView(editor_state->active_window->view));
     RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
 
     BeginRender();

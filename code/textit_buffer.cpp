@@ -1,4 +1,4 @@
-static inline LineEndKind
+function LineEndKind
 GuessLineEndKind(String string)
 {
     int64_t lf   = 0;
@@ -30,14 +30,14 @@ GuessLineEndKind(String string)
     return result;
 }
 
-static inline bool
+function bool
 IsInBufferRange(Buffer *buffer, int64_t pos)
 {
     bool result = ((pos >= 0) && (pos < buffer->count));
     return result;
 }
 
-static inline int64_t
+function int64_t
 ClampToBufferRange(Buffer *buffer, int64_t pos)
 {
     if (pos >= buffer->count) pos = buffer->count - 1;
@@ -45,13 +45,13 @@ ClampToBufferRange(Buffer *buffer, int64_t pos)
     return pos;
 }
 
-static inline Range
+function Range
 BufferRange(Buffer *buffer)
 {
     return MakeRange(0, buffer->count);
 }
 
-static inline uint8_t
+function uint8_t
 ReadBufferByte(Buffer *buffer, int64_t pos)
 {
     uint8_t result = 0;
@@ -62,7 +62,7 @@ ReadBufferByte(Buffer *buffer, int64_t pos)
     return result;
 }
 
-static inline int64_t
+function int64_t
 PeekNewline(Buffer *buffer, int64_t pos)
 {
     if (ReadBufferByte(buffer, pos + 0) == '\r' &&
@@ -77,7 +77,7 @@ PeekNewline(Buffer *buffer, int64_t pos)
     return 0;
 }
 
-static inline bool
+function bool
 AdvanceOverNewline(Buffer *buffer, int64_t *pos)
 {
     int64_t length = PeekNewline(buffer, *pos);
@@ -94,7 +94,7 @@ AdvanceOverNewline(Buffer *buffer, int64_t *pos)
     return result;
 }
 
-static inline int64_t
+function int64_t
 PeekNewlineBackward(Buffer *buffer, int64_t pos)
 {
     if (ReadBufferByte(buffer, pos - 0) == '\n' &&
@@ -109,7 +109,7 @@ PeekNewlineBackward(Buffer *buffer, int64_t pos)
     return 0;
 }
 
-static inline int64_t
+function int64_t
 ScanWordEndForward(Buffer *buffer, int64_t pos)
 {
     bool skipped_whitespace = false;
@@ -158,7 +158,7 @@ ScanWordEndForward(Buffer *buffer, int64_t pos)
 // ^ selection start
 //  ^ cursor/selection end
 
-static inline Range
+function Range
 ScanWordForward(Buffer *buffer, int64_t pos)
 {
     if (PeekNewline(buffer, pos + 1))
@@ -191,7 +191,7 @@ ScanWordForward(Buffer *buffer, int64_t pos)
     return result;
 }
 
-static inline Range
+function Range
 ScanWordBackward(Buffer *buffer, int64_t pos)
 {
     if (PeekNewlineBackward(buffer, pos - 1))
@@ -231,7 +231,7 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
     return result;
 }
 
-static inline Range
+function Range
 EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
 {
     Range result = MakeRange(pos, pos);
@@ -260,7 +260,7 @@ EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
     return result;
 }
 
-static inline void
+function void
 PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
 {
     auto undo = &buffer->undo;
@@ -281,14 +281,14 @@ PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
     undo->depth += 1;
 }
 
-static inline UndoNode *
+function UndoNode *
 CurrentUndoNode(Buffer *buffer)
 {
     auto undo = &buffer->undo;
     return undo->at;
 }
 
-static inline void
+function void
 SelectNextUndoBranch(Buffer *buffer)
 {
     UndoNode *node = CurrentUndoNode(buffer);
@@ -304,7 +304,7 @@ SelectNextUndoBranch(Buffer *buffer)
     node->selected_branch = (node->selected_branch + 1) % child_count;
 }
 
-static inline UndoNode *
+function UndoNode *
 NextChild(UndoNode *node)
 {
     UndoNode *result = node->first_child;
@@ -315,13 +315,13 @@ NextChild(UndoNode *node)
     return result;
 }
 
-static inline uint64_t
+function uint64_t
 CurrentUndoOrdinal(Buffer *buffer)
 {
     return buffer->undo.current_ordinal;
 }
 
-static inline void
+function void
 MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
 {
     Assert(last_ordinal >= first_ordinal);
@@ -342,7 +342,15 @@ MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
     }
 }
 
-static inline String
+function String
+BufferSubstring(Buffer *buffer, Range range)
+{
+    int64_t range_size = range.end - range.start;
+    String result = MakeString(range_size, buffer->text + range.start);
+    return result;
+}
+
+function String
 BufferPushRange(Arena *arena, Buffer *buffer, Range range)
 {
     int64_t range_size = range.end - range.start;
@@ -351,21 +359,7 @@ BufferPushRange(Arena *arena, Buffer *buffer, Range range)
     return result;
 }
 
-static inline void
-EnsureSpace(Buffer *buffer, int64_t append_size)
-{
-    Assert(buffer->count + append_size <= buffer->capacity);
-
-    if (buffer->count + append_size > buffer->committed)
-    {
-        int64_t to_commit = AlignPow2(append_size, platform->page_size);
-        platform->CommitMemory(buffer->text + buffer->committed, to_commit);
-        buffer->committed += to_commit;
-        Assert(buffer->committed >= (buffer->count + append_size));
-    }
-}
-
-static inline int64_t
+function int64_t
 BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 {
     if (buffer->flags & Buffer_ReadOnly)
@@ -373,36 +367,13 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
         return range.start;
     }
 
-    range = ClampRange(range, BufferRange(buffer));
-
-    int64_t delta = range.start - range.end + (int64_t)text.size;
-    EnsureSpace(buffer, delta);
-    // TODO: Decommit behaviour
-
-    if (delta != 0)
-    {
-        uint8_t *source = (delta > 0
-                           ? buffer->text + range.start
-                           : buffer->text + range.end);
-        uint8_t *dest   = source + delta;
-        uint8_t *end    = buffer->text + buffer->count;
-        memmove(dest, source, end - source);
-
-        buffer->count += delta;
-    }
-    memcpy(buffer->text + range.start, text.data, text.size);
-
-    int64_t edit_end = range.start;
-    if (delta > 0)
-    {
-        edit_end += delta;
-    }
-
     buffer->dirty = true;
-    return edit_end;
+
+    int64_t result = TextStorageReplaceRange(buffer, range, text);
+    return result;
 }
 
-static inline int64_t
+function int64_t
 BufferReplaceRange(Buffer *buffer, Range range, String text)
 {
     range = SanitizeRange(range);

@@ -1027,7 +1027,7 @@ MakeRect2iCenterHalfDim(V2i center, V2i half_dim)
 TEXTIT_INLINE void
 SplitRect2iVertical(Rect2i rect, int64_t split_point, Rect2i *out_left, Rect2i *out_right)
 {
-    split_point = Clamp(split_point, rect.min.x, rect.max.x);
+    split_point = Clamp(rect.min.x + split_point, rect.min.x, rect.max.x);
 
     Rect2i left;
     left.min = rect.min;
@@ -1044,7 +1044,7 @@ SplitRect2iVertical(Rect2i rect, int64_t split_point, Rect2i *out_left, Rect2i *
 TEXTIT_INLINE void
 SplitRect2iHorizontal(Rect2i rect, int64_t split_point, Rect2i *out_bottom, Rect2i *out_top)
 {
-    split_point = Clamp(split_point, rect.min.y, rect.max.y);
+    split_point = Clamp(rect.min.y + split_point, rect.min.y, rect.max.y);
 
     Rect2i bottom;
     bottom.min = rect.min;

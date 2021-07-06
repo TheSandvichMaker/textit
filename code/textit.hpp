@@ -18,6 +18,7 @@
 #include "textit_theme.hpp"
 #include "textit_render.hpp"
 #include "textit_tokens.hpp"
+#include "textit_text_storage.hpp"
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
 #include "textit_view.hpp"
@@ -46,28 +47,25 @@ struct StringMap
     StringMapNode **nodes;
 };
 
-static inline StringMap *PushStringMap(Arena *arena, size_t size);
-static inline void *StringMapFind(StringMap *map, String string);
-static inline void StringMapInsert(StringMap *map, String string, void *data);
+function StringMap *PushStringMap(Arena *arena, size_t size);
+function void *StringMapFind(StringMap *map, String string);
+function void StringMapInsert(StringMap *map, String string, void *data);
 
 enum WindowSplitKind
 {
+    WindowSplit_Leaf,
     WindowSplit_Horz,
     WindowSplit_Vert,
 };
 
 struct Window
 {
-    bool is_leaf;
     WindowSplitKind split;
-    union
-    {
-        struct
-        {
-            Window *a, *b;
-        };
-        ViewID view;
-    };
+
+    Window *parent;
+    Window *left, *right;
+
+    ViewID view;
 };
 
 struct CoreConfig
@@ -84,7 +82,7 @@ struct Cursor
     int64_t mark;
 };
 
-function Range GetEditRange(View *view, Buffer *buffer, Cursor *cursor);
+function Range GetEditRange(Cursor *cursor);
 
 struct CursorHashKey
 {
@@ -125,6 +123,9 @@ struct EditorState
 
     LanguageSpec *cpp_spec;
 
+    TextStorage default_register;
+    TextStorage registers[26];
+
     uint32_t buffer_count;
     Buffer *buffers[MAX_BUFFER_COUNT];
     BufferID used_buffer_ids[MAX_BUFFER_COUNT];
@@ -143,8 +144,8 @@ struct EditorState
     CursorHashEntry *first_free_cursor_hash_entry;
     CursorHashEntry *cursor_hash[CURSOR_HASH_SIZE];
 
-    ViewID active_view;
     Window root_window;
+    Window *active_window;
 
     V2i screen_mouse_p;
     V2i text_mouse_p;
@@ -163,10 +164,10 @@ struct EditorState
 };
 static EditorState *editor_state;
 
-static inline void ExecuteCommand(View *view, Command *command);
+function void ExecuteCommand(View *view, Command *command);
 
 function Cursor *GetCursor(ViewID view, BufferID buffer);
-function Cursor *GetCursor(View *view);
+function Cursor *GetCursor(View *view, Buffer *buffer = nullptr);
 
 struct BufferIterator
 {
@@ -174,7 +175,7 @@ struct BufferIterator
     Buffer *buffer;
 };
 
-static inline BufferIterator
+function BufferIterator
 IterateBuffers(void)
 {
     BufferIterator result = {};
@@ -182,13 +183,13 @@ IterateBuffers(void)
     return result;
 }
 
-static inline bool
+function bool
 IsValid(BufferIterator *iter)
 {
     return (iter->index < editor_state->buffer_count);
 }
 
-static inline void
+function void
 Next(BufferIterator *iter)
 {
     iter->index += 1;
@@ -204,7 +205,7 @@ struct ViewIterator
     View *view;
 };
 
-static inline ViewIterator
+function ViewIterator
 IterateViews(void)
 {
     ViewIterator result = {};
@@ -212,13 +213,13 @@ IterateViews(void)
     return result;
 }
 
-static inline bool
+function bool
 IsValid(ViewIterator *iter)
 {
     return (iter->index < editor_state->view_count);
 }
 
-static inline void
+function void
 Next(ViewIterator *iter)
 {
     iter->index += 1;
@@ -228,21 +229,21 @@ Next(ViewIterator *iter)
     }
 }
 
-static inline View *
+function View *
 CurrentView(EditorState *editor)
 {
-    return GetView(editor->active_view);
+    return GetView(editor->active_window->view);
 }
 
-static inline Buffer *
+function Buffer *
 CurrentBuffer(EditorState *editor)
 {
-    View *view = GetView(editor->active_view);
+    View *view = GetView(editor->active_window->view);
     Buffer *result = GetBuffer(view->buffer);
     return result;
 }
 
-static inline void SplitWindow(Window *window, WindowSplitKind split);
-static inline void SetDebugDelay(int milliseconds, int frame_count);
+function void SplitWindow(Window *window, WindowSplitKind split);
+function void SetDebugDelay(int milliseconds, int frame_count);
 
 #endif /* TEXTIT_HPP */

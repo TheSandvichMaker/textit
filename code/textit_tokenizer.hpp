@@ -11,6 +11,7 @@ struct StringMap;
 
 struct LanguageSpec
 {
+    bool allow_nested_block_comments;
     StringMap *idents;
 };
 
@@ -20,8 +21,6 @@ struct Tokenizer
     Token null_token;
 
     TokenizeFlags flags;
-
-    LanguageSpec *spec;
 
     TokenList *tokens;
 
@@ -34,7 +33,7 @@ struct Tokenizer
     uint8_t *end;
 };
 
-static inline void TokenizeBuffer(Buffer *buffer);
+function void TokenizeBuffer(Buffer *buffer);
 static PLATFORM_JOB(TokenizeBufferJob);
 
 #endif /* TEXTIT_TOKENIZER_HPP */

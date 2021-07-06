@@ -1,4 +1,4 @@
-static inline TokenBlock *
+function TokenBlock *
 AllocateTokenBlock(void)
 {
     if (!editor_state->first_free_token_block)
@@ -16,7 +16,7 @@ AllocateTokenBlock(void)
     return result;
 }
 
-static inline void
+function void
 PushToken(Tokenizer *tok, const Token &t)
 {
     TokenList *list = tok->tokens;
@@ -42,20 +42,20 @@ PushToken(Tokenizer *tok, const Token &t)
     block->tokens[block->count++] = t;
 }
 
-static inline int64_t
+function int64_t
 AtPos(Tokenizer *tok)
 {
     return (int64_t)(tok->at - tok->buffer->text);
 }
 
-static inline int64_t
+function int64_t
 CharsLeft(Tokenizer *tok)
 {
     AssertSlow(tok->at < tok->end);
     return (int64_t)(tok->end - tok->at);
 }
 
-static inline uint8_t
+function uint8_t
 Peek(Tokenizer *tok, int64_t index = 0)
 {
     if (((tok->at + index) >= tok->buffer->text) &&
@@ -69,7 +69,7 @@ Peek(Tokenizer *tok, int64_t index = 0)
     }
 }
 
-static inline void
+function void
 FreeTokens(TokenList *list)
 {
     if (list->last)
@@ -82,7 +82,7 @@ FreeTokens(TokenList *list)
     list->last  = nullptr;
 }
 
-static inline void
+function void
 TokenizeBuffer(Buffer *buffer)
 {
     Tokenizer tok_ = {};
@@ -206,7 +206,14 @@ TokenizeBuffer(Buffer *buffer)
                     tok->at += 1;
                     if (tok->block_comment_count > 0)
                     {
-                        tok->block_comment_count -= 1;
+                        if (language->allow_nested_block_comments)
+                        {
+                            tok->block_comment_count -= 1;
+                        }
+                        else
+                        {
+                            tok->block_comment_count = 0;
+                        }
                     }
                     t.kind = Token_CloseBlockComment;
                     t.flags |= TokenFlag_IsComment;
@@ -285,7 +292,7 @@ PLATFORM_JOB(TokenizeBufferJob)
     buffer->tokenizing = false;
 }
 
-static inline LanguageSpec *
+function LanguageSpec *
 PushCppLanguageSpec(Arena *arena)
 {
     LanguageSpec *result = PushStruct(arena, LanguageSpec);

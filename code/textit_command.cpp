@@ -37,7 +37,14 @@ LoadDefaultBindings()
     command->map['X'].regular                      = FindCommand("DeleteChar"_str);
     command->map['U'].regular                      = FindCommand("UndoOnce"_str);
     command->map['R'].ctrl                         = FindCommand("RedoOnce"_str);
+
     command->map['V'].ctrl                         = FindCommand("SplitWindowVertical"_str);
+    command->map['S'].ctrl                         = FindCommand("SplitWindowHorizontal"_str);
+    command->map['H'].ctrl                         = FindCommand("FocusWindowLeft"_str);
+    command->map['J'].ctrl                         = FindCommand("FocusWindowDown"_str);
+    command->map['K'].ctrl                         = FindCommand("FocusWindowUp"_str);
+    command->map['L'].ctrl                         = FindCommand("FocusWindowRight"_str);
+
     command->map['D'].regular                      = FindCommand("DeleteSelection"_str);
     command->map['C'].regular                      = FindCommand("ChangeSelection"_str);
     command->map['Q'].regular                      = FindCommand("ToUppercase"_str);
@@ -52,6 +59,11 @@ LoadDefaultBindings()
     command->map['S'].regular                      = FindCommand("EncloseNextScope"_str);
     command->map[PlatformInputCode_Period].regular = FindCommand("RepeatLastCommand"_str);
     command->map[PlatformInputCode_F1].regular     = FindCommand("ToggleVisualizeNewlines"_str);
+
+    command->map['Y'].regular                      = FindCommand("Copy"_str);
+    command->map['P'].regular                      = FindCommand("PasteAfter"_str);
+    command->map['P'].shift                        = FindCommand("PasteBefore"_str);
+    command->map['P'].ctrl                         = FindCommand("PasteReplaceSelection"_str);
 
     BindingMap *text = &editor_state->bindings[EditMode_Text];
     text->text_command = FindCommand("WriteText"_str);

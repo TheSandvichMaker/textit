@@ -60,7 +60,7 @@ enum BufferFlags_ENUM : BufferFlags
 
 #define TEXTIT_BUFFER_SIZE Megabytes(128)
 #define BUFFER_ASYNC_THRESHOLD Megabytes(4)
-struct Buffer
+struct Buffer : TextStorage
 {
     BufferID id;
     BufferFlags flags;
@@ -86,11 +86,6 @@ struct Buffer
     volatile TokenList *tokens;
     TokenList *prev_tokens;
     TokenList tokens_[2];
-
-    int64_t count;
-    int64_t committed;
-    int64_t capacity;
-    uint8_t *text;
 };
 
 static inline Buffer *GetBuffer(BufferID id);

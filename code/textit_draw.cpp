@@ -1,4 +1,4 @@
-static inline V2i
+function V2i
 DrawLine(V2i p, String line, Color foreground, Color background)
 {
     V2i at_p = p;
@@ -29,8 +29,8 @@ DrawLine(V2i p, String line, Color foreground, Color background)
     return at_p;
 }
 
-static inline int64_t
-DrawTextArea(View *view, Rect2i bounds)
+function int64_t
+DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 {
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
@@ -38,16 +38,18 @@ DrawTextArea(View *view, Rect2i bounds)
     int64_t cursor_pos = cursor->pos;
     int64_t mark_pos = cursor->mark;
 
+    bool draw_cursor = is_active_window;
+
     int64_t left = bounds.min.x + 2;
     V2i at_p = MakeV2i(left, bounds.max.y - 2);
 
-    Color text_comment = GetThemeColor("text_comment"_str);
-    Color text_preprocessor = GetThemeColor("text_preprocessor"_str);
-    Color text_foreground = GetThemeColor("text_foreground"_str);
-    Color text_background = GetThemeColor("text_background"_str);
+    Color text_comment                 = GetThemeColor("text_comment"_str);
+    Color text_preprocessor            = GetThemeColor("text_preprocessor"_str);
+    Color text_foreground              = GetThemeColor("text_foreground"_str);
+    Color text_background              = GetThemeColor("text_background"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
     Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
-    Color selection_background = GetThemeColor("selection_background"_str);
+    Color selection_background         = GetThemeColor("selection_background"_str);
 
     int64_t actual_line_height = 0;
 
@@ -63,8 +65,7 @@ DrawTextArea(View *view, Rect2i bounds)
 
     Range mark_range = MakeSanitaryRange(cursor_pos, mark_pos);
 
-    volatile TokenList *list = buffer->tokens;
-    TokenBlock *block = list->first;
+    TokenBlock *block = buffer->tokens->first;
 
     int64_t token_index = 0;
 
@@ -151,7 +152,7 @@ DrawTextArea(View *view, Rect2i bounds)
             color = GetThemeColor(TokenThemeName(token->kind));
         }
 
-        if (pos == cursor_pos)
+        if (draw_cursor && (pos == cursor_pos))
         {
             PushTile(Layer_Text, at_p, MakeSprite('\0', text_background, text_foreground));
         }
@@ -201,7 +202,8 @@ DrawTextArea(View *view, Rect2i bounds)
             if (b == ' ' || IsPrintableAscii(b))
             {
                 Sprite sprite = MakeSprite(buffer->text[pos], color, text_background);
-                if ((editor_state->edit_mode == EditMode_Command) &&
+                if (draw_cursor &&
+                    (editor_state->edit_mode == EditMode_Command) &&
                     (pos >= mark_range.start && pos <= mark_range.end))
                 {
                     sprite.background = selection_background;
@@ -209,7 +211,7 @@ DrawTextArea(View *view, Rect2i bounds)
                     sprite.foreground.g = 255 - selection_background.g;
                     sprite.foreground.b = 255 - selection_background.b;
                 }
-                if (pos == cursor_pos)
+                if (draw_cursor && (pos == cursor_pos))
                 {
                     Swap(sprite.foreground, sprite.background);
                 }
@@ -221,12 +223,13 @@ DrawTextArea(View *view, Rect2i bounds)
             {
                 Color foreground = unrenderable_text_foreground;
                 Color background = unrenderable_text_background;
-                if (pos == cursor_pos)
+                if (draw_cursor && (pos == cursor_pos))
                 {
                     Swap(foreground, background);
                 }
 
-                if ((editor_state->edit_mode == EditMode_Command) &&
+                if (draw_cursor &&
+                    (editor_state->edit_mode == EditMode_Command) &&
                     (pos >= mark_range.start && pos <= mark_range.end))
                 {
                     background = selection_background;
@@ -301,8 +304,8 @@ DrawTextArea(View *view, Rect2i bounds)
     return actual_line_height;
 }
 
-static inline int64_t
-DrawView(View *view)
+function int64_t
+DrawView(View *view, bool is_active_window)
 {
     Buffer *buffer = GetBuffer(view);
     Rect2i bounds = view->viewport;
@@ -311,21 +314,25 @@ DrawView(View *view)
     Color text_background = GetThemeColor("text_background"_str);
     Color filebar_text_foreground = GetThemeColor("filebar_text_foreground"_str);
 
-    String filebar_text_background_str = "filebar_text_background"_str;
-    switch (editor_state->edit_mode)
+    String filebar_text_background_str = "filebar_text_inactive"_str;
+    if (is_active_window)
     {
-        case EditMode_Text:
+        filebar_text_background_str = "filebar_text_background"_str;
+        switch (editor_state->edit_mode)
         {
-            filebar_text_background_str = "filebar_text_background_text_mode"_str;
-        } break;
-
-        default:
-        {
-            if (editor_state->clutch)
+            case EditMode_Text:
             {
-                filebar_text_background_str = "filebar_text_background_clutch"_str;
-            }
-        } break;
+                filebar_text_background_str = "filebar_text_background_text_mode"_str;
+            } break;
+
+            default:
+            {
+                if (editor_state->clutch)
+                {
+                    filebar_text_background_str = "filebar_text_background_clutch"_str;
+                }
+            } break;
+        }
     }
 
     Color filebar_text_background = GetThemeColor(filebar_text_background_str);
@@ -341,5 +348,5 @@ DrawView(View *view)
                              loc.line, loc.col),
              filebar_text_foreground, filebar_text_background);
 
-    return DrawTextArea(view, bounds);
+    return DrawTextArea(view, bounds, is_active_window);
 }
