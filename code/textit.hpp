@@ -63,7 +63,9 @@ struct Window
     WindowSplitKind split;
 
     Window *parent;
-    Window *left, *right;
+    Window *first_child;
+    Window *last_child;
+    Window *next, *prev;
 
     ViewID view;
 };

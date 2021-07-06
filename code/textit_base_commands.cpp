@@ -314,25 +314,24 @@ COMMAND_PROC(FocusWindowLeft)
 {
     Window *window = editor->active_window;
 
-    Window *prev_window = window;
     for (;;)
     {
-        window = window->parent;
         if (!window ||
-            ((window->split == WindowSplit_Vert) &&
-             (window->left != prev_window)))
+            (window->parent &&
+             (window->parent->split == WindowSplit_Vert) &&
+             (window->parent->first_child != window)))
         {
             break;
         }
-        prev_window = window;
+        window = window->parent;
     }
 
     if (window)
     {
-        window = window->left;
+        window = window->prev;
         while (window->split != WindowSplit_Leaf)
         {
-            window = window->right;
+            window = window->last_child;
         }
         editor->active_window = window;
     }
@@ -342,25 +341,24 @@ COMMAND_PROC(FocusWindowRight)
 {
     Window *window = editor->active_window;
 
-    Window *prev_window = window;
     for (;;)
     {
-        window = window->parent;
         if (!window ||
-            ((window->split == WindowSplit_Vert) &&
-             (window->right != prev_window)))
+            (window->parent &&
+             (window->parent->split == WindowSplit_Vert) &&
+             (window->parent->last_child != window)))
         {
             break;
         }
-        prev_window = window;
+        window = window->parent;
     }
 
     if (window)
     {
-        window = window->right;
+        window = window->next;
         while (window->split != WindowSplit_Leaf)
         {
-            window = window->left;
+            window = window->first_child;
         }
         editor->active_window = window;
     }
@@ -370,25 +368,24 @@ COMMAND_PROC(FocusWindowUp)
 {
     Window *window = editor->active_window;
 
-    Window *prev_window = window;
     for (;;)
     {
-        window = window->parent;
         if (!window ||
-            ((window->split == WindowSplit_Horz) &&
-             (window->left != prev_window)))
+            (window->parent &&
+             (window->parent->split == WindowSplit_Horz) &&
+             (window->parent->last_child != window)))
         {
             break;
         }
-        prev_window = window;
+        window = window->parent;
     }
 
     if (window)
     {
-        window = window->left;
+        window = window->next;
         while (window->split != WindowSplit_Leaf)
         {
-            window = window->right;
+            window = window->first_child;
         }
         editor->active_window = window;
     }
@@ -398,25 +395,24 @@ COMMAND_PROC(FocusWindowDown)
 {
     Window *window = editor->active_window;
 
-    Window *prev_window = window;
     for (;;)
     {
-        window = window->parent;
         if (!window ||
-            ((window->split == WindowSplit_Horz) &&
-             (window->right != prev_window)))
+            (window->parent &&
+             (window->parent->split == WindowSplit_Horz) &&
+             (window->parent->first_child != window)))
         {
             break;
         }
-        prev_window = window;
+        window = window->parent;
     }
 
     if (window)
     {
-        window = window->right;
+        window = window->prev;
         while (window->split != WindowSplit_Leaf)
         {
-            window = window->left;
+            window = window->last_child;
         }
         editor->active_window = window;
     }

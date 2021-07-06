@@ -248,17 +248,46 @@ SplitWindow(Window *window, WindowSplitKind split)
     Assert(window->split == WindowSplit_Leaf);
 
     ViewID view = window->view;
-    window->split = split;
 
-    Window *left = window->left = PushStruct(&editor_state->transient_arena, Window);
-    left->parent = window;
-    left->view = view;
+    if (window->parent &&
+        window->parent->split == split)
+    {
+        Window *new_window = PushStruct(&editor_state->transient_arena, Window);
+        new_window->view = DuplicateView(view);
+        new_window->parent = window->parent;
+        new_window->prev = window;
+        new_window->next = window->next;
+        if (new_window->next)
+        {
+            new_window->next->prev = new_window;
+        }
+        else
+        {
+            new_window->parent->last_child = new_window;
+        }
+        window->next = new_window;
 
-    Window *right = window->right = PushStruct(&editor_state->transient_arena, Window);
-    right->parent = window;
-    right->view = DuplicateView(view);
+        editor_state->active_window = window;
+    }
+    else
+    {
+        window->split = split;
 
-    editor_state->active_window = right;
+        Window *left = PushStruct(&editor_state->transient_arena, Window);
+        left->parent = window;
+        left->view = view;
+
+        Window *right = PushStruct(&editor_state->transient_arena, Window);
+        right->parent = window;
+        right->view = DuplicateView(view);
+
+        left->next = right;
+        right->prev = left;
+        window->first_child = left;
+        window->last_child  = right;
+
+        editor_state->active_window = left;
+    }
 }
 
 function void
@@ -271,20 +300,47 @@ RecalculateViewBounds(Window *window, Rect2i rect)
     }
     else
     {
-        Rect2i a_rect, b_rect;
-        if (window->split == WindowSplit_Horz)
+        int child_count = 0;
+        for (Window *child = window->first_child;
+             child;
+             child = child->next)
         {
-            int64_t split = GetHeight(rect) / 2;
-            SplitRect2iHorizontal(rect, split, &b_rect, &a_rect);
+            child_count += 1;
         }
-        else
+
+        int64_t dim = ((window->split == WindowSplit_Vert) ? GetWidth(rect) : GetHeight(rect));
+        int64_t dim_div = dim / child_count;
+
+        int64_t start = ((window->split == WindowSplit_Vert) ? rect.min.x : rect.min.y);
+        int64_t   end = ((window->split == WindowSplit_Vert) ? rect.max.x : rect.max.y);
+
+        int child_index = 0;
+        for (Window *child = window->first_child;
+             child;
+             child = child->next)
         {
-            Assert(window->split == WindowSplit_Vert);
-            int64_t split = GetWidth(rect) / 2;
-            SplitRect2iVertical(rect, split, &a_rect, &b_rect);
+            int64_t split_start = start + child_index*dim_div;
+            int64_t split_end   = start + (child_index + 1)*dim_div;
+            if (!child->next)
+            {
+                split_end = end;
+            }
+
+            Rect2i child_rect = rect;
+            if (window->split == WindowSplit_Vert)
+            {
+                child_rect.min.x = split_start;
+                child_rect.max.x = split_end;
+            }
+            else
+            {
+                child_rect.min.y = split_start;
+                child_rect.max.y = split_end;
+            }
+            RecalculateViewBounds(child, child_rect);
+
+            child_index += 1;
         }
-        RecalculateViewBounds(window->left, a_rect);
-        RecalculateViewBounds(window->right, b_rect);
     }
 }
 
@@ -348,8 +404,12 @@ DrawWindows(Window *window)
     }
     else
     {
-        DrawWindows(window->left);
-        DrawWindows(window->right);
+        for (Window *child = window->first_child;
+             child;
+             child = child->next)
+        {
+            DrawWindows(child);
+        }
     }
 }
 
@@ -700,7 +760,7 @@ AppUpdateAndRender(Platform *platform_)
         platform->ReportError(PlatformError_Nonfatal, "Hey, the active window was not a leaf window, that's busted.");
         while (!editor_state->active_window->split != WindowSplit_Leaf)
         {
-            editor_state->active_window = editor_state->active_window->left;
+            editor_state->active_window = editor_state->active_window->first_child;
         }
     }
 
