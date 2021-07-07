@@ -44,6 +44,7 @@ LoadDefaultBindings()
     command->map['J'].ctrl                         = FindCommand("FocusWindowDown"_str);
     command->map['K'].ctrl                         = FindCommand("FocusWindowUp"_str);
     command->map['L'].ctrl                         = FindCommand("FocusWindowRight"_str);
+    command->map['Q'].ctrl                         = FindCommand("DestroyWindow"_str);
 
     command->map['D'].regular                      = FindCommand("DeleteSelection"_str);
     command->map['C'].regular                      = FindCommand("ChangeSelection"_str);

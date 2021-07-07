@@ -56,6 +56,25 @@ GetCursor(View *view, Buffer *buffer)
     return GetCursor(view->id, (buffer ? buffer->id : view->buffer));
 }
 
+function void
+DestroyCursor(ViewID view, BufferID buffer)
+{
+    CursorHashKey key;
+    key.view   = view;
+    key.buffer = buffer;
+    uint64_t hash = HashIntegers(key.value);
+    uint64_t slot = hash % ArrayCount(editor_state->cursor_hash);
+
+    CursorHashEntry *entry = editor_state->cursor_hash[slot];
+    if (entry)
+    {
+        editor_state->cursor_hash[slot] = entry->next_in_hash;
+
+        entry->next_free = editor_state->first_free_cursor_hash_entry;
+        editor_state->first_free_cursor_hash_entry = entry;
+    }
+}
+
 function Range
 GetEditRange(Cursor *cursor)
 {
@@ -218,6 +237,12 @@ DestroyView(ViewID id)
     editor_state->free_view_ids[MAX_VIEW_COUNT - editor_state->view_count] = id;
     editor_state->used_view_ids[used_id_index] = editor_state->used_view_ids[--editor_state->view_count];
 
+    for (size_t i = 0; i < editor_state->buffer_count; i += 1)
+    {
+        BufferID buffer_id = editor_state->used_buffer_ids[i];
+        DestroyCursor(id, buffer_id);
+    }
+
     Release(&view->arena);
     editor_state->views[id.index] = nullptr;
 }
@@ -242,6 +267,21 @@ DuplicateView(ViewID id)
     return result;
 }
 
+function Window *
+AllocateWindow(void)
+{
+    if (!editor_state->first_free_window)
+    {
+        editor_state->first_free_window = PushStructNoClear(&editor_state->transient_arena, Window);
+        editor_state->first_free_window->next = nullptr;
+    }
+    Window *result = editor_state->first_free_window;
+    editor_state->first_free_window = result->next;
+
+    ZeroStruct(result);
+    return result;
+}
+
 function void
 SplitWindow(Window *window, WindowSplitKind split)
 {
@@ -252,7 +292,7 @@ SplitWindow(Window *window, WindowSplitKind split)
     if (window->parent &&
         window->parent->split == split)
     {
-        Window *new_window = PushStruct(&editor_state->transient_arena, Window);
+        Window *new_window = AllocateWindow();
         new_window->view = DuplicateView(view);
         new_window->parent = window->parent;
         new_window->prev = window;
@@ -273,11 +313,11 @@ SplitWindow(Window *window, WindowSplitKind split)
     {
         window->split = split;
 
-        Window *left = PushStruct(&editor_state->transient_arena, Window);
+        Window *left = AllocateWindow();
         left->parent = window;
         left->view = view;
 
-        Window *right = PushStruct(&editor_state->transient_arena, Window);
+        Window *right = AllocateWindow();
         right->parent = window;
         right->view = DuplicateView(view);
 
@@ -287,6 +327,76 @@ SplitWindow(Window *window, WindowSplitKind split)
         window->last_child  = right;
 
         editor_state->active_window = left;
+    }
+}
+
+function void
+DestroyWindowInternal(Window *window)
+{
+    if (window->parent)
+    {
+        Window *parent = window->parent;
+        if (window->prev) window->prev->next = window->next;
+        if (window->next) window->next->prev = window->prev;
+        if (window == parent->first_child) parent->first_child = window->next;
+        if (window == parent->last_child)  parent->last_child  = window->prev;
+
+        if (window->prev)
+        {
+            editor_state->active_window = window->prev;
+        }
+        else if (window->next)
+        {
+            editor_state->active_window = window->next;
+        }
+        else
+        {
+            editor_state->active_window = parent->first_child;
+        }
+
+        if (!parent->first_child)
+        {
+            if (window->split == WindowSplit_Leaf)
+            {
+                DestroyView(window->view);
+            }
+
+            DestroyWindowInternal(parent);
+        }
+        else if (parent->first_child == parent->last_child)
+        {
+            parent->first_child->parent = parent->parent;
+            parent->split = parent->first_child->split;
+            parent->view  = parent->first_child->view;
+            parent->first_child = parent->first_child->first_child;
+            parent->last_child = parent->last_child->last_child;
+
+            for (Window *child = parent->first_child;
+                 child;
+                 child = child->next)
+            {
+                child->parent = parent;
+            }
+
+            editor_state->active_window = parent;
+        }
+        else if (window->split == WindowSplit_Leaf)
+        {
+            DestroyView(window->view);
+        }
+
+        window->next = editor_state->first_free_window;
+        editor_state->first_free_window = window;
+    }
+}
+
+function void
+DestroyWindow(Window *window)
+{
+    DestroyWindowInternal(window);
+    if (editor_state->active_window->split != WindowSplit_Leaf)
+    {
+        editor_state->active_window = editor_state->active_window->first_child;
     }
 }
 
@@ -595,14 +705,15 @@ ExecuteCommand(View *view, Command *command)
 }
 
 function void
-HandleViewEvents(View *view)
+HandleViewEvents(ViewID view_id)
 {
-    Buffer *buffer = GetBuffer(view);
-
     for (PlatformEvent *event = nullptr;
          platform->NextEvent(&event, PlatformEventFilter_ANY);
          )
     {
+        View *view = GetView(view_id);
+        Buffer *buffer = GetBuffer(view);
+
         BindingMap *bindings = &editor_state->bindings[editor_state->edit_mode];
 
         Cursor *cursor = GetCursor(view);
@@ -685,6 +796,9 @@ HandleViewEvents(View *view)
         }
     }
 
+    View *view = GetView(view_id);
+    Buffer *buffer = GetBuffer(view);
+
     if (buffer->dirty && !buffer->tokenizing)
     {
         buffer->dirty = false;
@@ -764,7 +878,7 @@ AppUpdateAndRender(Platform *platform_)
         }
     }
 
-    HandleViewEvents(GetView(editor_state->active_window->view));
+    HandleViewEvents(editor_state->active_window->view);
     RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
 
     BeginRender();

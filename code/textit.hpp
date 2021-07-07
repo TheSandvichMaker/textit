@@ -70,6 +70,8 @@ struct Window
     ViewID view;
 };
 
+function void DestroyWindow(Window *window);
+
 struct CoreConfig
 {
     bool visualize_newlines = false;
@@ -102,7 +104,12 @@ struct CursorHashKey
 
 struct CursorHashEntry
 {
-    CursorHashEntry *next_in_hash;
+    union
+    {
+        CursorHashEntry *next_in_hash;
+        CursorHashEntry *next_free;
+    };
+
     CursorHashKey key;
     Cursor cursor;
 };
@@ -148,6 +155,7 @@ struct EditorState
 
     Window root_window;
     Window *active_window;
+    Window *first_free_window;
 
     V2i screen_mouse_p;
     V2i text_mouse_p;

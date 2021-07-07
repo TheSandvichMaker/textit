@@ -310,6 +310,12 @@ COMMAND_PROC(SplitWindowHorizontal)
     SplitWindow(window, WindowSplit_Horz);
 }
 
+COMMAND_PROC(DestroyWindow)
+{
+    Window *window = editor->active_window;
+    DestroyWindow(window);
+}
+
 COMMAND_PROC(FocusWindowLeft)
 {
     Window *window = editor->active_window;
