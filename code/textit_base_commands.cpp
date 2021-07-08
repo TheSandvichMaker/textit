@@ -1,3 +1,14 @@
+COMMAND_PROC(EnterCommandLineMode)
+{
+    editor->input_mode = InputMode_CommandLine;
+}
+
+COMMAND_PROC(Exit)
+{
+    UNUSED_VARIABLE(editor);
+    platform->exit_requested = true;
+}
+
 COMMAND_PROC(ToggleVisualizeNewlines)
 {
     UNUSED_VARIABLE(editor);

@@ -25,6 +25,12 @@
 
 #define CURSOR_HASH_SIZE 512
 
+enum InputMode
+{
+    InputMode_Editor,
+    InputMode_CommandLine,
+};
+
 enum EditMode
 {
     EditMode_Command,
@@ -123,6 +129,14 @@ struct EditorState
     Arena undo_scratch;
 
     Theme theme;
+
+    InputMode input_mode;
+
+    int command_line_cursor;
+    int command_line_count;
+    uint8_t command_line[256];
+
+    Command *command_line_prediction;
 
     EditMode edit_mode;
     EditMode next_edit_mode;

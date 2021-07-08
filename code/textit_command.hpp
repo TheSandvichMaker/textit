@@ -67,7 +67,7 @@ NullCommand()
 struct CommandList
 {
     uint32_t command_count;
-    Command commands[MAX_COMMAND_COUNT*4 / 3];
+    Command commands[MAX_COMMAND_COUNT];
 };
 GLOBAL_STATE(CommandList, command_list);
 

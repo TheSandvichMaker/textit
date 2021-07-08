@@ -894,11 +894,150 @@ AppUpdateAndRender(Platform *platform_)
         }
     }
 
-    HandleViewEvents(editor_state->active_window->view);
-    RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
-
     BeginRender();
+
+    switch (editor_state->input_mode)
+    {
+        case InputMode_Editor:
+        {
+            HandleViewEvents(editor_state->active_window->view);
+            RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
+        } break;
+
+        case InputMode_CommandLine:
+        {
+            editor_state->clutch = false;
+
+            for (PlatformEvent *event = nullptr;
+                 platform->NextEvent(&event, PlatformEventFilter_ANY);
+                 )
+            {
+                if (event->type == PlatformEvent_Text)
+                {
+                    String text = MakeString(event->text_length, event->text);
+
+                    for (size_t i = 0; i < text.size; i += 1)
+                    {
+                        if (IsPrintableAscii(text.data[i]))
+                        {
+                            size_t left = ArrayCount(editor_state->command_line) - editor_state->command_line_count;
+                            if (left > 0)
+                            {
+                                memmove(editor_state->command_line + editor_state->command_line_cursor + 1,
+                                        editor_state->command_line + editor_state->command_line_cursor,
+                                        left);
+                                editor_state->command_line[editor_state->command_line_cursor++] = text.data[i];
+                                editor_state->command_line_count += 1;
+                            }
+                        }
+                    }
+                }
+                else if (event->type == PlatformEvent_KeyDown)
+                {
+                    switch (event->input_code)
+                    {
+                        case PlatformInputCode_Left:
+                        {
+                            if (editor_state->command_line_cursor > 0)
+                            {
+                                editor_state->command_line_cursor -= 1;
+                            }
+                        } break;
+
+                        case PlatformInputCode_Right:
+                        {
+                            if (editor_state->command_line_cursor < editor_state->command_line_count)
+                            {
+                                editor_state->command_line_cursor += 1;
+                            }
+                        } break;
+
+                        case PlatformInputCode_Escape:
+                        {
+                            editor_state->command_line_cursor = 0;
+                            editor_state->command_line_count = 0;
+                            editor_state->input_mode = InputMode_Editor;
+                        } break;
+
+                        case PlatformInputCode_Return:
+                        {
+                            Command *command = FindCommand(MakeString(editor_state->command_line_count, editor_state->command_line));
+                            if (command && command->kind == Command_Basic)
+                            {
+                                command->command(editor_state);
+                            }
+                            else if (editor_state->command_line_prediction)
+                            {
+                                editor_state->command_line_prediction->command(editor_state);
+                            }
+                            editor_state->command_line_cursor = 0;
+                            editor_state->command_line_count = 0;
+                            editor_state->input_mode = InputMode_Editor;
+                        } break;
+
+                        case PlatformInputCode_Tab:
+                        {
+                            Command *prediction = editor_state->command_line_prediction;
+                            if (prediction)
+                            {
+                                editor_state->command_line_count = (int)prediction->name.size;
+                                CopyArray(editor_state->command_line_count, prediction->name.data, editor_state->command_line);
+                                editor_state->command_line_cursor = editor_state->command_line_count;
+                            }
+                        } break;
+                        
+                        case PlatformInputCode_Back:
+                        {
+                            size_t left = ArrayCount(editor_state->command_line) - editor_state->command_line_cursor;
+                            if (editor_state->command_line_cursor > 0)
+                            {
+                                memmove(editor_state->command_line + editor_state->command_line_cursor - 1,
+                                        editor_state->command_line + editor_state->command_line_cursor,
+                                        left);
+                                editor_state->command_line_cursor -= 1;
+                                editor_state->command_line_count  -= 1;
+                            }
+                        } break;
+
+                        case PlatformInputCode_Delete:
+                        {
+                            size_t left = ArrayCount(editor_state->command_line) - editor_state->command_line_cursor;
+                            if (editor_state->command_line_count > editor_state->command_line_cursor)
+                            {
+                                memmove(editor_state->command_line + editor_state->command_line_cursor,
+                                        editor_state->command_line + editor_state->command_line_cursor + 1,
+                                        left);
+                                editor_state->command_line_count -= 1;
+                                if (editor_state->command_line_cursor > editor_state->command_line_count)
+                                {
+                                    editor_state->command_line_cursor = editor_state->command_line_count;
+                                }
+                            }
+                        } break;
+                    }
+                }
+            }
+
+            editor_state->command_line_prediction = nullptr;
+
+            String command_string = MakeString(editor_state->command_line_count, editor_state->command_line);
+            for (size_t i = 0; i < command_list->command_count; i += 1)
+            {
+                Command *command = &command_list->commands[i];
+                if ((command->kind == Command_Basic) &&
+                    MatchPrefix(command->name, command_string))
+                {
+                    editor_state->command_line_prediction = command;
+                }
+            }
+        } break;
+    }
+
     DrawWindows(&editor_state->root_window);
+    if (editor_state->input_mode)
+    {
+        DrawCommandLineInput();
+    }
     EndRender();
 
     int free_window_count = 0;

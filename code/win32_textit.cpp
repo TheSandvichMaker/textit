@@ -1386,37 +1386,37 @@ main(int, char **)
     PlatformJobQueue high_priority_queue = {};
     PlatformJobQueue  low_priority_queue = {};
 
-    platform->page_size = system_info.dwPageSize;
-    platform->NextEvent = Win32_NextEvent;
-    platform->PushTickEvent = Win32_PushTickEvent;
-    platform->high_priority_queue = &high_priority_queue;
-    platform->low_priority_queue = &low_priority_queue;
-    platform->DebugPrint = Win32_DebugPrint;
-    platform->LogPrint = Win32_LogPrint;
-    platform->GetFirstLogLine = Win32_GetFirstLogLine;
-    platform->GetLatestLogLine = Win32_GetLatestLogLine;
-    platform->GetNextLogLine = Win32_GetNextLogLine;
-    platform->GetPrevLogLine = Win32_GetPrevLogLine;
-    platform->ReportError = Win32_ReportError;
-    platform->AllocateMemory = Win32_Allocate;
-    platform->ReserveMemory = Win32_Reserve;
-    platform->CommitMemory = Win32_Commit;
-    platform->DecommitMemory = Win32_Decommit;
-    platform->DeallocateMemory = Win32_Deallocate;
+    platform->page_size             = system_info.dwPageSize;
+    platform->NextEvent             = Win32_NextEvent;
+    platform->PushTickEvent         = Win32_PushTickEvent;
+    platform->high_priority_queue   = &high_priority_queue;
+    platform->low_priority_queue    = &low_priority_queue;
+    platform->DebugPrint            = Win32_DebugPrint;
+    platform->LogPrint              = Win32_LogPrint;
+    platform->GetFirstLogLine       = Win32_GetFirstLogLine;
+    platform->GetLatestLogLine      = Win32_GetLatestLogLine;
+    platform->GetNextLogLine        = Win32_GetNextLogLine;
+    platform->GetPrevLogLine        = Win32_GetPrevLogLine;
+    platform->ReportError           = Win32_ReportError;
+    platform->AllocateMemory        = Win32_Allocate;
+    platform->ReserveMemory         = Win32_Reserve;
+    platform->CommitMemory          = Win32_Commit;
+    platform->DecommitMemory        = Win32_Decommit;
+    platform->DeallocateMemory      = Win32_Deallocate;
     platform->GetThreadLocalContext = Win32_GetThreadLocalContext;
-    platform->GetTempArena = Win32_GetTempArena;
-    platform->AddJob = Win32_AddJob;
-    platform->WaitForJobs = Win32_WaitForJobs;
-    platform->ReadFile = Win32_ReadFile;
-    platform->ReadFileInto = Win32_ReadFileInto;
-    platform->GetFileSize = Win32_GetFileSize;
-    platform->GetTime = Win32_GetTime;
-    platform->RegisterFontFile = Win32_RegisterFontFile;
-    platform->MakeAsciiFont = Win32_MakeAsciiFont;
-    platform->SecondsElapsed = Win32_SecondsElapsed;
-    platform->WriteClipboard = Win32_WriteClipboard;
-    platform->ReadClipboard = Win32_ReadClipboard;
-    platform->SleepThread = Win32_SleepThread;
+    platform->GetTempArena          = Win32_GetTempArena;
+    platform->AddJob                = Win32_AddJob;
+    platform->WaitForJobs           = Win32_WaitForJobs;
+    platform->ReadFile              = Win32_ReadFile;
+    platform->ReadFileInto          = Win32_ReadFileInto;
+    platform->GetFileSize           = Win32_GetFileSize;
+    platform->GetTime               = Win32_GetTime;
+    platform->RegisterFontFile      = Win32_RegisterFontFile;
+    platform->MakeAsciiFont         = Win32_MakeAsciiFont;
+    platform->SecondsElapsed        = Win32_SecondsElapsed;
+    platform->WriteClipboard        = Win32_WriteClipboard;
+    platform->ReadClipboard         = Win32_ReadClipboard;
+    platform->SleepThread           = Win32_SleepThread;
 
     win32_state.thread_local_index = TlsAlloc();
     if (win32_state.thread_local_index == TLS_OUT_OF_INDEXES)
@@ -1683,6 +1683,8 @@ main(int, char **)
             }
         }
 
+        exit_requested |= platform->exit_requested;
+
         if (exit_requested)
         {
             g_running = false;
@@ -1708,8 +1710,10 @@ main(int, char **)
         }
     }
 
+#if 0
     if (leaked_memory)
     {
         Win32_ReportError(PlatformError_Nonfatal, "Potential Memory Leak Detected");
     }
+#endif
 }

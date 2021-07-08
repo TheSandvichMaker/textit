@@ -66,6 +66,8 @@ LoadDefaultBindings()
     command->map['P'].regular                      = FindCommand("PasteBefore"_str);
     command->map['P'].ctrl                         = FindCommand("PasteReplaceSelection"_str);
 
+    command->map[PlatformInputCode_Oem1].shift     = FindCommand("EnterCommandLineMode"_str);
+
     BindingMap *text = &editor_state->bindings[EditMode_Text];
     text->text_command = FindCommand("WriteText"_str);
     text->map[PlatformInputCode_Left].regular     = FindCommand("MoveLeft"_str);

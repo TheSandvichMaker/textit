@@ -248,6 +248,14 @@ AreEqual(const String &a, const String &b)
     return result;
 }
 
+function bool
+MatchPrefix(String string, String prefix)
+{
+    if (prefix.size > string.size) return false;
+    if (string.size > prefix.size) string.size = prefix.size;
+    return AreEqual(string, prefix);
+}
+
 function String
 PushString(Arena *arena, String string)
 {

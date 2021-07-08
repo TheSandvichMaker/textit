@@ -365,3 +365,35 @@ DrawView(View *view, bool is_active_window)
 
     return DrawTextArea(view, bounds, is_active_window);
 }
+
+function void
+DrawCommandLineInput()
+{
+    Color text_foreground = GetThemeColor("text_foreground"_str);
+    Color text_background = GetThemeColor("text_background"_str);
+
+    V2i p = MakeV2i(2, 0);
+    if (editor_state->command_line_prediction)
+    {
+        Command *prediction = editor_state->command_line_prediction;
+        DrawLine(p, prediction->name, MakeColor(127, 127, 127), text_background);
+    }
+
+    for (size_t i = 0; i < editor_state->command_line_count + 1; i += 1)
+    {
+        Sprite sprite;
+        if (i < editor_state->command_line_count)
+        {
+            sprite = MakeSprite(editor_state->command_line[i], text_foreground, text_background);
+        }
+        else
+        {
+            sprite = MakeSprite(0, text_foreground, text_background);
+        }
+        if (i == editor_state->command_line_cursor)
+        {
+            Swap(sprite.foreground, sprite.background);
+        }
+        PushTile(Layer_Text, p + MakeV2i(i, 0), sprite);
+    }
+}
