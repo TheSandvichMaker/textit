@@ -136,7 +136,10 @@ struct EditorState
     int command_line_count;
     uint8_t command_line[256];
 
-    Command *command_line_prediction;
+    bool cycling_predictions;
+    int command_line_prediction_index;
+    int command_line_prediction_count;
+    Command *command_line_predictions[32];
 
     EditMode edit_mode;
     EditMode next_edit_mode;

@@ -373,10 +373,22 @@ DrawCommandLineInput()
     Color text_background = GetThemeColor("text_background"_str);
 
     V2i p = MakeV2i(2, 0);
-    if (editor_state->command_line_prediction)
+    if (editor_state->command_line_prediction_count > 0)
     {
-        Command *prediction = editor_state->command_line_prediction;
-        DrawLine(p, prediction->name, MakeColor(127, 127, 127), text_background);
+        int prediction_offset = 1;
+        for (int i = 0; i < editor_state->command_line_prediction_count; i += 1)
+        {
+            Command *other_prediction = editor_state->command_line_predictions[i];
+
+            Color color = MakeColor(127, 127, 127);
+            if (i == editor_state->command_line_prediction_index)
+            {
+                color = MakeColor(192, 127, 127);
+            }
+
+            DrawLine(p + MakeV2i(0, prediction_offset), other_prediction->name, color, text_background);
+            prediction_offset += 1;
+        }
     }
 
     for (size_t i = 0; i < editor_state->command_line_count + 1; i += 1)

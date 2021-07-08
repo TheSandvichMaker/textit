@@ -909,7 +909,7 @@ AppUpdateAndRender(Platform *platform_)
             editor_state->clutch = false;
 
             for (PlatformEvent *event = nullptr;
-                 platform->NextEvent(&event, PlatformEventFilter_ANY);
+                 platform->NextEvent(&event, PlatformEventFilter_Text|PlatformEventFilter_Keyboard);
                  )
             {
                 if (event->type == PlatformEvent_Text)
@@ -920,6 +920,8 @@ AppUpdateAndRender(Platform *platform_)
                     {
                         if (IsPrintableAscii(text.data[i]))
                         {
+                            editor_state->cycling_predictions = false;
+
                             size_t left = ArrayCount(editor_state->command_line) - editor_state->command_line_count;
                             if (left > 0)
                             {
@@ -934,6 +936,8 @@ AppUpdateAndRender(Platform *platform_)
                 }
                 else if (event->type == PlatformEvent_KeyDown)
                 {
+                    editor_state->cycling_predictions = false;
+
                     switch (event->input_code)
                     {
                         case PlatformInputCode_Left:
@@ -966,10 +970,6 @@ AppUpdateAndRender(Platform *platform_)
                             {
                                 command->command(editor_state);
                             }
-                            else if (editor_state->command_line_prediction)
-                            {
-                                editor_state->command_line_prediction->command(editor_state);
-                            }
                             editor_state->command_line_cursor = 0;
                             editor_state->command_line_count = 0;
                             editor_state->input_mode = InputMode_Editor;
@@ -977,9 +977,12 @@ AppUpdateAndRender(Platform *platform_)
 
                         case PlatformInputCode_Tab:
                         {
-                            Command *prediction = editor_state->command_line_prediction;
-                            if (prediction)
+                            editor_state->cycling_predictions = true;
+                            if (editor_state->command_line_prediction_count > 0)
                             {
+                                Command *prediction = editor_state->command_line_predictions[editor_state->command_line_prediction_index++];
+                                editor_state->command_line_prediction_index %= editor_state->command_line_prediction_count;
+
                                 editor_state->command_line_count = (int)prediction->name.size;
                                 CopyArray(editor_state->command_line_count, prediction->name.data, editor_state->command_line);
                                 editor_state->command_line_cursor = editor_state->command_line_count;
@@ -1016,18 +1019,30 @@ AppUpdateAndRender(Platform *platform_)
                         } break;
                     }
                 }
-            }
 
-            editor_state->command_line_prediction = nullptr;
-
-            String command_string = MakeString(editor_state->command_line_count, editor_state->command_line);
-            for (size_t i = 0; i < command_list->command_count; i += 1)
-            {
-                Command *command = &command_list->commands[i];
-                if ((command->kind == Command_Basic) &&
-                    MatchPrefix(command->name, command_string))
+                if (!editor_state->cycling_predictions)
                 {
-                    editor_state->command_line_prediction = command;
+                    editor_state->command_line_prediction_count = 0;
+                    editor_state->command_line_prediction_index = 0;
+
+                    if (editor_state->command_line_count > 0)
+                    {
+                        String command_string = MakeString(editor_state->command_line_count, editor_state->command_line);
+                        for (size_t i = 0; i < command_list->command_count; i += 1)
+                        {
+                            Command *command = &command_list->commands[i];
+                            if ((command->kind == Command_Basic) &&
+                                MatchPrefix(command->name, command_string, StringMatch_CaseInsensitive))
+                            {
+                                editor_state->command_line_predictions[editor_state->command_line_prediction_count++] = command;
+                            }
+                        }
+
+                        if (editor_state->command_line_prediction_index > editor_state->command_line_prediction_count)
+                        {
+                            editor_state->command_line_prediction_index = editor_state->command_line_prediction_count;
+                        }
+                    }
                 }
             }
         } break;

@@ -21,6 +21,12 @@ enum CharacterClassFlags_ENUM : CharacterClassFlags
     Character_Utf8                 = 0x20,
 };
 
+typedef uint32_t StringMatchFlags;
+enum StringMatchFlags_ENUM : StringMatchFlags
+{
+    StringMatch_CaseInsensitive = 0x1,
+};
+
 struct ParseUtf8Result
 {
     uint32_t codepoint;

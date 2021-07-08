@@ -27,6 +27,16 @@ ToUpperAscii(uint8_t c)
     return c;
 }
 
+function uint8_t
+ToLowerAscii(uint8_t c)
+{
+    if ((c >= 'A') && (c <= 'Z'))
+    {
+        c = 'a' + (c - 'A');
+    }
+    return c;
+}
+
 function bool
 IsNumericAscii(uint8_t c)
 {
@@ -225,7 +235,7 @@ ParseUtf8Codepoint(uint8_t *text)
 }
 
 function bool
-AreEqual(const String &a, const String &b)
+AreEqual(const String &a, const String &b, StringMatchFlags flags = 0)
 {
     bool result = false;
 
@@ -236,6 +246,12 @@ AreEqual(const String &a, const String &b)
         {
             char c1 = a.data[i];
             char c2 = b.data[i];
+
+            if (flags & StringMatch_CaseInsensitive)
+            {
+                c1 = ToLowerAscii(c1);
+                c2 = ToLowerAscii(c2);
+            }
 
             if (c1 != c2)
             {
@@ -249,11 +265,11 @@ AreEqual(const String &a, const String &b)
 }
 
 function bool
-MatchPrefix(String string, String prefix)
+MatchPrefix(String string, String prefix, StringMatchFlags flags = 0)
 {
     if (prefix.size > string.size) return false;
     if (string.size > prefix.size) string.size = prefix.size;
-    return AreEqual(string, prefix);
+    return AreEqual(string, prefix, flags);
 }
 
 function String
