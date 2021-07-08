@@ -100,6 +100,8 @@ TokenizeBuffer(Buffer *buffer)
     int64_t token_count = 0;
     PlatformHighResTime start_time = platform->GetTime();
 
+    int line_count = 1;
+
     while (CharsLeft(tok))
     {
         while (CharsLeft(tok))
@@ -109,12 +111,19 @@ TokenizeBuffer(Buffer *buffer)
             {
                 if (HasFlag(c_class, Character_VerticalWhitespace))
                 {
+                    line_count += 1;
+
                     if (!tok->continue_next_line)
                     {
                         tok->in_line_comment = false;
                         tok->in_preprocessor = false;
                     }
                     tok->continue_next_line = false;
+
+                    if ((tok->at[0] == '\r') && (tok->at[1] == '\n'))
+                    {
+                        tok->at += 1;
+                    }
                 }
                 tok->at += 1;
             }
@@ -281,6 +290,8 @@ TokenizeBuffer(Buffer *buffer)
     TokenList *tokens = (TokenList *)buffer->tokens;
     AtomicExchange((void *volatile*)&buffer->tokens, buffer->prev_tokens);
     buffer->prev_tokens = tokens;
+
+    AtomicExchange(&buffer->line_count, line_count);
 }
 
 static

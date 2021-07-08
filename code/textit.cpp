@@ -274,6 +274,8 @@ AllocateWindow(void)
     {
         editor_state->first_free_window = PushStructNoClear(&editor_state->transient_arena, Window);
         editor_state->first_free_window->next = nullptr;
+
+        editor_state->debug.allocated_window_count += 1;
     }
     Window *result = editor_state->first_free_window;
     editor_state->first_free_window = result->next;
@@ -365,11 +367,19 @@ DestroyWindowInternal(Window *window)
         }
         else if (parent->first_child == parent->last_child)
         {
-            parent->first_child->parent = parent->parent;
-            parent->split = parent->first_child->split;
-            parent->view  = parent->first_child->view;
+            // NOTE: If the parent is a split with only one child,
+            // we want to condense that so that the parent just
+            // gets replaced by its child.
+            Window *first_child = parent->first_child;
+
+            first_child->parent = parent->parent;
+            parent->split = first_child->split;
+            parent->view  = first_child->view;
             parent->first_child = parent->first_child->first_child;
-            parent->last_child = parent->last_child->last_child;
+            parent->last_child  = parent->last_child->last_child;
+
+            first_child->next = editor_state->first_free_window;
+            editor_state->first_free_window = first_child;
 
             for (Window *child = parent->first_child;
                  child;
@@ -418,19 +428,17 @@ RecalculateViewBounds(Window *window, Rect2i rect)
             child_count += 1;
         }
 
-        int64_t dim = ((window->split == WindowSplit_Vert) ? GetWidth(rect) : GetHeight(rect));
-        int64_t dim_div = dim / child_count;
-
+        int64_t dim   = ((window->split == WindowSplit_Vert) ? GetWidth(rect) : GetHeight(rect));
         int64_t start = ((window->split == WindowSplit_Vert) ? rect.min.x : rect.min.y);
-        int64_t   end = ((window->split == WindowSplit_Vert) ? rect.max.x : rect.max.y);
+        int64_t end   = ((window->split == WindowSplit_Vert) ? rect.max.x : rect.max.y);
 
         int child_index = 0;
         for (Window *child = window->first_child;
              child;
              child = child->next)
         {
-            int64_t split_start = start + child_index*dim_div;
-            int64_t split_end   = start + (child_index + 1)*dim_div;
+            int64_t split_start = start + child_index*dim / child_count;
+            int64_t split_end   = start + (child_index + 1)*dim / child_count;
             if (!child->next)
             {
                 split_end = end;
@@ -832,7 +840,15 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-        editor_state->font = LoadFontFromDisk(&editor_state->transient_arena, "font8x16.bmp"_str, 8, 16);
+        platform->RegisterFontFile("Px437_OlivettiThin_8x14.ttf"_str);
+        if (!platform->MakeAsciiFont("Px437 OlivettiThin 8x14"_str,
+                                     &editor_state->font,
+                                     14,
+                                     PlatformFontRasterFlag_RasterFont))
+        {
+            platform->ReportError(PlatformError_Nonfatal, "Failed to load ttf font. Trying fallback bmp font.");
+            editor_state->font = LoadFontFromDisk(&editor_state->transient_arena, "font8x16_slim.bmp"_str, 8, 16);
+        }
         InitializeRenderState(&editor_state->transient_arena, &platform->backbuffer, &editor_state->font);
 
         LoadDefaultTheme();
@@ -884,6 +900,18 @@ AppUpdateAndRender(Platform *platform_)
     BeginRender();
     DrawWindows(&editor_state->root_window);
     EndRender();
+
+    int free_window_count = 0;
+    for (Window *window = editor_state->first_free_window;
+         window;
+         window = window->next)
+    {
+        free_window_count += 1;
+    }
+
+    platform->window_title = PushTempStringF("TextIt - Free Windows: %d, Allocated Windows: %d",
+                                             free_window_count,
+                                             editor_state->debug.allocated_window_count);
     
     Buffer *buffer = CurrentBuffer(editor_state);
     if ((editor_state->next_edit_mode == EditMode_Text) &&

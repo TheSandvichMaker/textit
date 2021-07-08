@@ -62,8 +62,8 @@ LoadDefaultBindings()
     command->map[PlatformInputCode_F1].regular     = FindCommand("ToggleVisualizeNewlines"_str);
 
     command->map['Y'].regular                      = FindCommand("Copy"_str);
-    command->map['P'].regular                      = FindCommand("PasteAfter"_str);
-    command->map['P'].shift                        = FindCommand("PasteBefore"_str);
+    command->map['P'].shift                        = FindCommand("PasteAfter"_str);
+    command->map['P'].regular                      = FindCommand("PasteBefore"_str);
     command->map['P'].ctrl                         = FindCommand("PasteReplaceSelection"_str);
 
     BindingMap *text = &editor_state->bindings[EditMode_Text];

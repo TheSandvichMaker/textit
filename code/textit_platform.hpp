@@ -115,6 +115,14 @@ AtomicIncrement(volatile uint32_t *dest)
 }
 
 static inline uint32_t
+AtomicExchange(volatile int32_t *dest, int32_t value)
+{
+    // NOTE: This returns the value _before_ exchanging
+    int32_t result = (int32_t)_InterlockedExchange((volatile long *)dest, value);
+    return result;
+}
+
+static inline uint32_t
 AtomicExchange(volatile uint32_t *dest, uint32_t value)
 {
     // NOTE: This returns the value _before_ exchanging
@@ -430,6 +438,12 @@ struct PlatformLogLine
     uint8_t data_[PLATFORM_LOG_LINE_SIZE];
 };
 
+typedef uint32_t PlatformFontRasterFlags;
+enum PlatformFontRasterFlags_ENUM : PlatformFontRasterFlags
+{
+    PlatformFontRasterFlag_RasterFont = 0x1,
+};
+
 struct Platform
 {
     bool exit_requested;
@@ -437,6 +451,8 @@ struct Platform
     bool app_initialized;
     bool exe_reloaded;
     void *persistent_app_data;
+
+    String window_title;
 
     float dt;
 
@@ -470,6 +486,9 @@ struct Platform
     void *(*CommitMemory)(void *location, size_t size);
     void (*DecommitMemory)(void *location, size_t size);
     void (*DeallocateMemory)(void *memory);
+
+    bool (*RegisterFontFile)(String file_name);
+    bool (*MakeAsciiFont)(String font_name, Font *out_font, int font_size, PlatformFontRasterFlags flags);
 
     ThreadLocalContext *(*GetThreadLocalContext)(void);
     Arena *(*GetTempArena)(void);

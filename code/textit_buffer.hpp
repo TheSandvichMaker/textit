@@ -82,6 +82,7 @@ struct Buffer : TextStorage
 
     bool dirty;
     volatile bool tokenizing;
+    volatile int line_count;
 
     volatile TokenList *tokens;
     TokenList *prev_tokens;

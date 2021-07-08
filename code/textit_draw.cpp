@@ -1,9 +1,14 @@
 function V2i
-DrawLine(V2i p, String line, Color foreground, Color background)
+DrawLine(V2i p, String line, Color foreground, Color background, size_t max = 0)
 {
     V2i at_p = p;
     for (size_t i = 0; i < line.size;)
     {
+        if (max > 0 && i >= max)
+        {
+            break;
+        }
+
         if (IsUtf8Byte(line.data[i]))
         {
             ParseUtf8Result unicode = ParseUtf8Codepoint(&line.data[i]);
@@ -91,6 +96,16 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 block = block->next;
             }
         }
+    }
+
+    int64_t line_count = buffer->line_count;
+    int64_t bounds_height = GetHeight(bounds) - 2;
+    int64_t scrollbar_size = Max(1, bounds_height*bounds_height / line_count);
+    int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*(bounds_height + 2) / line_count);
+
+    for (int i = 0; i < scrollbar_size; i += 1)
+    {
+        PushTile(Layer_Text, MakeV2i(bounds.max.x - 1, bounds.max.y - 2 - i - scrollbar_offset), MakeWall(Wall_Top|Wall_Bottom, text_foreground, MakeColor(127, 127, 127)));
     }
 
     if (block)
@@ -346,7 +361,7 @@ DrawView(View *view, bool is_active_window)
                              buffer->id.index, StringExpand(buffer->name),
                              view->scroll_at,
                              loc.line, loc.col),
-             filebar_text_foreground, filebar_text_background);
+             filebar_text_foreground, filebar_text_background, GetWidth(bounds) - 4);
 
     return DrawTextArea(view, bounds, is_active_window);
 }

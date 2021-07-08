@@ -171,6 +171,12 @@ struct EditorState
 
     int debug_delay;
     int debug_delay_frame_count;
+
+    struct
+    {
+        int allocated_window_count;
+    } debug;
+
 };
 static EditorState *editor_state;
 

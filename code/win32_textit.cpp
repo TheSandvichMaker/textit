@@ -194,6 +194,54 @@ Win32_Utf16ToUtf8(Arena *arena, const wchar_t *utf16, int *out_length = nullptr)
     return result;
 }
 
+function String_utf16
+Win32_Utf8ToUtf16(Arena *arena, String utf8)
+{
+    String_utf16 result = {};
+
+    result.size = (size_t)MultiByteToWideChar(CP_UTF8, 0, (char *)utf8.data, (int)utf8.size, nullptr, 0);
+    result.data = PushArrayNoClear(arena, result.size + 1, wchar_t);
+    if (result.data)
+    {
+        if (!MultiByteToWideChar(CP_UTF8, 0, (char *)utf8.data, (int)utf8.size, result.data, (int)result.size))
+        {
+            Win32_DisplayLastError();
+        }
+
+        result.data[result.size] = 0;
+    }
+    else
+    {
+        INVALID_CODE_PATH;
+    }
+
+    return result;
+}
+
+function String
+Win32_Utf16ToUtf8(Arena *arena, String_utf16 utf16)
+{
+    String result = {};
+
+    result.size = (size_t)WideCharToMultiByte(CP_UTF8, 0, utf16.data, (int)utf16.size, nullptr, 0, nullptr, nullptr);
+    result.data = PushArrayNoClear(arena, result.size + 1, uint8_t);
+    if (result.data)
+    {
+        if (!WideCharToMultiByte(CP_UTF8, 0, utf16.data, (int)utf16.size, (char *)result.data, (int)result.size, nullptr, nullptr))
+        {
+            Win32_DisplayLastError();
+        }
+
+        result.data[result.size] = 0;
+    }
+    else
+    {
+        INVALID_CODE_PATH;
+    }
+
+    return result;
+}
+
 function wchar_t *
 FormatWStringV(Arena *arena, wchar_t *fmt, va_list args_init)
 {
@@ -1192,6 +1240,130 @@ Win32_CloseJobQueue(PlatformJobQueue *queue)
     CloseHandle(queue->done);
 }
 
+function bool
+Win32_RegisterFontFile(String file_name_utf8)
+{
+    String_utf16 file_name = Win32_Utf8ToUtf16(platform->GetTempArena(), file_name_utf8);
+    bool result = !!AddFontResourceExW(file_name.data, FR_PRIVATE, 0);
+    return result;
+}
+
+function bool
+Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, PlatformFontRasterFlags flags)
+{
+    bool result = false;
+
+    bool raster_font = !!(flags & PlatformFontRasterFlag_RasterFont);
+
+    ZeroStruct(out_font);
+
+    HDC screen_dc = GetDC(NULL);
+    Assert(screen_dc);
+
+    HDC font_dc = CreateCompatibleDC(screen_dc);
+    Assert(font_dc);
+
+    ReleaseDC(NULL, screen_dc);
+
+    String_utf16 font_name = Win32_Utf8ToUtf16(platform->GetTempArena(), font_name_utf8);
+
+    int height = font_size;
+
+    DWORD out_precision = raster_font ? OUT_RASTER_PRECIS : OUT_DEFAULT_PRECIS;
+    DWORD quality       = raster_font ? NONANTIALIASED_QUALITY : PROOF_QUALITY;
+
+    HFONT font = CreateFontW(height, 0, 0, 0,
+                             FW_NORMAL,
+                             FALSE,
+                             FALSE,
+                             FALSE,
+                             DEFAULT_CHARSET,
+                             out_precision,
+                             CLIP_DEFAULT_PRECIS,
+                             quality,
+                             DEFAULT_PITCH|FF_DONTCARE,
+                             font_name.data);
+
+    if (font)
+    {
+        if (!SelectObject(font_dc, font))
+        {
+            INVALID_CODE_PATH;
+        }
+
+        char character_set[255];
+        for (int i = 0; i < 255; i += 1)
+        {
+            character_set[i] = (char)i;
+        }
+
+        wchar_t character_set_unicode[255];
+        if (!MultiByteToWideChar(437, 0, character_set, 255, character_set_unicode, 255))
+        {
+            INVALID_CODE_PATH;
+        }
+
+        SIZE size;
+        if (!GetTextExtentPoint32W(font_dc, L"M", 1, &size))
+        {
+            INVALID_CODE_PATH;
+        }
+
+        BITMAPINFO font_bitmap_info = {};
+        BITMAPINFOHEADER *header = &font_bitmap_info.bmiHeader;
+        header->biSize        = sizeof(*header);
+        header->biWidth       = 16*size.cx;
+        header->biHeight      = 16*size.cy;
+        header->biPlanes      = 1;
+        header->biBitCount    = 32;
+        header->biCompression = BI_RGB;
+
+        VOID *font_bits = nullptr;
+        HBITMAP font_bitmap = CreateDIBSection(font_dc, &font_bitmap_info, DIB_RGB_COLORS, &font_bits, NULL, 0);
+        if (font_bitmap)
+        {
+            SelectObject(font_dc, font_bitmap);
+            SetBkColor(font_dc, RGB(0, 0, 0));
+            SetTextAlign(font_dc, TA_TOP|TA_LEFT);
+
+            out_font->glyph_w        = size.cx;
+            out_font->glyph_h        = size.cy;
+            out_font->glyphs_per_row = 16;
+            out_font->glyphs_per_col = 16;
+            out_font->w              = header->biWidth;
+            out_font->h              = header->biHeight;
+            out_font->pitch          = out_font->w;
+            out_font->data           = (Color *)font_bits;
+
+            SetTextColor(font_dc, RGB(255, 255, 255));
+            for (int i = 0; i < 255; i += 1)
+            {
+                int x = i % 16;
+                int y = i / 16;
+                TextOutW(font_dc, out_font->glyph_w*x, out_font->glyph_h*y, character_set_unicode + i, 1);
+            }
+
+            Color *pixels = out_font->data;
+            for (int i = 0; i < out_font->pitch*out_font->h; i += 1)
+            {
+                pixels[i].a = pixels[i].r;
+            }
+
+            result = true;
+        }
+
+        DeleteObject(font);
+    }
+    else
+    {
+        platform->ReportError(PlatformError_Nonfatal, "Failed to load font '%.*s'", StringExpand(font_name_utf8));
+    }
+
+    DeleteDC(font_dc);
+
+    return result;
+}
+
 int
 main(int, char **)
 // WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int show_cmd)
@@ -1239,6 +1411,8 @@ main(int, char **)
     platform->ReadFileInto = Win32_ReadFileInto;
     platform->GetFileSize = Win32_GetFileSize;
     platform->GetTime = Win32_GetTime;
+    platform->RegisterFontFile = Win32_RegisterFontFile;
+    platform->MakeAsciiFont = Win32_MakeAsciiFont;
     platform->SecondsElapsed = Win32_SecondsElapsed;
     platform->WriteClipboard = Win32_WriteClipboard;
     platform->ReadClipboard = Win32_ReadClipboard;
@@ -1478,7 +1652,12 @@ main(int, char **)
         Swap(frame_start_time, frame_end_time);
 
         smooth_frametime = 0.9f*smooth_frametime + 0.1f*seconds_elapsed;
-        wchar_t *title = FormatWString(&win32_state.temp_arena, L"Textit - frame time: %fms, fps: %f\n",
+
+        String_utf16 user_title = Win32_Utf8ToUtf16(&win32_state.temp_arena, platform->window_title);
+
+        wchar_t *title = FormatWString(&win32_state.temp_arena,
+                                       L"%.*s - frame time: %fms, fps: %f\n",
+                                       StringExpand(user_title),
                                        1000.0*smooth_frametime,
                                        1.0 / smooth_frametime);
         SetWindowTextW(window, title);
