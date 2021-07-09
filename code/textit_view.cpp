@@ -4,85 +4,6 @@ GetBuffer(View *view)
     return GetBuffer(view->buffer);
 }
 
-function BufferLocation
-CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
-{
-    // TESTME
-
-    pos = ClampToBufferRange(buffer, pos);
-
-    BufferLocation result = {};
-
-    while (result.pos < pos)
-    {
-        if (AdvanceOverNewline(buffer, &result.pos))
-        {
-            result.line += 1;
-            result.col   = 0;
-
-            result.line_range.start = result.pos;
-            result.line_range.end = result.pos;
-        }
-        else
-        {
-            result.col += 1;
-        }
-    }
-
-    while (IsInBufferRange(buffer, result.line_range.end))
-    {
-        if (AdvanceOverNewline(buffer, &result.line_range.end))
-        {
-            break;
-        }
-    }
-
-    return result;
-}
-
-function BufferLocation
-CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
-{
-    // TESTME
-
-    BufferLocation result = {};
-
-    while (IsInBufferRange(buffer, result.pos) && (result.line < line))
-    {
-        if (AdvanceOverNewline(buffer, &result.pos))
-        {
-            result.line += 1;
-            result.line_range.start = result.pos;
-            result.line_range.end = result.pos;
-        }
-        else
-        {
-            result.pos += 1;
-        }
-    }
-
-    while (IsInBufferRange(buffer, result.pos) && (result.col < col))
-    {
-        if (PeekNewline(buffer, result.pos))
-        {
-            break;
-        }
-
-        result.pos += 1;
-        result.col += 1;
-    }
-
-    while (IsInBufferRange(buffer, result.line_range.end))
-    {
-        if (AdvanceOverNewline(buffer, &result.line_range.end))
-        {
-            break;
-        }
-    }
-
-    return result;
-}
-
 function void
 SetCursor(View *view, int64_t pos, int64_t mark = -1)
 {
@@ -99,23 +20,8 @@ SetCursor(View *view, int64_t pos, int64_t mark = -1)
 function void
 MoveCursorRelative(View *view, V2i delta)
 {
-    Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
-
-    BufferLocation curr_loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
-    int64_t target_line = curr_loc.line + delta.y;
-    int64_t target_col  = curr_loc.col  + delta.x;
-    BufferLocation target_loc = CalculateBufferLocationFromLineCol(buffer, target_line, target_col);
-
-    int64_t pos = target_loc.pos;
-
-    while (IsInBufferRange(buffer, pos) &&
-           IsTrailingUtf8Byte(ReadBufferByte(buffer, pos)))
-    {
-        pos += SignOf(delta.x);
-    }
-
-    SetCursor(view, pos);
+    cursor->pos = CalculateRelativeMove(GetBuffer(view), cursor->pos, delta);
 }
 
 function int64_t

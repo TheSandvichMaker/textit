@@ -231,6 +231,32 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
     return result;
 }
 
+function int64_t
+FindLineStart(Buffer *buffer, int64_t pos)
+{
+    int64_t result = pos;
+
+    while (IsInBufferRange(buffer, result - 1) && !PeekNewlineBackward(buffer, result - 1))
+    {
+        result -= 1;
+    }
+
+    return result;
+}
+
+function int64_t
+FindLineEnd(Buffer *buffer, int64_t pos)
+{
+    int64_t result = pos;
+
+    while (IsInBufferRange(buffer, result + 1) && !PeekNewlineBackward(buffer, result + 1))
+    {
+        result += 1;
+    }
+
+    return result;
+}
+
 function Range
 EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
 {
@@ -258,6 +284,104 @@ EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
         }
     }
     return result;
+}
+
+function BufferLocation
+CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
+{
+    // TESTME
+
+    pos = ClampToBufferRange(buffer, pos);
+
+    BufferLocation result = {};
+
+    while (result.pos < pos)
+    {
+        if (AdvanceOverNewline(buffer, &result.pos))
+        {
+            result.line += 1;
+            result.col   = 0;
+
+            result.line_range.start = result.pos;
+            result.line_range.end = result.pos;
+        }
+        else
+        {
+            result.col += 1;
+        }
+    }
+
+    while (IsInBufferRange(buffer, result.line_range.end))
+    {
+        if (AdvanceOverNewline(buffer, &result.line_range.end))
+        {
+            break;
+        }
+    }
+
+    return result;
+}
+
+function BufferLocation
+CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
+{
+    // TESTME
+
+    BufferLocation result = {};
+
+    while (IsInBufferRange(buffer, result.pos) && (result.line < line))
+    {
+        if (AdvanceOverNewline(buffer, &result.pos))
+        {
+            result.line += 1;
+            result.line_range.start = result.pos;
+            result.line_range.end = result.pos;
+        }
+        else
+        {
+            result.pos += 1;
+        }
+    }
+
+    while (IsInBufferRange(buffer, result.pos) && (result.col < col))
+    {
+        if (PeekNewline(buffer, result.pos))
+        {
+            break;
+        }
+
+        result.pos += 1;
+        result.col += 1;
+    }
+
+    while (IsInBufferRange(buffer, result.line_range.end))
+    {
+        if (AdvanceOverNewline(buffer, &result.line_range.end))
+        {
+            break;
+        }
+    }
+
+    return result;
+}
+
+function int64_t
+CalculateRelativeMove(Buffer *buffer, int64_t cursor_pos, V2i delta)
+{
+    BufferLocation curr_loc = CalculateBufferLocationFromPos(buffer, cursor_pos);
+    int64_t target_line = curr_loc.line + delta.y;
+    int64_t target_col  = curr_loc.col  + delta.x;
+    BufferLocation target_loc = CalculateBufferLocationFromLineCol(buffer, target_line, target_col);
+
+    int64_t pos = target_loc.pos;
+
+    while (IsInBufferRange(buffer, pos) &&
+           IsTrailingUtf8Byte(ReadBufferByte(buffer, pos)))
+    {
+        pos += SignOf(delta.x);
+    }
+
+    return pos;
 }
 
 function void

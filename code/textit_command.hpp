@@ -13,6 +13,30 @@ enum CommandKind
     Command_Change,
 };
 
+struct Move
+{
+    Range selection;
+    int64_t pos;
+};
+
+function Move
+MakeMove(Range selection, int64_t pos = -1)
+{
+    Move result;
+    result.selection = selection;
+    if (pos < 0)
+    {
+        result.pos = selection.end;
+    }
+    return result;
+}
+
+function Move
+MakeMove(int64_t pos)
+{
+    return MakeMove(MakeRange(pos), pos);
+}
+
 typedef void (*CommandProc)(EditorState *editor);
 #define COMMAND_PROC(name, ...)                                                                                           \
     static void Paste(CMD_, name)(EditorState *editor);                                                                   \
@@ -25,11 +49,11 @@ typedef void (*TextCommandProc)(EditorState *editor, String text);
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), Paste(CMD_, name));                 \
     static void Paste(CMD_, name)(EditorState *editor, String text)
 
-typedef Range (*MovementProc)(EditorState *editor);
+typedef Move (*MovementProc)(EditorState *editor);
 #define MOVEMENT_PROC(name)                                                                                               \
-    static Range Paste(MOV_, name)(EditorState *editor);                                                                  \
+    static Move Paste(MOV_, name)(EditorState *editor);                                                                   \
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), Paste(MOV_, name));             \
-    static Range Paste(MOV_, name)(EditorState *editor)
+    static Move Paste(MOV_, name)(EditorState *editor)
 
 typedef void (*ChangeProc)(EditorState *editor, Range range);
 #define CHANGE_PROC(name)                                                                                                 \

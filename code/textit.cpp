@@ -682,14 +682,14 @@ ExecuteCommand(View *view, Command *command)
 
         case Command_Movement:
         {
-            Range range = command->movement(editor_state);
+            Move move = command->movement(editor_state);
             if (editor_state->clutch)
             {
-                SetCursor(view, range.end);
+                SetCursor(view, move.pos);
             }
             else
             {
-                SetCursor(view, range.end, range.start);
+                SetCursor(view, move.pos, move.selection.start);
             }
         } break;
 

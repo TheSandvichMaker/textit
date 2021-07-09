@@ -101,7 +101,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     int64_t line_count = buffer->line_count;
     int64_t bounds_height = GetHeight(bounds) - 2;
     int64_t scrollbar_size = Max(1, bounds_height*bounds_height / line_count);
-    int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*(bounds_height + 2) / line_count);
+    int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*bounds_height / line_count);
 
     for (int i = 0; i < scrollbar_size; i += 1)
     {
@@ -177,131 +177,107 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             break;
         }
 
-#if 0
-        int64_t newline_length = PeekNewline(buffer, pos);
-        if (newline_length)
+        if (at_p.x >= (bounds.max.x - 2))
         {
-            if ((editor_state->edit_mode == EditMode_Command) &&
+            PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
+
+            at_p.x = left - 1;
+            at_p.y -= 1;
+
+            if (at_p.y <= bounds.min.y)
+            {
+                return actual_line_height;
+            }
+        }
+
+        uint8_t b = buffer->text[pos];
+        if (b == ' ' || IsPrintableAscii(b))
+        {
+            Sprite sprite = MakeSprite(buffer->text[pos], color, text_background);
+            if (draw_cursor &&
+                (editor_state->edit_mode == EditMode_Command) &&
                 (pos >= mark_range.start && pos <= mark_range.end))
             {
-                Sprite sprite = {};
                 sprite.background = selection_background;
                 sprite.foreground.r = 255 - selection_background.r;
                 sprite.foreground.g = 255 - selection_background.g;
                 sprite.foreground.b = 255 - selection_background.b;
-                PushTile(Layer_Text, at_p, sprite);
             }
-
-            at_p.x = left;
-            at_p.y -= 1;
-
-            pos += newline_length;
+            if (draw_cursor && (pos == cursor_pos))
+            {
+                Swap(sprite.foreground, sprite.background);
+            }
+            PushTile(Layer_Text, at_p, sprite);
+            at_p.x += 1;
+            pos += 1;
         }
         else
-#endif
         {
-            if (at_p.x >= (bounds.max.x - 2))
+            Color foreground = unrenderable_text_foreground;
+            Color background = unrenderable_text_background;
+            if (draw_cursor && (pos == cursor_pos))
             {
-                PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
-
-                at_p.x = left - 1;
-                at_p.y -= 1;
-
-                if (at_p.y <= bounds.min.y)
-                {
-                    return actual_line_height;
-                }
+                Swap(foreground, background);
             }
 
-            uint8_t b = buffer->text[pos];
-            if (b == ' ' || IsPrintableAscii(b))
+            if (draw_cursor &&
+                (editor_state->edit_mode == EditMode_Command) &&
+                (pos >= mark_range.start && pos <= mark_range.end))
             {
-                Sprite sprite = MakeSprite(buffer->text[pos], color, text_background);
-                if (draw_cursor &&
-                    (editor_state->edit_mode == EditMode_Command) &&
-                    (pos >= mark_range.start && pos <= mark_range.end))
-                {
-                    sprite.background = selection_background;
-                    sprite.foreground.r = 255 - selection_background.r;
-                    sprite.foreground.g = 255 - selection_background.g;
-                    sprite.foreground.b = 255 - selection_background.b;
-                }
-                if (draw_cursor && (pos == cursor_pos))
-                {
-                    Swap(sprite.foreground, sprite.background);
-                }
-                PushTile(Layer_Text, at_p, sprite);
-                at_p.x += 1;
-                pos += 1;
+                background = selection_background;
+                foreground.r = 255 - selection_background.r;
+                foreground.g = 255 - selection_background.g;
+                foreground.b = 255 - selection_background.b;
+            }
+
+            int64_t advance = 1;
+            String string = {};
+            if (b == '\r')
+            {
+                if (core_config->visualize_newlines) string = PushTempStringF("\\r");
+            }
+            else if (b == '\n')
+            {
+                if (core_config->visualize_newlines) string = PushTempStringF("\\n");
             }
             else
             {
-                Color foreground = unrenderable_text_foreground;
-                Color background = unrenderable_text_background;
-                if (draw_cursor && (pos == cursor_pos))
+                ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
+                string = PushTempStringF("\\u%x", unicode.codepoint);
+                advance = unicode.advance;
+            }
+            for (size_t i = 0; i < string.size; ++i)
+            {
+                PushTile(Layer_Text, at_p, MakeSprite(string.data[i], foreground, background));
+                at_p.x += 1;
+                if (at_p.x >= (bounds.max.x - 2))
                 {
-                    Swap(foreground, background);
-                }
+                    PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
 
-                if (draw_cursor &&
-                    (editor_state->edit_mode == EditMode_Command) &&
-                    (pos >= mark_range.start && pos <= mark_range.end))
-                {
-                    background = selection_background;
-                    foreground.r = 255 - selection_background.r;
-                    foreground.g = 255 - selection_background.g;
-                    foreground.b = 255 - selection_background.b;
-                }
+                    at_p.x = left - 1;
+                    at_p.y -= 1;
 
-                int64_t advance = 1;
-                String string = {};
-                if (b == '\r')
-                {
-                    if (core_config->visualize_newlines) string = PushTempStringF("\\r");
-                }
-                else if (b == '\n')
-                {
-                    if (core_config->visualize_newlines) string = PushTempStringF("\\n");
-                }
-                else
-                {
-                    ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
-                    string = PushTempStringF("\\u%x", unicode.codepoint);
-                    advance = unicode.advance;
-                }
-                for (size_t i = 0; i < string.size; ++i)
-                {
-                    PushTile(Layer_Text, at_p, MakeSprite(string.data[i], foreground, background));
-                    at_p.x += 1;
-                    if (at_p.x >= (bounds.max.x - 2))
+                    if (at_p.y <= bounds.min.y)
                     {
-                        PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
-
-                        at_p.x = left - 1;
-                        at_p.y -= 1;
-
-                        if (at_p.y <= bounds.min.y)
-                        {
-                            return actual_line_height;
-                        }
+                        return actual_line_height;
                     }
                 }
-                pos += advance;
             }
+            pos += advance;
+        }
 
-            if (b == '\n')
+        if (b == '\n')
+        {
+            at_p.x = left;
+            at_p.y -= 1;
+
+            if (at_p.y > bounds.min.y)
             {
-                at_p.x = left;
-                at_p.y -= 1;
-
-                if (at_p.y > bounds.min.y)
-                {
-                    actual_line_height += 1;
-                }
-                else
-                {
-                    return actual_line_height;
-                }
+                actual_line_height += 1;
+            }
+            else
+            {
+                return actual_line_height;
             }
         }
     }
