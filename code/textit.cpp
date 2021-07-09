@@ -901,7 +901,6 @@ AppUpdateAndRender(Platform *platform_)
         case InputMode_Editor:
         {
             HandleViewEvents(editor_state->active_window->view);
-            RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
         } break;
 
         case InputMode_CommandLine:
@@ -980,7 +979,10 @@ AppUpdateAndRender(Platform *platform_)
                             editor_state->cycling_predictions = true;
                             if (editor_state->command_line_prediction_count > 0)
                             {
-                                Command *prediction = editor_state->command_line_predictions[editor_state->command_line_prediction_index++];
+                                int index = editor_state->command_line_prediction_index++;
+                                editor_state->command_line_prediction_selected_index = index;
+
+                                Command *prediction = editor_state->command_line_predictions[index];
                                 editor_state->command_line_prediction_index %= editor_state->command_line_prediction_count;
 
                                 editor_state->command_line_count = (int)prediction->name.size;
@@ -1024,6 +1026,7 @@ AppUpdateAndRender(Platform *platform_)
                 {
                     editor_state->command_line_prediction_count = 0;
                     editor_state->command_line_prediction_index = 0;
+                    editor_state->command_line_prediction_selected_index = -1;
 
                     if (editor_state->command_line_count > 0)
                     {
@@ -1032,9 +1035,15 @@ AppUpdateAndRender(Platform *platform_)
                         {
                             Command *command = &command_list->commands[i];
                             if ((command->kind == Command_Basic) &&
+                                (command->flags & Command_Visible) &&
                                 MatchPrefix(command->name, command_string, StringMatch_CaseInsensitive))
                             {
                                 editor_state->command_line_predictions[editor_state->command_line_prediction_count++] = command;
+                            }
+
+                            if (editor_state->command_line_prediction_count >= ArrayCount(editor_state->command_line_predictions))
+                            {
+                                break;
                             }
                         }
 
@@ -1048,7 +1057,9 @@ AppUpdateAndRender(Platform *platform_)
         } break;
     }
 
+    RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
     DrawWindows(&editor_state->root_window);
+
     if (editor_state->input_mode)
     {
         DrawCommandLineInput();

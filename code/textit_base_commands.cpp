@@ -33,7 +33,8 @@ COMMAND_PROC(EnterCommandMode,
 }
 
 COMMAND_PROC(CenterView,
-             "Center the view around the cursor"_str)
+             "Center the view around the cursor"_str,
+             Command_Visible)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
@@ -44,13 +45,13 @@ COMMAND_PROC(CenterView,
     view->scroll_at = loc.line - viewport_height / 2;
 }
 
-COMMAND_PROC(JumpToBufferStart)
+COMMAND_PROC(JumpToBufferStart, "Jump to the start of the buffer"_str, Command_Visible)
 {
     View *view = CurrentView(editor);
     SetCursor(view, 0);
 }
 
-COMMAND_PROC(JumpToBufferEnd)
+COMMAND_PROC(JumpToBufferEnd, "Jump to the end of the buffer"_str, Command_Visible)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
@@ -309,25 +310,25 @@ COMMAND_PROC(SelectNextUndoBranch)
     SelectNextUndoBranch(CurrentBuffer(editor));
 }
 
-COMMAND_PROC(SplitWindowVertical)
+COMMAND_PROC(SplitWindowVertical, "Split the window along the vertical axis"_str, Command_Visible)
 {
     Window *window = editor->active_window;
     SplitWindow(window, WindowSplit_Vert);
 }
 
-COMMAND_PROC(SplitWindowHorizontal)
+COMMAND_PROC(SplitWindowHorizontal, "Split the window along the horizontal axis"_str, Command_Visible)
 {
     Window *window = editor->active_window;
     SplitWindow(window, WindowSplit_Horz);
 }
 
-COMMAND_PROC(DestroyWindow)
+COMMAND_PROC(DestroyWindow, "Destroy the current active window"_str, Command_Visible)
 {
     Window *window = editor->active_window;
     DestroyWindow(window);
 }
 
-COMMAND_PROC(FocusWindowLeft)
+COMMAND_PROC(FocusWindowLeft, "Focus the next window on the left"_str, Command_Visible)
 {
     Window *window = editor->active_window;
 
@@ -354,7 +355,7 @@ COMMAND_PROC(FocusWindowLeft)
     }
 }
 
-COMMAND_PROC(FocusWindowRight)
+COMMAND_PROC(FocusWindowRight, "Focus the next window on the right"_str, Command_Visible)
 {
     Window *window = editor->active_window;
 
@@ -381,7 +382,7 @@ COMMAND_PROC(FocusWindowRight)
     }
 }
 
-COMMAND_PROC(FocusWindowUp)
+COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str, Command_Visible)
 {
     Window *window = editor->active_window;
 
@@ -408,7 +409,7 @@ COMMAND_PROC(FocusWindowUp)
     }
 }
 
-COMMAND_PROC(FocusWindowDown)
+COMMAND_PROC(FocusWindowDown, "Focus the next window down"_str, Command_Visible)
 {
     Window *window = editor->active_window;
 

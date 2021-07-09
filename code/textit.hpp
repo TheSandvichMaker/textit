@@ -138,6 +138,7 @@ struct EditorState
 
     bool cycling_predictions;
     int command_line_prediction_index;
+    int command_line_prediction_selected_index;
     int command_line_prediction_count;
     Command *command_line_predictions[32];
 

@@ -37,9 +37,16 @@ typedef void (*ChangeProc)(EditorState *editor, Range range);
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), Paste(CHG_, name));               \
     static void Paste(CHG_, name)(EditorState *editor, Range range)
 
+typedef uint32_t CommandFlags;
+enum CommandFlags_ENUM : CommandFlags
+{
+    Command_Visible = 0x1,
+};
+
 struct Command
 {
     CommandKind kind;
+    CommandFlags flags;
     String name;
     String description;
     union
@@ -57,7 +64,7 @@ CMD_Stub(EditorState *)
 {
     platform->DebugPrint("Someone called the stub command.\n");
 }
-static Command null_command_ = { Command_Basic, "Stub"_str, "It's the stub command, if this gets called somebody did something wrong"_str, CMD_Stub };
+static Command null_command_ = { Command_Basic, 0, "Stub"_str, "It's the stub command, if this gets called somebody did something wrong"_str, CMD_Stub };
 static inline Command *
 NullCommand()
 {
@@ -75,16 +82,17 @@ static inline Command *FindCommand(String name);
 
 struct CommandRegisterHelper
 {
-    CommandRegisterHelper(CommandKind kind, String name, void *proc, String description = ""_str)
+    CommandRegisterHelper(CommandKind kind, String name, void *proc, String description = ""_str, CommandFlags flags = 0)
     {
         Assert(FindCommand(name) == NullCommand());
         if (command_list->command_count < ArrayCount(command_list->commands))
         {
             Command *command = &command_list->commands[command_list->command_count++];
-            command->name = name;
+            command->kind        = kind;
+            command->flags       = flags;
+            command->name        = name;
             command->description = description;
-            command->kind = kind;
-            command->generic = proc;
+            command->generic     = proc;
         }
         else
         {

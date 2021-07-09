@@ -342,10 +342,7 @@ DrawView(View *view, bool is_active_window)
 
             default:
             {
-                if (editor_state->clutch)
-                {
-                    filebar_text_background_str = "filebar_text_background_clutch"_str;
-                }
+                /* crickets */
             } break;
         }
     }
@@ -381,7 +378,7 @@ DrawCommandLineInput()
             Command *other_prediction = editor_state->command_line_predictions[i];
 
             Color color = MakeColor(127, 127, 127);
-            if (i == editor_state->command_line_prediction_index)
+            if (i == editor_state->command_line_prediction_selected_index)
             {
                 color = MakeColor(192, 127, 127);
             }
