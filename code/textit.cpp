@@ -13,6 +13,13 @@
 #include "textit_base_commands.cpp"
 #include "textit_draw.cpp"
 
+//
+// PRIOR ART: https://github.com/helix-editor/helix <--- look at how this lad does things
+// Markers:
+//  - https://blog.atom.io/2015/06/16/optimizing-an-important-atom-primitive.html
+//  - https://github.com/neovim/neovim/issues/4816
+//
+
 function Cursor *
 GetCursor(ViewID view, BufferID buffer)
 {
