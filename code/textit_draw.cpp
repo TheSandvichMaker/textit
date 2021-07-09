@@ -41,7 +41,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     Cursor *cursor = GetCursor(view);
 
     int64_t cursor_pos = cursor->pos;
-    int64_t mark_pos = cursor->mark;
 
     bool draw_cursor = is_active_window;
 
@@ -68,7 +67,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         actual_line_height += ((bounds.max.y - 1) - at_p.y);
     }
 
-    Range mark_range = MakeSanitaryRange(cursor_pos, mark_pos);
+    Range mark_range = GetEditRange(cursor);
 
     TokenBlock *block = buffer->tokens->first;
 

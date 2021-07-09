@@ -34,7 +34,7 @@ operator ""_str(const char *data, size_t size)
 #define StringLiteral(c_string) Paste(c_string, _str)
 #define StringExpand(string) (int)(string).size, (char *)(string).data
 
-static inline String
+function String
 MakeString(size_t size, uint8_t *text)
 {
     String result;
@@ -92,7 +92,7 @@ struct Range
     int64_t start, end;
 };
 
-static inline Range
+function Range
 MakeRange(int64_t start, int64_t end)
 {
     Range result;
@@ -101,13 +101,13 @@ MakeRange(int64_t start, int64_t end)
     return result;
 }
 
-static inline Range
+function Range
 MakeRange(int64_t pos)
 {
     return MakeRange(pos, pos);
 }
 
-static inline Range
+function Range
 MakeSanitaryRange(int64_t start, int64_t end)
 {
     Range result;
@@ -124,7 +124,7 @@ MakeSanitaryRange(int64_t start, int64_t end)
     return result;
 }
 
-static inline Range
+function Range
 SanitizeRange(Range range)
 {
     if (range.end < range.start)
@@ -134,13 +134,13 @@ SanitizeRange(Range range)
     return range;
 }
 
-static inline Range
+function Range
 MakeRangeStartLength(int64_t start, int64_t length)
 {
     return MakeRange(start, start + length);
 }
 
-static inline int64_t
+function int64_t
 ClampToRange(int64_t value, Range bounds)
 {
     if (value < bounds.start) value = bounds.start;
@@ -148,7 +148,7 @@ ClampToRange(int64_t value, Range bounds)
     return value;
 }
 
-static inline Range
+function Range
 ClampRange(Range range, Range bounds)
 {
     if (range.start < bounds.start) range.start = bounds.start;
@@ -158,11 +158,20 @@ ClampRange(Range range, Range bounds)
     return range;
 }
 
-static inline int64_t
+function int64_t
 RangeSize(Range range)
 {
     range = SanitizeRange(range);
     return range.end - range.start;
+}
+
+function Range
+Union(Range a, Range b)
+{
+    Range result;
+    result.start = a.start < b.start ? a.start : b.start;
+    result.end = a.end > b.end ? a.end : b.end;
+    return result;
 }
 
 // NOTE: These colors are in BGRA byte order

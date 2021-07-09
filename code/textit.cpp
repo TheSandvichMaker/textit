@@ -85,7 +85,7 @@ DestroyCursor(ViewID view, BufferID buffer)
 function Range
 GetEditRange(Cursor *cursor)
 {
-    Range result = MakeSanitaryRange(cursor->pos, cursor->mark);
+    Range result = SanitizeRange(cursor->selection);
     return result;
 }
 
@@ -265,7 +265,11 @@ DuplicateView(ViewID id)
         View *new_view = OpenNewView(view->buffer);
 
         Cursor *cursor = GetCursor(view);
-        SetCursor(new_view, cursor->pos, cursor->mark);
+        Cursor *new_cursor = GetCursor(new_view);
+
+        new_cursor->sticky_col = cursor->sticky_col;
+        new_cursor->selection  = cursor->selection;
+        new_cursor->pos        = cursor->pos;
 
         new_view->scroll_at = view->scroll_at;
         result = new_view->id;
@@ -671,15 +675,7 @@ ExecuteCommand(View *view, Command *command)
     {
         case Command_Basic:
         {
-            Cursor *cursor = GetCursor(view);
-
-            int64_t mark = cursor->mark;
             command->command(editor_state);
-
-            if (mark == cursor->mark)
-            {
-                cursor->mark = cursor->pos;
-            }
         } break;
 
         case Command_Text:
@@ -689,14 +685,19 @@ ExecuteCommand(View *view, Command *command)
 
         case Command_Movement:
         {
+            Cursor *cursor = GetCursor(view);
+
             Move move = command->movement(editor_state);
+
             if (editor_state->clutch)
             {
-                SetCursor(view, move.pos);
+                cursor->selection = Union(cursor->selection, move.selection);
+                cursor->pos = move.pos;
             }
             else
             {
-                SetCursor(view, move.pos, move.selection.start);
+                cursor->selection = move.selection;
+                cursor->pos = move.pos;
             }
         } break;
 
@@ -704,17 +705,11 @@ ExecuteCommand(View *view, Command *command)
         {
             Cursor *cursor = GetCursor(view);
 
-            int64_t mark = cursor->mark;
-
             Range edit_range = GetEditRange(cursor);
             edit_range.end += 1; // Why?
 
             command->change(editor_state, edit_range);
-
-            if (mark == cursor->mark)
-            {
-                cursor->mark = cursor->pos;
-            }
+            cursor->selection = MakeRange(cursor->pos);
         } break;
     }
 }
@@ -787,10 +782,6 @@ HandleViewEvents(ViewID view_id)
             {
                 if (AreEqual(command->name, "RepeatLastCommand"_str))
                 {
-                    if (cursor->mark > cursor->mark)
-                    {
-                        Swap(cursor->pos, cursor->mark);
-                    }
                     ExecuteCommand(view, editor_state->last_movement_for_change);
                     ExecuteCommand(view, editor_state->last_change);
                 }
@@ -804,6 +795,8 @@ HandleViewEvents(ViewID view_id)
                         {
                             editor_state->last_movement_for_change = editor_state->last_movement;
                             editor_state->last_change = command;
+
+                            ExecuteCommand(view, editor_state->last_movement);
                         } break;
                     }
                 }

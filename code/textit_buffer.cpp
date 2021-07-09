@@ -245,13 +245,25 @@ FindLineStart(Buffer *buffer, int64_t pos)
 }
 
 function int64_t
-FindLineEnd(Buffer *buffer, int64_t pos)
+FindLineEnd(Buffer *buffer, int64_t pos, bool include_newline = false)
 {
     int64_t result = pos;
 
-    while (IsInBufferRange(buffer, result + 1) && !PeekNewlineBackward(buffer, result + 1))
+    while (IsInBufferRange(buffer, result + 1))
     {
-        result += 1;
+        int64_t newline_length = PeekNewline(buffer, result + 1);
+        if (newline_length)
+        {
+            if (include_newline)
+            {
+                result += newline_length;
+            }
+            break;
+        }
+        else
+        {
+            result += 1;
+        }
     }
 
     return result;

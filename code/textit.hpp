@@ -87,9 +87,10 @@ GLOBAL_STATE(CoreConfig, core_config);
 struct Cursor
 {
     Cursor *next;
-    int64_t sticky_col;
+    int64_t sticky_col; // << HELLO
+
     int64_t pos;
-    int64_t mark;
+    Range selection;
 };
 
 function Range GetEditRange(Cursor *cursor);

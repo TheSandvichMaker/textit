@@ -203,8 +203,7 @@ MOVEMENT_PROC(MoveDown)
     Cursor *cursor = GetCursor(view);
 
     Move move;
-    move.selection.start = FindLineStart(buffer, cursor->pos);
-    move.selection.end   = FindLineEnd(buffer, cursor->pos);
+    move.selection = EncloseLine(buffer, cursor->pos, true);
     move.pos = CalculateRelativeMove(buffer, cursor->pos, MakeV2i(0, 1));
     return move;
 }
@@ -216,8 +215,7 @@ MOVEMENT_PROC(MoveUp)
     Cursor *cursor = GetCursor(view);
 
     Move move;
-    move.selection.start = FindLineEnd(buffer, cursor->pos);
-    move.selection.end   = FindLineStart(buffer, cursor->pos);
+    move.selection = EncloseLine(buffer, cursor->pos, true);
     move.pos = CalculateRelativeMove(buffer, cursor->pos, MakeV2i(0, -1));
     return move;
 }
@@ -504,7 +502,7 @@ COMMAND_PROC(PasteBefore)
 
     String string = platform->ReadClipboard(platform->GetTempArena());
 
-    int64_t insert_pos = Min(cursor->pos, cursor->mark);
+    int64_t insert_pos = cursor->pos;
     int64_t pos = BufferReplaceRange(buffer, MakeRange(insert_pos), string);
     SetCursor(view, pos);
 }
@@ -517,7 +515,7 @@ COMMAND_PROC(PasteAfter)
 
     String string = platform->ReadClipboard(platform->GetTempArena());
 
-    int64_t insert_pos = Max(cursor->pos, cursor->mark) + 1;
+    int64_t insert_pos = cursor->pos + 1;
     int64_t pos = BufferReplaceRange(buffer, MakeRange(insert_pos), string);
     SetCursor(view, pos);
 }
