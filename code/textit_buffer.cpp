@@ -495,6 +495,16 @@ BufferPushRange(Arena *arena, Buffer *buffer, Range range)
     return result;
 }
 
+function int64_t
+ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
+{
+    if (pos > delta_pos)
+    {
+        pos += Min(delta, pos - delta_pos);
+    }
+    return pos;
+}
+
 function void
 OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
 {
@@ -505,9 +515,9 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
              cursor;
              cursor = cursor->next)
         {
-            if (pos < cursor->pos)             cursor->pos             += delta;
-            if (pos < cursor->selection.start) cursor->selection.start += delta;
-            if (pos < cursor->selection.end)   cursor->selection.end   += delta;
+            cursor->pos             = ApplyPositionDelta(cursor->pos, pos, delta);
+            cursor->selection.start = ApplyPositionDelta(cursor->selection.start, pos, delta);
+            cursor->selection.end   = ApplyPositionDelta(cursor->selection.end, pos, delta);
         }
     }
 

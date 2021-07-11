@@ -733,8 +733,13 @@ ExecuteCommand(View *view, Command *command)
 
             command->change(editor_state, edit_range);
 
-            Move next_move = editor_state->last_movement->movement(editor_state);
-            ApplyMove(cursor, next_move);
+            if (editor_state->last_movement)
+            {
+                Assert(editor_state->last_movement->kind == Command_Movement);
+
+                Move next_move = editor_state->last_movement->movement(editor_state);
+                ApplyMove(cursor, next_move);
+            }
         } break;
     }
 }
