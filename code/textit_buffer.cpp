@@ -495,6 +495,24 @@ BufferPushRange(Arena *arena, Buffer *buffer, Range range)
     return result;
 }
 
+function void
+OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
+{
+    for (size_t i = 0; i < editor_state->view_count; i += 1)
+    {
+        ViewID view_id = editor_state->used_view_ids[i];
+        for (Cursor *cursor = IterateCursors(view_id, buffer->id);
+             cursor;
+             cursor = cursor->next)
+        {
+            if (pos < cursor->pos)             cursor->pos             += delta;
+            if (pos < cursor->selection.start) cursor->selection.start += delta;
+            if (pos < cursor->selection.end)   cursor->selection.end   += delta;
+        }
+    }
+
+}
+
 function int64_t
 BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 {
@@ -506,6 +524,12 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     buffer->dirty = true;
 
     int64_t result = TextStorageReplaceRange(buffer, range, text);
+
+    int64_t delta = range.start - range.end + (int64_t)text.size;
+    OnBufferChanged(buffer, range.start, delta);
+
+    TokenizeBuffer(buffer);
+
     return result;
 }
 

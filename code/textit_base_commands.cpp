@@ -3,7 +3,7 @@ COMMAND_PROC(EnterCommandLineMode)
     editor->input_mode = InputMode_CommandLine;
 }
 
-COMMAND_PROC(Exit)
+COMMAND_PROC(Exit, "Exit the editor"_str, Command_Visible)
 {
     UNUSED_VARIABLE(editor);
     platform->exit_requested = true;
@@ -452,10 +452,7 @@ CHANGE_PROC(DeleteSelection)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
-    // Range mark_range = MakeSanitaryRange(buffer->cursor.pos, buffer->mark.pos);
-    // mark_range.end += 1;
-    int64_t pos = BufferReplaceRange(buffer, range, ""_str);
-    SetCursor(view, pos);
+    BufferReplaceRange(buffer, range, ""_str);
 }
 
 CHANGE_PROC(ChangeSelection)

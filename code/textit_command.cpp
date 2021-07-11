@@ -1,11 +1,11 @@
-static inline Command *
-FindCommand(String name)
+function Command *
+FindCommand(String name, StringMatchFlags flags)
 {
     Command *result = NullCommand();
     for (size_t i = 0; i < command_list->command_count; i += 1)
     {
         Command *command = &command_list->commands[i];
-        if (AreEqual(command->name, name))
+        if (AreEqual(command->name, name, flags))
         {
             result = command;
             break;
@@ -14,7 +14,7 @@ FindCommand(String name)
     return result;
 }
 
-static inline void
+function void
 LoadDefaultBindings()
 {
     BindingMap *command = &editor_state->bindings[EditMode_Command];

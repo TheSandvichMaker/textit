@@ -275,6 +275,8 @@ TokenizeBuffer(Buffer *buffer)
     }
 
     PlatformHighResTime end_time = platform->GetTime();
+
+#if 0
     double total_time = platform->SecondsElapsed(start_time, end_time);
 
     platform->DebugPrint("Total time: %fms for %lld tokens, %lld characters (%fns/tok, %fns/char).\n",
@@ -286,6 +288,7 @@ TokenizeBuffer(Buffer *buffer)
     platform->DebugPrint("%f megatokens, %f megachars per second\n", 
                          (double)token_count / (1'000'000.0*total_time),
                          (double)buffer->count / (1'000'000.0*total_time));
+#endif
 
     TokenList *tokens = (TokenList *)buffer->tokens;
     AtomicExchange((void *volatile*)&buffer->tokens, buffer->prev_tokens);

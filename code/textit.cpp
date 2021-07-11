@@ -21,7 +21,7 @@
 //
 
 function Cursor *
-GetCursor(ViewID view, BufferID buffer)
+GetCursorInternal(ViewID view, BufferID buffer, bool make_if_missing)
 {
     CursorHashKey key;
     key.view   = view;
@@ -37,7 +37,7 @@ GetCursor(ViewID view, BufferID buffer)
         entry = entry->next_in_hash;
     }
 
-    if (!entry)
+    if (!entry && make_if_missing)
     {
         if (!editor_state->first_free_cursor_hash_entry)
         {
@@ -54,7 +54,19 @@ GetCursor(ViewID view, BufferID buffer)
         ZeroStruct(&entry->cursor);
     }
 
-    return &entry->cursor;
+    return entry ? &entry->cursor : nullptr;
+}
+
+function Cursor *
+GetCursor(ViewID view, BufferID buffer)
+{
+    return GetCursorInternal(view, buffer, true);
+}
+
+function Cursor *
+IterateCursors(ViewID view, BufferID buffer)
+{
+    return GetCursorInternal(view, buffer, false);
 }
 
 function Cursor *
@@ -182,6 +194,12 @@ DestroyBuffer(BufferID id)
     }
     editor_state->free_buffer_ids[MAX_BUFFER_COUNT - editor_state->buffer_count] = id;
     editor_state->used_buffer_ids[used_id_index] = editor_state->used_buffer_ids[--editor_state->buffer_count];
+
+    for (size_t i = 0; i < editor_state->view_count; i += 1)
+    {
+        ViewID view_id = editor_state->used_view_ids[i];
+        DestroyCursor(view_id, id);
+    }
 
     Release(&buffer->arena);
     editor_state->buffers[id.index] = nullptr;
@@ -669,6 +687,21 @@ GetGlyphBitmap(Font *font, Glyph glyph)
 }
 
 function void
+ApplyMove(Cursor *cursor, Move move)
+{
+    if (editor_state->clutch)
+    {
+        cursor->selection = Union(cursor->selection, move.selection);
+        cursor->pos = move.pos;
+    }
+    else
+    {
+        cursor->selection = move.selection;
+        cursor->pos = move.pos;
+    }
+}
+
+function void
 ExecuteCommand(View *view, Command *command)
 {
     switch (command->kind)
@@ -688,17 +721,7 @@ ExecuteCommand(View *view, Command *command)
             Cursor *cursor = GetCursor(view);
 
             Move move = command->movement(editor_state);
-
-            if (editor_state->clutch)
-            {
-                cursor->selection = Union(cursor->selection, move.selection);
-                cursor->pos = move.pos;
-            }
-            else
-            {
-                cursor->selection = move.selection;
-                cursor->pos = move.pos;
-            }
+            ApplyMove(cursor, move);
         } break;
 
         case Command_Change:
@@ -709,7 +732,9 @@ ExecuteCommand(View *view, Command *command)
             edit_range.end += 1; // Why?
 
             command->change(editor_state, edit_range);
-            cursor->selection = MakeRange(cursor->pos);
+
+            Move next_move = editor_state->last_movement->movement(editor_state);
+            ApplyMove(cursor, next_move);
         } break;
     }
 }
@@ -795,28 +820,10 @@ HandleViewEvents(ViewID view_id)
                         {
                             editor_state->last_movement_for_change = editor_state->last_movement;
                             editor_state->last_change = command;
-
-                            ExecuteCommand(view, editor_state->last_movement);
                         } break;
                     }
                 }
             }
-        }
-    }
-
-    View *view = GetView(view_id);
-    Buffer *buffer = GetBuffer(view);
-
-    if (buffer->dirty && !buffer->tokenizing)
-    {
-        buffer->dirty = false;
-        if (buffer->count < BUFFER_ASYNC_THRESHOLD)
-        {
-            TokenizeBuffer(buffer);
-        }
-        else
-        {
-            platform->AddJob(platform->low_priority_queue, buffer, TokenizeBufferJob);
         }
     }
 }
@@ -840,11 +847,12 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-        platform->RegisterFontFile("Px437_OlivettiThin_8x14.ttf"_str);
-        if (!platform->MakeAsciiFont("Px437 OlivettiThin 8x14"_str,
+        platform->RegisterFontFile("Bm437_OlivettiThin_8x14.FON"_str);
+        if (!platform->MakeAsciiFont("Bm437 OlivettiThin 8x14"_str,
                                      &editor_state->font,
                                      14,
-                                     PlatformFontRasterFlag_RasterFont))
+                                     PlatformFontRasterFlag_RasterFont|
+                                     PlatformFontRasterFlag_DoNotMapUnicode))
         {
             platform->ReportError(PlatformError_Nonfatal, "Failed to load ttf font. Trying fallback bmp font.");
             editor_state->font = LoadFontFromDisk(&editor_state->transient_arena, "font8x16_slim.bmp"_str, 8, 16);
@@ -964,7 +972,8 @@ AppUpdateAndRender(Platform *platform_)
 
                         case PlatformInputCode_Return:
                         {
-                            Command *command = FindCommand(MakeString(editor_state->command_line_count, editor_state->command_line));
+                            String command_string = MakeString(editor_state->command_line_count, editor_state->command_line);
+                            Command *command = FindCommand(command_string, StringMatch_CaseInsensitive);
                             if (command && command->kind == Command_Basic)
                             {
                                 command->command(editor_state);

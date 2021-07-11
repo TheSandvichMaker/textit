@@ -264,6 +264,21 @@ AreEqual(const String &a, const String &b, StringMatchFlags flags = 0)
     return result;
 }
 
+function String
+GetExtension(String string)
+{
+    String result = {};
+    for (size_t i = 0; i < string.size - 1; i += 1)
+    {
+        if (string.data[i] == '.')
+        {
+            result.data = string.data + i + 1;
+            result.size = i - string.size - 1;
+        }
+    }
+    return result;
+}
+
 function bool
 MatchPrefix(String string, String prefix, StringMatchFlags flags = 0)
 {

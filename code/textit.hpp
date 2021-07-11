@@ -203,6 +203,7 @@ function void ExecuteCommand(View *view, Command *command);
 
 function Cursor *GetCursor(ViewID view, BufferID buffer);
 function Cursor *GetCursor(View *view, Buffer *buffer = nullptr);
+function Cursor *IterateCursors(ViewID view, BufferID buffer);
 
 struct BufferIterator
 {

@@ -442,6 +442,7 @@ typedef uint32_t PlatformFontRasterFlags;
 enum PlatformFontRasterFlags_ENUM : PlatformFontRasterFlags
 {
     PlatformFontRasterFlag_RasterFont = 0x1,
+    PlatformFontRasterFlag_DoNotMapUnicode = 0x2, // screw you, windows
 };
 
 struct Platform

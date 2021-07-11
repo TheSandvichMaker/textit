@@ -24,6 +24,7 @@ MakeMove(Range selection, int64_t pos = -1)
 {
     Move result;
     result.selection = selection;
+    result.pos       = pos;
     if (pos < 0)
     {
         result.pos = selection.end;
@@ -83,13 +84,13 @@ struct Command
     };
 };
 
-static inline void
+function void
 CMD_Stub(EditorState *)
 {
     platform->DebugPrint("Someone called the stub command.\n");
 }
 static Command null_command_ = { Command_Basic, 0, "Stub"_str, "It's the stub command, if this gets called somebody did something wrong"_str, CMD_Stub };
-static inline Command *
+function Command *
 NullCommand()
 {
     return &null_command_;
@@ -102,7 +103,7 @@ struct CommandList
 };
 GLOBAL_STATE(CommandList, command_list);
 
-static inline Command *FindCommand(String name);
+function Command *FindCommand(String name, StringMatchFlags flags = 0);
 
 struct CommandRegisterHelper
 {
@@ -146,7 +147,7 @@ struct BindingKey
     BindingModifier mod;
 };
 
-static inline BindingKey
+function BindingKey
 MakeBindingKey(PlatformInputCode code, BindingModifier mod = BindMod_None)
 {
     BindingKey result;
