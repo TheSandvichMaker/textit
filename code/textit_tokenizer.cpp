@@ -21,7 +21,7 @@ PushToken(Tokenizer *tok, const Token &t)
 {
     TokenList *list = tok->tokens;
     if (!list->first ||
-        list->last->count >= ArrayCount(list->last->tokens))
+        list->last->count >= (int64_t)ArrayCount(list->last->tokens))
     {
         TokenBlock *block = AllocateTokenBlock();
         if (list->first)
@@ -92,8 +92,8 @@ TokenizeBuffer(Buffer *buffer)
     tok->at = buffer->text;
     tok->end = buffer->text + buffer->count;
 
-    FreeTokens(buffer->prev_tokens);
-    tok->tokens = buffer->prev_tokens;
+    FreeTokens(&buffer->tokens);
+    tok->tokens = &buffer->tokens;
 
     LanguageSpec *language = buffer->language;
 
@@ -259,6 +259,7 @@ TokenizeBuffer(Buffer *buffer)
         t.pos = (int64_t)(start - buffer->text);
         t.length = (int64_t)(end - start);
 
+#if 0
         String string = MakeString((size_t)(end - start), start);
         if (t.kind == Token_Identifier)
         {
@@ -268,11 +269,14 @@ TokenizeBuffer(Buffer *buffer)
                 t.kind = kind;
             }
         }
+#endif
 
         token_count += 1;
 
         PushToken(tok, t);
     }
+
+    buffer->line_count = line_count;
 
     PlatformHighResTime end_time = platform->GetTime();
 
@@ -285,18 +289,13 @@ TokenizeBuffer(Buffer *buffer)
                          buffer->count,
                          1'000'000'000.0*total_time / (double)token_count,
                          1'000'000'000.0*total_time / (double)buffer->count);
-    platform->DebugPrint("%f megatokens, %f megachars per second\n", 
+    platform->DebugPrint("%f megatokens/s, %fmb/s\n", 
                          (double)token_count / (1'000'000.0*total_time),
                          (double)buffer->count / (1'000'000.0*total_time));
 #endif
-
-    TokenList *tokens = (TokenList *)buffer->tokens;
-    AtomicExchange((void *volatile*)&buffer->tokens, buffer->prev_tokens);
-    buffer->prev_tokens = tokens;
-
-    AtomicExchange(&buffer->line_count, line_count);
 }
 
+#if 0
 static
 PLATFORM_JOB(TokenizeBufferJob)
 {
@@ -305,6 +304,7 @@ PLATFORM_JOB(TokenizeBufferJob)
     TokenizeBuffer(buffer);
     buffer->tokenizing = false;
 }
+#endif
 
 function LanguageSpec *
 PushCppLanguageSpec(Arena *arena)

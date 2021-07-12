@@ -72,7 +72,7 @@ struct StringList
     size_t node_count = 0;
 };
 
-struct StringContainer
+struct DynamicString
 {
     union
     {

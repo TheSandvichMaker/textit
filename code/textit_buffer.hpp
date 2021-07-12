@@ -76,17 +76,17 @@ struct Buffer : TextStorage
         uint64_t depth;
         UndoNode root;
         UndoNode *at;
+
+        int64_t run_pos;
+        int64_t insert_pos;
+        FixedStringContainer<2048> fwd_buffer;
+        FixedStringContainer<2048> bck_buffer;
     } undo;
 
     struct LanguageSpec *language;
 
-    bool dirty;
-    volatile bool tokenizing;
-    volatile int line_count;
-
-    volatile TokenList *tokens;
-    TokenList *prev_tokens;
-    TokenList tokens_[2];
+    int line_count;
+    TokenList tokens;
 };
 
 static inline Buffer *GetBuffer(BufferID id);
@@ -94,7 +94,7 @@ static inline Buffer *GetBuffer(BufferID id);
 static inline TokenIterator
 MakeTokenIterator(Buffer *buffer, int64_t start_pos = 0)
 {
-    return MakeTokenIterator((TokenList *)buffer->tokens, start_pos);
+    return MakeTokenIterator(&buffer->tokens, start_pos);
 }
 
 #endif /* TEXTIT_BUFFER_HPP */

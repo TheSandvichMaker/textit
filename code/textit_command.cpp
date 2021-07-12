@@ -38,6 +38,8 @@ LoadDefaultBindings()
     command->map['U'].regular                      = FindCommand("UndoOnce"_str);
     command->map['R'].ctrl                         = FindCommand("RedoOnce"_str);
 
+    command->map['O'].regular                      = FindCommand("OpenNewLineBelow"_str);
+
     command->map['V'].ctrl                         = FindCommand("SplitWindowVertical"_str);
     command->map['S'].ctrl                         = FindCommand("SplitWindowHorizontal"_str);
     command->map['H'].ctrl                         = FindCommand("FocusWindowLeft"_str);

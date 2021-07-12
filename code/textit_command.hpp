@@ -39,27 +39,27 @@ MakeMove(int64_t pos)
 }
 
 typedef void (*CommandProc)(EditorState *editor);
-#define COMMAND_PROC(name, ...)                                                                                           \
-    static void Paste(CMD_, name)(EditorState *editor);                                                                   \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), Paste(CMD_, name), ##__VA_ARGS__); \
+#define COMMAND_PROC(name, ...)                                                                                                    \
+    static void Paste(CMD_, name)(EditorState *editor);                                                                            \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), (void *)&Paste(CMD_, name), ##__VA_ARGS__); \
     static void Paste(CMD_, name)(EditorState *editor)
 
 typedef void (*TextCommandProc)(EditorState *editor, String text);
-#define TEXT_COMMAND_PROC(name)                                                                                           \
-    static void Paste(CMD_, name)(EditorState *editor, String text);                                                      \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), Paste(CMD_, name));                 \
+#define TEXT_COMMAND_PROC(name)                                                                                                    \
+    static void Paste(CMD_, name)(EditorState *editor, String text);                                                               \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), (void *)&Paste(CMD_, name));                 \
     static void Paste(CMD_, name)(EditorState *editor, String text)
 
 typedef Move (*MovementProc)(EditorState *editor);
-#define MOVEMENT_PROC(name)                                                                                               \
-    static Move Paste(MOV_, name)(EditorState *editor);                                                                   \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), Paste(MOV_, name));             \
+#define MOVEMENT_PROC(name)                                                                                                        \
+    static Move Paste(MOV_, name)(EditorState *editor);                                                                            \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), (void *)&Paste(MOV_, name));             \
     static Move Paste(MOV_, name)(EditorState *editor)
 
 typedef void (*ChangeProc)(EditorState *editor, Range range);
-#define CHANGE_PROC(name)                                                                                                 \
-    static void Paste(CHG_, name)(EditorState *editor, Range range);                                                      \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), Paste(CHG_, name));               \
+#define CHANGE_PROC(name)                                                                                                          \
+    static void Paste(CHG_, name)(EditorState *editor, Range range);                                                               \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), (void *)&Paste(CHG_, name));               \
     static void Paste(CHG_, name)(EditorState *editor, Range range)
 
 typedef uint32_t CommandFlags;
@@ -89,7 +89,19 @@ CMD_Stub(EditorState *)
 {
     platform->DebugPrint("Someone called the stub command.\n");
 }
-static Command null_command_ = { Command_Basic, 0, "Stub"_str, "It's the stub command, if this gets called somebody did something wrong"_str, CMD_Stub };
+
+function Command
+MakeNullCommand()
+{
+    Command result = {};
+    result.name = "Stub"_str;
+    result.description = "It's the stub command, if this gets called somebody did something wrong"_str;
+    result.command = CMD_Stub;
+    return result;
+}
+
+static Command null_command_ = MakeNullCommand();
+
 function Command *
 NullCommand()
 {

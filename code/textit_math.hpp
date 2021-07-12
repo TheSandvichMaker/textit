@@ -681,6 +681,12 @@ Min(int64_t a, int64_t b)
     return (a < b ? a : b);
 }
 
+TEXTIT_INLINE size_t
+Min(size_t a, size_t b)
+{
+    return (a < b ? a : b);
+}
+
 TEXTIT_INLINE V2i
 Min(V2i a, V2i b)
 {

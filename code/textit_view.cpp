@@ -17,6 +17,10 @@ SetCursor(View *view, int64_t pos, int64_t mark = -1)
     {
         cursor->selection = MakeRange(ClampToBufferRange(buffer, mark), pos);
     }
+    else
+    {
+        cursor->selection = MakeRange(pos);
+    }
 }
 
 function void
@@ -26,10 +30,10 @@ MoveCursorRelative(View *view, V2i delta)
     cursor->pos = CalculateRelativeMove(GetBuffer(view), cursor->pos, delta);
 }
 
-function int64_t
+function Range
 UndoOnce(View *view)
 {
-    int64_t pos = -1;
+    Range result = MakeRange(-1, -1);
 
     Buffer *buffer = GetBuffer(view);
     auto undo = &buffer->undo;
@@ -42,9 +46,8 @@ UndoOnce(View *view)
 
         Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
         BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
-        pos = node->pos;
 
-        SetCursor(view, pos, pos + node->backward.size - 1);
+        result = MakeRange(node->pos, Max(node->pos, node->pos + node->backward.size - 1));
 
         if (node->parent->ordinal == node->ordinal)
         {
@@ -56,13 +59,13 @@ UndoOnce(View *view)
         }
     }
 
-    return pos;
+    return result;
 }
 
-function int64_t
+function Range
 RedoOnce(View *view)
 {
-    int64_t pos = -1;
+    Range result = MakeRange(-1, -1);
 
     Buffer *buffer = GetBuffer(view);
     auto undo = &buffer->undo;
@@ -76,9 +79,7 @@ RedoOnce(View *view)
         Range remove_range = MakeRangeStartLength(node->pos, node->backward.size);
         BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
 
-        pos = node->pos;
-
-        SetCursor(view, pos, pos + node->forward.size - 1);
+        result = MakeRange(node->pos, Max(node->pos, node->pos + node->forward.size - 1));
 
         UndoNode *next_node = NextChild(node);
         if (next_node &&
@@ -92,5 +93,5 @@ RedoOnce(View *view)
         }
     }
 
-    return pos;
+    return result;
 }

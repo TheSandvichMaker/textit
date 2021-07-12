@@ -3,6 +3,8 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "textit_platform.hpp"
 #include "textit_intrinsics.hpp"

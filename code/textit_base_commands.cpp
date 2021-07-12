@@ -28,8 +28,8 @@ COMMAND_PROC(EnterCommandMode,
     editor->next_edit_mode = EditMode_Command;
 
     Buffer *buffer = CurrentBuffer(editor);
-    uint64_t current_undo_ordinal = CurrentUndoOrdinal(buffer);
-    MergeUndoHistory(buffer, editor->enter_text_mode_undo_ordinal, current_undo_ordinal);
+    FlushBufferedUndo(buffer);
+    MergeUndoHistory(buffer, editor->enter_text_mode_undo_ordinal, buffer->undo.current_ordinal);
 }
 
 COMMAND_PROC(CenterView,
@@ -299,10 +299,10 @@ COMMAND_PROC(UndoOnce)
 {
     View *view = CurrentView(editor);
 
-    int64_t pos = UndoOnce(view);
-    if (pos >= 0)
+    Range result = UndoOnce(view);
+    if (result.start >= 0)
     {
-        SetCursor(view, pos);
+        SetCursor(view, result.start, result.end);
     }
 }
 
@@ -310,10 +310,10 @@ COMMAND_PROC(RedoOnce)
 {
     View *view = CurrentView(editor);
 
-    int64_t pos = RedoOnce(view);
-    if (pos >= 0)
+    Range result = RedoOnce(view);
+    if (result.start >= 0)
     {
-        SetCursor(view, pos);
+        SetCursor(view, result.start, result.end);
     }
 }
 
@@ -485,7 +485,6 @@ COMMAND_PROC(Copy)
     Cursor *cursor = GetCursor(view);
 
     Range range = GetEditRange(cursor);
-    range.end += 1; // make this an inclusive range
     String string = BufferSubstring(buffer, range);
 
     platform->WriteClipboard(string);
@@ -534,6 +533,21 @@ CHANGE_PROC(PasteReplaceSelection)
     platform->WriteClipboard(replaced_string);
 }
 
+COMMAND_PROC(OpenNewLineBelow)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    CMD_EnterTextMode(editor);
+
+    int64_t insert_pos = FindLineEnd(buffer, cursor->pos, true);
+    // TODO: Get newline type from buffer
+    int64_t new_pos = BufferReplaceRange(buffer, MakeRange(insert_pos), "\n"_str);
+    new_pos = AutoIndentLineAt(buffer, new_pos);
+    SetCursor(view, new_pos);
+}
+
 TEXT_COMMAND_PROC(WriteText)
 {
     View *view = CurrentView(editor);
@@ -543,9 +557,19 @@ TEXT_COMMAND_PROC(WriteText)
     int64_t pos = cursor->pos;
 
     uint64_t start_ordinal = CurrentUndoOrdinal(buffer);
+    bool should_auto_indent = false;
     bool should_merge = false;
     for (size_t i = 0; i < text.size; i += 1)
     {
+        if (text.data[0] == '\n' ||
+            text.data[0] == '}' ||
+            text.data[0] == '{' ||
+            text.data[0] == '(' ||
+            text.data[0] == ')')
+        {
+            should_auto_indent = true;
+        }
+
         if (text.data[0] != '\n')
         {
             UndoNode *last_undo = CurrentUndoNode(buffer);
@@ -571,7 +595,10 @@ TEXT_COMMAND_PROC(WriteText)
     if (text.data[0] == '\n' || IsPrintableAscii(text.data[0]) || IsUtf8Byte(text.data[0]))
     {
         int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), text);
-        SetCursor(view, new_pos);
+        if (should_auto_indent)
+        {
+            AutoIndentLineAt(buffer, new_pos);
+        }
     }
     if (should_merge)
     {

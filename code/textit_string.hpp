@@ -33,4 +33,41 @@ struct ParseUtf8Result
     uint32_t advance;
 };
 
+template <size_t Capacity>
+struct FixedStringContainer
+{
+    static constexpr size_t capacity = Capacity;
+    size_t size;
+    uint8_t data[Capacity];
+
+    String
+    AsString()
+    {
+        return MakeString(size, data);
+    }
+
+    bool
+    CanFitAppend(String string)
+    {
+        size_t left = capacity - size;
+        return left >= string.size;
+    }
+
+    void
+    Append(String string)
+    {
+        size_t left = capacity - size;
+        size_t to_copy = Min(left, string.size);
+
+        CopyArray(to_copy, string.data, data + size);
+        size += to_copy;
+    }
+
+    void
+    Clear()
+    {
+        size = 0;
+    }
+};
+
 #endif /* TEXTIT_STRING_HPP */

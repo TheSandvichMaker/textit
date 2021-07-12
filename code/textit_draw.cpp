@@ -67,9 +67,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         actual_line_height += ((bounds.max.y - 1) - at_p.y);
     }
 
-    Range mark_range = GetEditRange(cursor);
+    Range selection = SanitizeRange(cursor->selection);
 
-    TokenBlock *block = buffer->tokens->first;
+    TokenBlock *block = buffer->tokens.first;
 
     int64_t token_index = 0;
 
@@ -156,10 +156,22 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         {
             color = text_comment;
         }
-        else if ((token->kind == Token_Identifier) &&
-            HasFlag(token->flags, TokenFlag_IsPreprocessor))
+        else if (token->kind == Token_Identifier)
         {
-            color = text_preprocessor;
+            if (HasFlag(token->flags, TokenFlag_IsPreprocessor))
+            {
+                color = text_preprocessor;
+            }
+            else
+            {
+                String string = MakeString(token->length, &buffer->text[token->pos]);
+                TokenKind kind = (TokenKind)PointerToInt(StringMapFind(buffer->language->idents, string));
+                if (kind)
+                {
+                    color = GetThemeColor(TokenThemeName(kind));
+                    token->kind = kind; // HIGHLY QUESTIONABLE!
+                }
+            }
         }
         else
         {
@@ -195,7 +207,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             Sprite sprite = MakeSprite(buffer->text[pos], color, text_background);
             if (draw_cursor &&
                 (editor_state->edit_mode == EditMode_Command) &&
-                (pos >= mark_range.start && pos <= mark_range.end))
+                (pos >= selection.start && pos <= selection.end))
             {
                 sprite.background = selection_background;
                 sprite.foreground.r = 255 - selection_background.r;
@@ -221,7 +233,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             if (draw_cursor &&
                 (editor_state->edit_mode == EditMode_Command) &&
-                (pos >= mark_range.start && pos <= mark_range.end))
+                (pos >= selection.start && pos <= selection.end))
             {
                 background = selection_background;
                 foreground.r = 255 - selection_background.r;
@@ -363,7 +375,7 @@ DrawCommandLineInput()
         }
     }
 
-    for (size_t i = 0; i < editor_state->command_line_count + 1; i += 1)
+    for (int i = 0; i < editor_state->command_line_count + 1; i += 1)
     {
         Sprite sprite;
         if (i < editor_state->command_line_count)

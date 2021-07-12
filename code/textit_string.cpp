@@ -299,6 +299,16 @@ PushString(Arena *arena, String string)
 }
 
 function String
+PushStringSpace(Arena *arena, int64_t size)
+{
+    String result = {};
+    result.size = size;
+    result.data = PushArray(arena, result.size + 1, uint8_t);
+    result.data[result.size] = 0;
+    return result;
+}
+
+function String
 PushStringFV(Arena *arena, const char *fmt, va_list args_init)
 {
     va_list args_size;

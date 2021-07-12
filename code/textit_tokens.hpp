@@ -30,6 +30,8 @@ TokenThemeName(TokenKind kind)
 {
     switch (kind)
     {
+        INCOMPLETE_SWITCH;
+
         case Token_Identifier: return "text_identifier"_str;
         case Token_Keyword: return "text_keyword"_str;
         case Token_FlowControl: return "text_flowcontrol"_str;

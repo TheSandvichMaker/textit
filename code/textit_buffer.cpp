@@ -269,6 +269,17 @@ FindLineEnd(Buffer *buffer, int64_t pos, bool include_newline = false)
     return result;
 }
 
+function int64_t
+FindFirstNonHorzWhitespace(Buffer *buffer, int64_t pos)
+{
+    int64_t result = pos;
+    while (IsInBufferRange(buffer, result) && IsHorizontalWhitespaceAscii(buffer->text[result]))
+    {
+        result += 1;
+    }
+    return result;
+}
+
 function Range
 EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
 {
@@ -397,9 +408,10 @@ CalculateRelativeMove(Buffer *buffer, int64_t cursor_pos, V2i delta)
 }
 
 function void
-PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
+PushUndoInternal(Buffer *buffer, int64_t pos, String forward, String backward)
 {
     auto undo = &buffer->undo;
+
     UndoNode *node = PushStruct(&buffer->arena, UndoNode);
 
     node->parent = undo->at;
@@ -409,12 +421,63 @@ PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
     undo->current_ordinal += 1;
     node->ordinal = undo->current_ordinal;
 
+    platform->DebugPrint("Pushing undo node, ordinal: %llu\n", node->ordinal);
+
     node->pos = pos;
     node->forward = forward;
     node->backward = backward;
 
     undo->at = node;
     undo->depth += 1;
+}
+
+function void
+FlushBufferedUndo(Buffer *buffer)
+{
+    auto undo = &buffer->undo;
+    if (undo->run_pos != -1)
+    {
+        platform->DebugPrint("Flushing undo buffer.\nfwd: '%.*s'\nbck: '%.*s'\n",
+                             StringExpand(undo->fwd_buffer),
+                             StringExpand(undo->bck_buffer));
+        PushUndoInternal(buffer,
+                         undo->run_pos,
+                         undo->fwd_buffer.AsString(),
+                         undo->bck_buffer.AsString());
+        undo->fwd_buffer.Clear();
+        undo->bck_buffer.Clear();
+        undo->run_pos = -1;
+        undo->insert_pos = -1;
+    }
+}
+
+function void
+PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
+{
+#if 0
+    auto undo = &buffer->undo;
+
+    if ((undo->run_pos == -1 || (undo->insert_pos == pos)) &&
+        undo->fwd_buffer.CanFitAppend(forward) &&
+        (backward.size == 0)) // TODO: Make backward buffering work
+    {
+        undo->fwd_buffer.Append(forward);
+        undo->bck_buffer.Append(backward);
+        platform->DebugPrint("Appending to undo buffer.\nfwd: '%.*s'\nbck: '%.*s'\n",
+                             StringExpand(undo->fwd_buffer),
+                             StringExpand(undo->bck_buffer));
+        if (undo->run_pos == -1)
+        {
+            undo->run_pos = pos;
+        }
+        undo->insert_pos = pos + forward.size;
+    }
+    else
+#endif
+    {
+        FlushBufferedUndo(buffer);
+        PushUndoInternal(buffer, pos, forward, backward);
+    }
 }
 
 function UndoNode *
@@ -474,7 +537,7 @@ MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
     }
     if (buffer->undo.current_ordinal == last_ordinal)
     {
-        buffer->undo.current_ordinal = first_ordinal;
+        buffer->undo.current_ordinal = first_ordinal + 1;
     }
 }
 
@@ -498,9 +561,9 @@ BufferPushRange(Arena *arena, Buffer *buffer, Range range)
 function int64_t
 ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
 {
-    if (pos > delta_pos)
+    if (pos >= delta_pos)
     {
-        pos += Min(delta, pos - delta_pos);
+        pos += delta;
     }
     return pos;
 }
@@ -531,8 +594,6 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
         return range.start;
     }
 
-    buffer->dirty = true;
-
     int64_t result = TextStorageReplaceRange(buffer, range, text);
 
     int64_t delta = range.start - range.end + (int64_t)text.size;
@@ -562,6 +623,11 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
     }
 
     PushUndo(buffer, range.start, forward, backward);
+
+    if (editor_state->edit_mode == EditMode_Command)
+    {
+        FlushBufferedUndo(buffer);
+    }
 
     int64_t result = BufferReplaceRangeNoUndoHistory(buffer, range, text);
     return result;

@@ -10,6 +10,7 @@
 #include "textit_view.cpp"
 #include "textit_command.cpp"
 #include "textit_theme.cpp"
+#include "textit_auto_indent.cpp"
 #include "textit_base_commands.cpp"
 #include "textit_draw.cpp"
 
@@ -98,6 +99,7 @@ function Range
 GetEditRange(Cursor *cursor)
 {
     Range result = SanitizeRange(cursor->selection);
+    result.end += 1;
     return result;
 }
 
@@ -121,11 +123,10 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->flags = flags;
     result->name = PushString(&result->arena, buffer_name);
     result->undo.at = &result->undo.root;
+    result->undo.run_pos = -1;
+    result->undo.insert_pos = -1;
 
     AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
-
-    result->tokens = &result->tokens_[0];
-    result->prev_tokens = &result->tokens_[1];
 
     editor->buffers[result->id.index] = result;
 
@@ -146,14 +147,7 @@ OpenBufferFromFile(String filename)
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
     result->language = editor_state->cpp_spec;
 
-    if (result->count < BUFFER_ASYNC_THRESHOLD)
-    {
-        TokenizeBuffer(result);
-    }
-    else
-    {
-        platform->AddJob(platform->low_priority_queue, result, TokenizeBufferJob);
-    }
+    TokenizeBuffer(result);
 
     return result;
 }
@@ -729,8 +723,6 @@ ExecuteCommand(View *view, Command *command)
             Cursor *cursor = GetCursor(view);
 
             Range edit_range = GetEditRange(cursor);
-            edit_range.end += 1; // Why?
-
             command->change(editor_state, edit_range);
 
             if (editor_state->last_movement)
@@ -813,6 +805,7 @@ HandleViewEvents(ViewID view_id)
                 if (AreEqual(command->name, "RepeatLastCommand"_str))
                 {
                     ExecuteCommand(view, editor_state->last_movement_for_change);
+                    editor_state->last_movement = editor_state->last_movement_for_change;
                     ExecuteCommand(view, editor_state->last_change);
                 }
                 else
@@ -820,6 +813,8 @@ HandleViewEvents(ViewID view_id)
                     ExecuteCommand(view, command);
                     switch (command->kind)
                     {
+                        INCOMPLETE_SWITCH;
+
                         case Command_Movement: { editor_state->last_movement = command; } break;
                         case Command_Change:
                         {
@@ -901,7 +896,7 @@ AppUpdateAndRender(Platform *platform_)
     if (editor_state->active_window->split != WindowSplit_Leaf)
     {
         platform->ReportError(PlatformError_Nonfatal, "Hey, the active window was not a leaf window, that's busted.");
-        while (!editor_state->active_window->split != WindowSplit_Leaf)
+        while (editor_state->active_window->split != WindowSplit_Leaf)
         {
             editor_state->active_window = editor_state->active_window->first_child;
         }
@@ -952,6 +947,8 @@ AppUpdateAndRender(Platform *platform_)
 
                     switch (event->input_code)
                     {
+                        INCOMPLETE_SWITCH;
+
                         case PlatformInputCode_Left:
                         {
                             if (editor_state->command_line_cursor > 0)
@@ -1055,7 +1052,8 @@ AppUpdateAndRender(Platform *platform_)
                                 editor_state->command_line_predictions[editor_state->command_line_prediction_count++] = command;
                             }
 
-                            if (editor_state->command_line_prediction_count >= ArrayCount(editor_state->command_line_predictions))
+                            if (editor_state->command_line_prediction_count >=
+                                (int64_t)ArrayCount(editor_state->command_line_predictions))
                             {
                                 break;
                             }
