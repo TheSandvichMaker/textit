@@ -18,6 +18,7 @@ enum TokenKind : uint32_t
     Token_OpenBlockComment,
     Token_CloseBlockComment,
     Token_Type,
+    Token_LineEnd,
 
     Token_LeftParen,
     Token_RightParen,
@@ -25,7 +26,7 @@ enum TokenKind : uint32_t
     Token_RightScope,
 };
 
-static inline String
+function String
 TokenThemeName(TokenKind kind)
 {
     switch (kind)
@@ -58,8 +59,9 @@ TokenThemeName(TokenKind kind)
 typedef uint32_t TokenFlags;
 enum TokenFlags_ENUM : TokenFlags
 {
-    TokenFlag_IsComment = 0x1,
+    TokenFlag_IsComment      = 0x1,
     TokenFlag_IsPreprocessor = 0x2,
+    TokenFlag_FirstInLine    = 0x4,
 };
 
 struct Token
@@ -97,7 +99,7 @@ struct TokenIterator
     Token *token;
 };
 
-static inline TokenIterator
+function TokenIterator
 MakeTokenIterator(TokenList *list, int64_t start_pos = 0)
 {
     TokenIterator result = {};
@@ -125,13 +127,13 @@ MakeTokenIterator(TokenList *list, int64_t start_pos = 0)
     return result;
 }
 
-static inline bool
+function bool
 IsValid(TokenIterator *it)
 {
     return !!it->block;
 }
 
-static inline Token *
+function Token *
 Next(TokenIterator *it)
 {
     Token *result = nullptr;
@@ -150,7 +152,7 @@ Next(TokenIterator *it)
     return result;
 }
 
-static inline Token *
+function Token *
 Prev(TokenIterator *it)
 {
     Token *result = nullptr;

@@ -143,8 +143,8 @@ MakeRangeStartLength(int64_t start, int64_t length)
 function int64_t
 ClampToRange(int64_t value, Range bounds)
 {
-    if (value < bounds.start) value = bounds.start;
-    if (value > bounds.end  ) value = bounds.end;
+    if (value >= bounds.end  ) value = bounds.end - 1;
+    if (value <  bounds.start) value = bounds.start;
     return value;
 }
 
@@ -163,6 +163,14 @@ RangeSize(Range range)
 {
     range = SanitizeRange(range);
     return range.end - range.start;
+}
+
+function Range
+TrimEnd(Range range, int64_t trim)
+{
+    range.end -= trim;
+    if (range.end < range.start) range.end = range.start;
+    return range;
 }
 
 function Range

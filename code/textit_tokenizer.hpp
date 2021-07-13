@@ -22,6 +22,7 @@ struct Tokenizer
 
     TokenizeFlags flags;
 
+    int token_count;
     TokenList *tokens;
 
     bool continue_next_line;
@@ -29,6 +30,7 @@ struct Tokenizer
     bool in_preprocessor;
     int block_comment_count;
 
+    uint8_t *start;
     uint8_t *at;
     uint8_t *end;
 };

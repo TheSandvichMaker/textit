@@ -24,6 +24,7 @@
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
 #include "textit_view.hpp"
+#include "textit_auto_indent.hpp"
 
 #define CURSOR_HASH_SIZE 512
 
@@ -83,6 +84,12 @@ function void DestroyWindow(Window *window);
 struct CoreConfig
 {
     bool visualize_newlines = false;
+
+    bool indent_with_tabs = false;
+    int indent_space_depth = 4;
+
+    IndentStyle paren_indent_style = IndentStyle_Hanging;
+    IndentStyle scope_indent_style = IndentStyle_Regular;
 };
 GLOBAL_STATE(CoreConfig, core_config);
 

@@ -203,7 +203,7 @@ MOVEMENT_PROC(MoveDown)
     Cursor *cursor = GetCursor(view);
 
     Move move;
-    move.selection = EncloseLine(buffer, cursor->pos, true);
+    move.selection = TrimEnd(EncloseLine(buffer, cursor->pos, true), 1);
     move.pos = CalculateRelativeMove(buffer, cursor->pos, MakeV2i(0, 1));
     return move;
 }
@@ -215,7 +215,7 @@ MOVEMENT_PROC(MoveUp)
     Cursor *cursor = GetCursor(view);
 
     Move move;
-    move.selection = EncloseLine(buffer, cursor->pos, true);
+    move.selection = TrimEnd(EncloseLine(buffer, cursor->pos, true), 1);
     move.pos = CalculateRelativeMove(buffer, cursor->pos, MakeV2i(0, -1));
     return move;
 }

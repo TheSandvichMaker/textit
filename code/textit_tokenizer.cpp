@@ -1,3 +1,10 @@
+function LineData *
+AllocateLineData(void)
+{
+    LineData *result = PushStruct(&editor_state->transient_arena, LineData);
+    return result;
+}
+
 function TokenBlock *
 AllocateTokenBlock(void)
 {
@@ -40,6 +47,7 @@ PushToken(Tokenizer *tok, const Token &t)
     if (t.pos + t.length > block->max_pos) block->max_pos = t.pos + t.length;
 
     block->tokens[block->count++] = t;
+    tok->token_count += 1;
 }
 
 function int64_t
@@ -89,7 +97,8 @@ TokenizeBuffer(Buffer *buffer)
     Tokenizer *tok = &tok_;
 
     tok->buffer = buffer;
-    tok->at = buffer->text;
+    tok->start = buffer->text;
+    tok->at = tok->start;
     tok->end = buffer->text + buffer->count;
 
     FreeTokens(&buffer->tokens);
@@ -101,6 +110,14 @@ TokenizeBuffer(Buffer *buffer)
     PlatformHighResTime start_time = platform->GetTime();
 
     int line_count = 1;
+    int tokens_at_start_of_line = 0;
+
+    bool at_newline = true;
+
+    LineData *line_data = &buffer->line_data[0];
+    ZeroStruct(line_data);
+
+    line_data->tokens = tok->tokens->first;
 
     while (CharsLeft(tok))
     {
@@ -109,9 +126,11 @@ TokenizeBuffer(Buffer *buffer)
             CharacterClassFlags c_class = CharacterizeByte(tok->at[0]);
             if (HasFlag(c_class, Character_Whitespace))
             {
+                tok->at += 1;
+
                 if (HasFlag(c_class, Character_VerticalWhitespace))
                 {
-                    line_count += 1;
+                    at_newline = true;
 
                     if (!tok->continue_next_line)
                     {
@@ -120,12 +139,26 @@ TokenizeBuffer(Buffer *buffer)
                     }
                     tok->continue_next_line = false;
 
-                    if ((tok->at[0] == '\r') && (tok->at[1] == '\n'))
+                    line_data->whitespace_pos = tok->at - tok->start - 1;
+
+                    if ((tok->at[-1] == '\r') && (tok->at[0] == '\n'))
                     {
                         tok->at += 1;
                     }
+
+                    line_data->range.end = tok->at - tok->start;
+                    
+                    line_count += 1;
+                    Assert(line_count <= 1000000);
+
+                    line_data = &buffer->line_data[line_count - 1];
+                    ZeroStruct(line_data);
+
+                    line_data->range.start = tok->at - tok->start;
+                    line_data->tokens = tok->tokens->last;
+                    line_data->token_count = tok->token_count - tokens_at_start_of_line;
+                    tokens_at_start_of_line = tok->token_count;
                 }
-                tok->at += 1;
             }
             else
             {
@@ -141,6 +174,11 @@ TokenizeBuffer(Buffer *buffer)
 
         Token t = {};
         t.kind = Token_Identifier;
+        if (at_newline)
+        {
+            t.flags |= TokenFlag_FirstInLine;
+        }
+        at_newline = false;
 
         uint8_t *start = tok->at;
 
@@ -239,6 +277,7 @@ TokenizeBuffer(Buffer *buffer)
                 tok->continue_next_line = true;
             } break;
 
+            case ';': { t.kind = Token_LineEnd; } break;
             case '(': { t.kind = Token_LeftParen; } break;
             case ')': { t.kind = Token_RightParen; } break;
             case '{': { t.kind = Token_LeftScope; } break;
@@ -276,6 +315,7 @@ TokenizeBuffer(Buffer *buffer)
         PushToken(tok, t);
     }
 
+    buffer->line_data[line_count - 1].range.end = buffer->count;
     buffer->line_count = line_count;
 
     PlatformHighResTime end_time = platform->GetTime();

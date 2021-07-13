@@ -9,7 +9,7 @@ enum LineEndKind
     LineEnd_CRLF,
 };
 
-static inline String
+function String
 LineEndString(LineEndKind kind)
 {
     switch (kind)
@@ -58,6 +58,21 @@ enum BufferFlags_ENUM : BufferFlags
     Buffer_ReadOnly = 0x2,
 };
 
+typedef uint32_t LineFlags;
+enum LineFlags_ENUM : LineFlags
+{
+    Line_Empty = 0x1,
+};
+
+struct LineData
+{
+    Range range;
+    int64_t whitespace_pos;
+    int token_count;
+    LineFlags flags;
+    TokenBlock *tokens;
+};
+
 #define TEXTIT_BUFFER_SIZE Megabytes(128)
 #define BUFFER_ASYNC_THRESHOLD Megabytes(4)
 struct Buffer : TextStorage
@@ -87,14 +102,52 @@ struct Buffer : TextStorage
 
     int line_count;
     TokenList tokens;
+
+    LineData line_data[1000000];
 };
 
-static inline Buffer *GetBuffer(BufferID id);
+function Buffer *GetBuffer(BufferID id);
+function Range GetLineRange(Buffer *buffer, int64_t line);
 
-static inline TokenIterator
+function bool
+IsInBufferRange(Buffer *buffer, int64_t pos)
+{
+    bool result = ((pos >= 0) && (pos < buffer->count));
+    return result;
+}
+
+function bool
+LineIsInBuffer(Buffer *buffer, int64_t line)
+{
+    return ((line >= 0) && (line < buffer->line_count));
+}
+
+function int64_t
+ClampToBufferRange(Buffer *buffer, int64_t pos)
+{
+    if (pos >= buffer->count) pos = buffer->count - 1;
+    if (pos < 0) pos = 0;
+    return pos;
+}
+
+function Range
+BufferRange(Buffer *buffer)
+{
+    return MakeRange(0, buffer->count);
+}
+
+function TokenIterator
 MakeTokenIterator(Buffer *buffer, int64_t start_pos = 0)
 {
     return MakeTokenIterator(&buffer->tokens, start_pos);
+}
+
+function TokenIterator
+IterateLineTokens(Buffer *buffer, int64_t line)
+{
+    Range range = GetLineRange(buffer, line);
+    TokenIterator result = MakeTokenIterator(buffer, range.start);
+    return result;
 }
 
 #endif /* TEXTIT_BUFFER_HPP */

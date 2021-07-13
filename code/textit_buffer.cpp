@@ -30,27 +30,6 @@ GuessLineEndKind(String string)
     return result;
 }
 
-function bool
-IsInBufferRange(Buffer *buffer, int64_t pos)
-{
-    bool result = ((pos >= 0) && (pos < buffer->count));
-    return result;
-}
-
-function int64_t
-ClampToBufferRange(Buffer *buffer, int64_t pos)
-{
-    if (pos >= buffer->count) pos = buffer->count - 1;
-    if (pos < 0) pos = 0;
-    return pos;
-}
-
-function Range
-BufferRange(Buffer *buffer)
-{
-    return MakeRange(0, buffer->count);
-}
-
 function uint8_t
 ReadBufferByte(Buffer *buffer, int64_t pos)
 {
@@ -293,6 +272,7 @@ EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
     while (IsInBufferRange(buffer, result.end + 1))
     {
         newline_length = PeekNewline(buffer, result.end + 1);
+        result.end += 1;
         if (newline_length)
         {
             if (including_newline)
@@ -301,43 +281,40 @@ EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
             }
             break;
         }
-        else
-        {
-            result.end += 1;
-        }
     }
     return result;
+}
+
+function Range
+GetLineRange(Buffer *buffer, int64_t line)
+{
+    Range range = {};
+    if (LineIsInBuffer(buffer, line))
+    {
+        range = buffer->line_data[line].range;
+    }
+    return range;
 }
 
 function BufferLocation
 CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
 {
-    // TESTME
-
     pos = ClampToBufferRange(buffer, pos);
 
     BufferLocation result = {};
 
-    while (result.pos < pos)
+    // TODO: Binary search
+    for (int64_t line = 0; line < buffer->line_count; line += 1)
     {
-        if (AdvanceOverNewline(buffer, &result.pos))
+        LineData *data = &buffer->line_data[line];
+        if ((pos >= data->range.start) &&
+            (pos <  data->range.end))
         {
-            result.line += 1;
-            result.col   = 0;
+            result.line = line;
+            result.pos  = Min(pos, data->whitespace_pos);
+            result.col  = result.pos - data->range.start;
+            result.line_range = data->range;
 
-            result.line_range.start = result.pos;
-            result.line_range.end = result.pos;
-        }
-        else
-        {
-            result.col += 1;
-        }
-    }
-
-    while (IsInBufferRange(buffer, result.line_range.end))
-    {
-        if (AdvanceOverNewline(buffer, &result.line_range.end))
-        {
             break;
         }
     }
@@ -348,41 +325,16 @@ CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
 function BufferLocation
 CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
 {
-    // TESTME
-
     BufferLocation result = {};
-
-    while (IsInBufferRange(buffer, result.pos) && (result.line < line))
+    if ((line >= 0) &&
+        (line < buffer->line_count))
     {
-        if (AdvanceOverNewline(buffer, &result.pos))
-        {
-            result.line += 1;
-            result.line_range.start = result.pos;
-            result.line_range.end = result.pos;
-        }
-        else
-        {
-            result.pos += 1;
-        }
-    }
-
-    while (IsInBufferRange(buffer, result.pos) && (result.col < col))
-    {
-        if (PeekNewline(buffer, result.pos))
-        {
-            break;
-        }
-
-        result.pos += 1;
-        result.col += 1;
-    }
-
-    while (IsInBufferRange(buffer, result.line_range.end))
-    {
-        if (AdvanceOverNewline(buffer, &result.line_range.end))
-        {
-            break;
-        }
+        LineData *data = &buffer->line_data[line];
+        Range whitespace_range = MakeRange(data->range.start, data->whitespace_pos);
+        result.line       = line;
+        result.col        = Min(col, RangeSize(whitespace_range));
+        result.pos        = ClampToRange(data->range.start + col, whitespace_range);
+        result.line_range = data->range;
     }
 
     return result;
