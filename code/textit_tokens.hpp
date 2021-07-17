@@ -18,7 +18,7 @@ enum TokenKind : uint32_t
     Token_OpenBlockComment,
     Token_CloseBlockComment,
     Token_Type,
-    Token_LineEnd,
+    Token_StatementEnd,
 
     Token_LeftParen,
     Token_RightParen,
@@ -45,6 +45,7 @@ TokenThemeName(TokenKind kind)
         case Token_CloseBlockComment: return "text_line_comment"_str;
         case Token_Type: return "text_type"_str;
     }
+    // single character tokens / scopes are dim
     if (kind < 128               ||
         kind == Token_LeftParen  ||
         kind == Token_RightParen ||
@@ -56,8 +57,7 @@ TokenThemeName(TokenKind kind)
     return "text_foreground"_str;
 }
 
-typedef uint32_t TokenFlags;
-enum TokenFlags_ENUM : TokenFlags
+enum_flags(int, TokenFlags)
 {
     TokenFlag_IsComment      = 0x1,
     TokenFlag_IsPreprocessor = 0x2,
@@ -88,16 +88,30 @@ struct TokenBlock
     TokenBlock *prev;
     int64_t min_pos;
     int64_t max_pos;
-    int64_t count;
+    int count;
     Token tokens[TOKEN_BLOCK_SIZE];
 };
 
 struct TokenIterator
 {
     TokenBlock *block;
-    int64_t index;
+    int index;
+    int count;
     Token *token;
 };
+
+function TokenIterator
+MakeTokenIterator(TokenBlock *block, int offset, int count = 0)
+{
+    Assert(offset < block->count);
+
+    TokenIterator result = {};
+    result.block = block;
+    result.index = offset;
+    result.count = count;
+    result.token = &result.block->tokens[result.index];
+    return result;
+}
 
 function TokenIterator
 MakeTokenIterator(TokenList *list, int64_t start_pos = 0)
@@ -148,6 +162,15 @@ Next(TokenIterator *it)
             it->index = 0;
             it->block = it->block->next;
         }
+
+        if (it->count > 0)
+        {
+            it->count -= 1;
+            if (it->count == 0)
+            {
+                it->block = nullptr;
+            }
+        }
     }
     return result;
 }
@@ -169,6 +192,15 @@ Prev(TokenIterator *it)
             if (it->block)
             {
                 it->index = it->block->count;
+            }
+        }
+
+        if (it->count > 0)
+        {
+            it->count -= 1;
+            if (it->count == 0)
+            {
+                it->block = nullptr;
             }
         }
     }

@@ -68,8 +68,9 @@ struct LineData
 {
     Range range;
     int64_t whitespace_pos;
-    int token_count;
     LineFlags flags;
+    int token_offset;
+    int token_count;
     TokenBlock *tokens;
 };
 
@@ -103,11 +104,13 @@ struct Buffer : TextStorage
     int line_count;
     TokenList tokens;
 
+    LineData null_line_data;
     LineData line_data[1000000];
 };
 
 function Buffer *GetBuffer(BufferID id);
 function Range GetLineRange(Buffer *buffer, int64_t line);
+function LineData *GetLineData(Buffer *buffer, int64_t line);
 
 function bool
 IsInBufferRange(Buffer *buffer, int64_t pos)
@@ -145,8 +148,8 @@ MakeTokenIterator(Buffer *buffer, int64_t start_pos = 0)
 function TokenIterator
 IterateLineTokens(Buffer *buffer, int64_t line)
 {
-    Range range = GetLineRange(buffer, line);
-    TokenIterator result = MakeTokenIterator(buffer, range.start);
+    LineData *line_data = GetLineData(buffer, line);
+    TokenIterator result = MakeTokenIterator(line_data->tokens, line_data->token_offset, line_data->token_count);
     return result;
 }
 

@@ -139,6 +139,10 @@ TokenizeBuffer(Buffer *buffer)
                     }
                     tok->continue_next_line = false;
 
+                    //
+                    // finish old line data
+                    //
+
                     line_data->whitespace_pos = tok->at - tok->start - 1;
 
                     if ((tok->at[-1] == '\r') && (tok->at[0] == '\n'))
@@ -147,16 +151,21 @@ TokenizeBuffer(Buffer *buffer)
                     }
 
                     line_data->range.end = tok->at - tok->start;
+                    line_data->token_count = tok->token_count - tokens_at_start_of_line;
                     
                     line_count += 1;
                     Assert(line_count <= 1000000);
+
+                    //
+                    // new line data
+                    //
 
                     line_data = &buffer->line_data[line_count - 1];
                     ZeroStruct(line_data);
 
                     line_data->range.start = tok->at - tok->start;
                     line_data->tokens = tok->tokens->last;
-                    line_data->token_count = tok->token_count - tokens_at_start_of_line;
+                    line_data->token_offset = line_data->tokens->count;
                     tokens_at_start_of_line = tok->token_count;
                 }
             }
@@ -277,7 +286,7 @@ TokenizeBuffer(Buffer *buffer)
                 tok->continue_next_line = true;
             } break;
 
-            case ';': { t.kind = Token_LineEnd; } break;
+            case ';': { t.kind = Token_StatementEnd; } break;
             case '(': { t.kind = Token_LeftParen; } break;
             case ')': { t.kind = Token_RightParen; } break;
             case '{': { t.kind = Token_LeftScope; } break;

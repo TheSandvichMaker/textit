@@ -13,16 +13,22 @@ enum CommandKind
     Command_Change,
 };
 
+enum_flags(int, MoveFlags)
+{
+    MoveFlag_Sticky = 0x1,
+};
+
 struct Move
 {
     Range selection;
     int64_t pos;
+    MoveFlags flags;
 };
 
 function Move
 MakeMove(Range selection, int64_t pos = -1)
 {
-    Move result;
+    Move result = {};
     result.selection = selection;
     result.pos       = pos;
     if (pos < 0)

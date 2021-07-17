@@ -1,8 +1,8 @@
 function int64_t
 AutoIndentLineAt(Buffer *buffer, int64_t pos)
 {
-    int64_t indent_spaces = 0;
-    int64_t indent_tabs   = 0;
+    int64_t target_indent_column = 0;
+    int64_t indent_width = core_config->indent_width;
 
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos);
 
@@ -12,51 +12,62 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
     TokenIterator it = MakeTokenIterator(buffer, first_non_whitespace);
     Token *anchor = nullptr;
     Token *prev_line_token = nullptr;
-    int scope_depth = 0;
-    int paren_depth = 0;
-    for (;;)
+    int64_t scope_depth = 0;
+    int64_t paren_depth = 0;
+
+    Token *t = it.token;
+    if (t->pos < loc.line_range.end)
     {
-        Token *t = it.token;
-        if ((t->pos < loc.line_range.end) &&
-            (t->kind == Token_RightScope))
+        if (t->kind == Token_RightScope)
         {
-            indent_spaces -= 4; // horrible
+            target_indent_column -= indent_width;
         }
+    }
 
-        t = Prev(&it);
-        if (!t) break;
-
-        if (!HasFlag(t->flags, TokenFlag_IsPreprocessor|TokenFlag_IsComment))
+    Token *line_token = IterateLineTokens(buffer, loc.line).token;
+    if (line_token->kind == Token_Preprocessor)
+    {
+        target_indent_column = 0;
+    }
+    else
+    {
+        for (;;)
         {
-            if (t->kind == Token_RightParen) paren_depth += 1;
-            if (t->kind == Token_RightScope) scope_depth += 1;
+            t = Prev(&it);
+            if (!t) break;
 
-            if (t->kind == Token_LeftParen)
+            if (!HasFlag(t->flags, TokenFlag_IsComment))
             {
-                paren_depth -= 1;
-                if (paren_depth < 0)
+                if (t->kind == Token_RightParen) paren_depth += 1;
+                if (t->kind == Token_RightScope) scope_depth += 1;
+
+                if (t->kind == Token_LeftParen)
                 {
-                    anchor = t;
-                    break;
+                    paren_depth -= 1;
+                    if (paren_depth < 0)
+                    {
+                        anchor = t;
+                        break;
+                    }
                 }
-            }
 
-            if (t->kind == Token_LeftScope)
-            {
-                scope_depth -= 1;
-                if (scope_depth < 0)
+                if (t->kind == Token_LeftScope)
                 {
-                    anchor = t;
-                    break;
+                    scope_depth -= 1;
+                    if (scope_depth < 0)
+                    {
+                        anchor = t;
+                        break;
+                    }
                 }
-            }
 
-            if (!prev_line_token &&
-                (paren_depth == 0) &&
-                (scope_depth == 0) &&
-                HasFlag(t->flags, TokenFlag_FirstInLine))
-            {
-                prev_line_token = t;
+                if (!prev_line_token &&
+                    (paren_depth == 0) &&
+                    (scope_depth == 0) &&
+                    HasFlag(t->flags, TokenFlag_FirstInLine))
+                {
+                    prev_line_token = t;
+                }
             }
         }
     }
@@ -88,11 +99,11 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
 
             if (c == ' ')
             {
-                indent_spaces += 1;
+                target_indent_column += 1;
             }
             else if (c == '\t')
             {
-                indent_tabs += 1;
+                target_indent_column += indent_width;
             }
             else
             {
@@ -104,12 +115,12 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
         {
             if (core_config->scope_indent_style == IndentStyle_Hanging)
             {
-                indent_spaces = anchor->pos - line_range.start + 1;
+                target_indent_column = anchor->pos - line_range.start + 1;
             }
             else
             {
                 Assert(core_config->scope_indent_style == IndentStyle_Regular);
-                indent_spaces += 4; // TODO: Get from config
+                target_indent_column += indent_width;
             }
         }
 
@@ -117,26 +128,38 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
         {
             if (core_config->paren_indent_style == IndentStyle_Hanging)
             {
-                indent_spaces = anchor->pos - line_range.start + 1;
+                target_indent_column = anchor->pos - line_range.start + 1;
             }
             else
             {
                 Assert(core_config->paren_indent_style == IndentStyle_Regular);
-                indent_spaces += 4; // TODO: Get from config
+                target_indent_column += indent_width;
             }
         }
     }
 
-    indent_spaces = Max(0, indent_spaces);
-    indent_tabs   = Max(0, indent_tabs);
+    target_indent_column = Max(0, target_indent_column);
 
-    String string = PushStringSpace(platform->GetTempArena(), indent_spaces + indent_tabs);
+    int64_t tabs = 0;
+    int64_t spaces = 0;
+
+    if (core_config->indent_with_tabs)
+    {
+        tabs   = target_indent_column / indent_width;
+        spaces = target_indent_column % indent_width;
+    }
+    else
+    {
+        spaces = target_indent_column;
+    }
+
+    String string = PushStringSpace(platform->GetTempArena(), tabs + spaces);
     size_t at = 0;
-    for (int64_t i = 0; i < indent_tabs; i += 1)
+    for (int64_t i = 0; i < tabs; i += 1)
     {
         string.data[at++] = '\t';
     }
-    for (int64_t i = 0; i < indent_spaces; i += 1)
+    for (int64_t i = 0; i < spaces; i += 1)
     {
         string.data[at++] = ' ';
     }

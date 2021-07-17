@@ -27,7 +27,7 @@ function void
 MoveCursorRelative(View *view, V2i delta)
 {
     Cursor *cursor = GetCursor(view);
-    cursor->pos = CalculateRelativeMove(GetBuffer(view), cursor->pos, delta);
+    cursor->pos = CalculateRelativeMove(GetBuffer(view), cursor, delta).pos;
 }
 
 function Range

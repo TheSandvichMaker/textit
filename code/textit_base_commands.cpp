@@ -67,6 +67,10 @@ MOVEMENT_PROC(MoveLeft)
     int64_t pos = cursor->pos;
     Range line_range = EncloseLine(buffer, pos);
     pos = ClampToRange(pos - 1, line_range);
+
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos);
+    cursor->sticky_col = loc.col;
+
     return MakeMove(pos);
 }
 
@@ -79,6 +83,10 @@ MOVEMENT_PROC(MoveRight)
     int64_t pos = cursor->pos;
     Range line_range = EncloseLine(buffer, pos);
     pos = ClampToRange(pos + 1, line_range);
+
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos);
+    cursor->sticky_col = loc.col;
+
     return MakeMove(pos);
 }
 
@@ -90,6 +98,9 @@ MOVEMENT_PROC(MoveLeftIdentifier)
 
     int64_t pos = cursor->pos;
     Range result = ScanWordBackward(buffer, pos);
+
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.end);
+    cursor->sticky_col = loc.col;
 
     return MakeMove(result);
 }
@@ -103,6 +114,9 @@ MOVEMENT_PROC(MoveRightIdentifier)
     int64_t pos = cursor->pos;
     Range result = ScanWordForward(buffer, pos);
 
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.end);
+    cursor->sticky_col = loc.col;
+
     return MakeMove(result);
 }
 
@@ -111,6 +125,8 @@ MOVEMENT_PROC(MoveLineStart)
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
+
+    cursor->sticky_col = 0;
 
     int64_t pos = cursor->pos;
     Range line_range = EncloseLine(buffer, pos, true);
@@ -123,9 +139,17 @@ MOVEMENT_PROC(MoveLineEnd)
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
+    cursor->sticky_col = 9999;
+
     int64_t pos = cursor->pos;
-    Range line_range = EncloseLine(buffer, pos, true);
-    return MakeMove(MakeRange(pos, line_range.end));
+    int64_t end = FindLineEnd(buffer, pos);
+
+    Move move = {};
+    move.selection.start = pos;
+    move.selection.end   = end;
+    move.pos             = end;
+
+    return move;
 }
 
 MOVEMENT_PROC(EncloseLine)
@@ -202,9 +226,9 @@ MOVEMENT_PROC(MoveDown)
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    Move move;
+    Move move = {};
     move.selection = TrimEnd(EncloseLine(buffer, cursor->pos, true), 1);
-    move.pos = CalculateRelativeMove(buffer, cursor->pos, MakeV2i(0, 1));
+    move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, 1)).pos;
     return move;
 }
 
@@ -214,9 +238,9 @@ MOVEMENT_PROC(MoveUp)
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    Move move;
+    Move move = {};
     move.selection = TrimEnd(EncloseLine(buffer, cursor->pos, true), 1);
-    move.pos = CalculateRelativeMove(buffer, cursor->pos, MakeV2i(0, -1));
+    move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, -1)).pos;
     return move;
 }
 
@@ -565,7 +589,8 @@ TEXT_COMMAND_PROC(WriteText)
             text.data[0] == '}' ||
             text.data[0] == '{' ||
             text.data[0] == '(' ||
-            text.data[0] == ')')
+            text.data[0] == ')' ||
+            text.data[0] == '#')
         {
             should_auto_indent = true;
         }

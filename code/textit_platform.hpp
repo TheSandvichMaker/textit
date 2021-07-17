@@ -88,6 +88,7 @@
 #define PointerToInt(i) (intptr_t)(i)
 
 #define function static inline
+#define enum_flags(type, name) typedef type name; enum name##_ENUM : type
 
 #include "textit_types.hpp"
 #include "textit_intrinsics.hpp"

@@ -52,6 +52,7 @@ GetCursorInternal(ViewID view, BufferID buffer, bool make_if_missing)
         editor_state->cursor_hash[slot] = entry;
 
         entry->key = key;
+
         ZeroStruct(&entry->cursor);
     }
 

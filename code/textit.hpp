@@ -86,7 +86,7 @@ struct CoreConfig
     bool visualize_newlines = false;
 
     bool indent_with_tabs = false;
-    int indent_space_depth = 4;
+    int indent_width = 4;
 
     IndentStyle paren_indent_style = IndentStyle_Hanging;
     IndentStyle scope_indent_style = IndentStyle_Regular;
@@ -96,7 +96,7 @@ GLOBAL_STATE(CoreConfig, core_config);
 struct Cursor
 {
     Cursor *next;
-    int64_t sticky_col; // << HELLO
+    int64_t sticky_col;
 
     int64_t pos;
     Range selection;

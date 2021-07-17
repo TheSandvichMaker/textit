@@ -285,6 +285,17 @@ EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
     return result;
 }
 
+function LineData *
+GetLineData(Buffer *buffer, int64_t line)
+{
+    LineData *result = &buffer->null_line_data;
+    if (LineIsInBuffer(buffer, line))
+    {
+        result = &buffer->line_data[line];
+    }
+    return result;
+}
+
 function Range
 GetLineRange(Buffer *buffer, int64_t line)
 {
@@ -335,28 +346,40 @@ CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
         result.col        = Min(col, RangeSize(whitespace_range));
         result.pos        = ClampToRange(data->range.start + col, whitespace_range);
         result.line_range = data->range;
+
+#if 0
+        while (IsInBufferRange(buffer, pos) &&
+               IsTrailingUtf8Byte(ReadBufferByte(buffer, pos)))
+        {
+            pos += SignOf(delta.x);
+        }
+#endif
     }
 
     return result;
 }
 
-function int64_t
-CalculateRelativeMove(Buffer *buffer, int64_t cursor_pos, V2i delta)
+function BufferLocation
+CalculateRelativeMove(Buffer *buffer, Cursor *cursor, V2i delta)
 {
-    BufferLocation curr_loc = CalculateBufferLocationFromPos(buffer, cursor_pos);
+    BufferLocation curr_loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+
     int64_t target_line = curr_loc.line + delta.y;
     int64_t target_col  = curr_loc.col  + delta.x;
-    BufferLocation target_loc = CalculateBufferLocationFromLineCol(buffer, target_line, target_col);
 
-    int64_t pos = target_loc.pos;
-
-    while (IsInBufferRange(buffer, pos) &&
-           IsTrailingUtf8Byte(ReadBufferByte(buffer, pos)))
+    if (!delta.x && delta.y)
     {
-        pos += SignOf(delta.x);
+        target_col = cursor->sticky_col;
     }
 
-    return pos;
+    BufferLocation result = CalculateBufferLocationFromLineCol(buffer, target_line, target_col);
+
+    if (delta.x)
+    {
+        cursor->sticky_col = result.col;
+    }
+
+    return result;
 }
 
 function void
