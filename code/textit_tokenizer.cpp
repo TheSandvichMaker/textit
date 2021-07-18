@@ -207,10 +207,11 @@ TokenizeBuffer(Buffer *buffer)
         {
             default:
             {
-                if (IsAlphabeticAscii(c) || c == '_')
+                if (IsHeadUtf8Byte(c) || IsAlphabeticAscii(c) || c == '_')
                 {
                     t.kind = Token_Identifier;
-                    while (CharsLeft(tok) && IsValidIdentifierAscii(Peek(tok)))
+                    while (CharsLeft(tok) &&
+                           (IsValidIdentifierAscii(Peek(tok)) || IsUtf8Byte(Peek(tok))))
                     {
                         tok->at += 1;
                     }

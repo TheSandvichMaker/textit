@@ -128,6 +128,10 @@ struct CommandRegisterHelper
     CommandRegisterHelper(CommandKind kind, String name, void *proc, String description = ""_str, CommandFlags flags = 0)
     {
         Assert(FindCommand(name) == NullCommand());
+        if (description.size > 0)
+        {
+            flags |= Command_Visible;
+        }
         if (command_list->command_count < ArrayCount(command_list->commands))
         {
             Command *command = &command_list->commands[command_list->command_count++];

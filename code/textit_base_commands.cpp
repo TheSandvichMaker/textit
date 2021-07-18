@@ -1,9 +1,21 @@
+COMMAND_PROC(LoadDefaultIndentRules,
+             "Load the default indent rules for the current buffer"_str)
+{
+    LoadDefaultIndentRules(&editor->default_indent_rules);
+}
+
+COMMAND_PROC(LoadOtherIndentRules,
+             "Load the other indent rules for the current buffer"_str)
+{
+    LoadOtherIndentRules(&editor->default_indent_rules);
+}
+
 COMMAND_PROC(EnterCommandLineMode)
 {
     editor->input_mode = InputMode_CommandLine;
 }
 
-COMMAND_PROC(Exit, "Exit the editor"_str, Command_Visible)
+COMMAND_PROC(Exit, "Exit the editor"_str)
 {
     UNUSED_VARIABLE(editor);
     platform->exit_requested = true;
@@ -22,6 +34,14 @@ COMMAND_PROC(EnterTextMode,
     editor->enter_text_mode_undo_ordinal = CurrentUndoOrdinal(CurrentBuffer(editor));
 }
 
+COMMAND_PROC(Append)
+{
+    View *view = CurrentView(editor);
+    Cursor *cursor = GetCursor(view);
+    cursor->pos += 1;
+    CMD_EnterTextMode(editor);
+}
+
 COMMAND_PROC(EnterCommandMode,
              "Enter Command Mode"_str)
 {
@@ -30,11 +50,17 @@ COMMAND_PROC(EnterCommandMode,
     Buffer *buffer = CurrentBuffer(editor);
     FlushBufferedUndo(buffer);
     MergeUndoHistory(buffer, editor->enter_text_mode_undo_ordinal, buffer->undo.current_ordinal);
+
+    View *view = CurrentView(editor);
+    Cursor *cursor = GetCursor(view);
+
+    BufferLocation loc = CalculateRelativeMove(buffer, cursor, MakeV2i(-1, 0));
+    cursor->pos = loc.pos;
+    cursor->sticky_col = loc.col;
 }
 
 COMMAND_PROC(CenterView,
-             "Center the view around the cursor"_str,
-             Command_Visible)
+             "Center the view around the cursor"_str)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
@@ -45,13 +71,13 @@ COMMAND_PROC(CenterView,
     view->scroll_at = loc.line - viewport_height / 2;
 }
 
-COMMAND_PROC(JumpToBufferStart, "Jump to the start of the buffer"_str, Command_Visible)
+COMMAND_PROC(JumpToBufferStart, "Jump to the start of the buffer"_str)
 {
     View *view = CurrentView(editor);
     SetCursor(view, 0);
 }
 
-COMMAND_PROC(JumpToBufferEnd, "Jump to the end of the buffer"_str, Command_Visible)
+COMMAND_PROC(JumpToBufferEnd, "Jump to the end of the buffer"_str)
 {
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
@@ -346,25 +372,25 @@ COMMAND_PROC(SelectNextUndoBranch)
     SelectNextUndoBranch(CurrentBuffer(editor));
 }
 
-COMMAND_PROC(SplitWindowVertical, "Split the window along the vertical axis"_str, Command_Visible)
+COMMAND_PROC(SplitWindowVertical, "Split the window along the vertical axis"_str)
 {
     Window *window = editor->active_window;
     SplitWindow(window, WindowSplit_Vert);
 }
 
-COMMAND_PROC(SplitWindowHorizontal, "Split the window along the horizontal axis"_str, Command_Visible)
+COMMAND_PROC(SplitWindowHorizontal, "Split the window along the horizontal axis"_str)
 {
     Window *window = editor->active_window;
     SplitWindow(window, WindowSplit_Horz);
 }
 
-COMMAND_PROC(DestroyWindow, "Destroy the current active window"_str, Command_Visible)
+COMMAND_PROC(DestroyWindow, "Destroy the current active window"_str)
 {
     Window *window = editor->active_window;
     DestroyWindow(window);
 }
 
-COMMAND_PROC(FocusWindowLeft, "Focus the next window on the left"_str, Command_Visible)
+COMMAND_PROC(FocusWindowLeft, "Focus the next window on the left"_str)
 {
     Window *window = editor->active_window;
 
@@ -391,7 +417,7 @@ COMMAND_PROC(FocusWindowLeft, "Focus the next window on the left"_str, Command_V
     }
 }
 
-COMMAND_PROC(FocusWindowRight, "Focus the next window on the right"_str, Command_Visible)
+COMMAND_PROC(FocusWindowRight, "Focus the next window on the right"_str)
 {
     Window *window = editor->active_window;
 
@@ -418,7 +444,7 @@ COMMAND_PROC(FocusWindowRight, "Focus the next window on the right"_str, Command
     }
 }
 
-COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str, Command_Visible)
+COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str)
 {
     Window *window = editor->active_window;
 
@@ -445,7 +471,7 @@ COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str, Command_Visible)
     }
 }
 
-COMMAND_PROC(FocusWindowDown, "Focus the next window down"_str, Command_Visible)
+COMMAND_PROC(FocusWindowDown, "Focus the next window down"_str)
 {
     Window *window = editor->active_window;
 

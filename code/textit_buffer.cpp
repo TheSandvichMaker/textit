@@ -206,6 +206,12 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
         pos -= 1;
     }
 
+    while (IsInBufferRange(buffer, pos) &&
+           IsVerticalWhitespaceAscii(ReadBufferByte(buffer, pos)))
+       {
+           pos -= 1;
+       }
+
     result.end = pos;
     return result;
 }

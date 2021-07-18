@@ -1,7 +1,7 @@
 #ifndef TEXTIT_TOKENS_HPP
 #define TEXTIT_TOKENS_HPP
 
-enum TokenKind : uint32_t
+enum TokenKind : uint8_t
 {
     Token_None = 0,
 
@@ -24,6 +24,10 @@ enum TokenKind : uint32_t
     Token_RightParen,
     Token_LeftScope,
     Token_RightScope,
+
+    // "ghost" tokens, mark-up of the code for convenience that doesn't match actual physical characters
+
+    Token_LineEnd,
 
     Token_COUNT,
 };

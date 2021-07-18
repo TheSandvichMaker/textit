@@ -1,211 +1,3 @@
-#if 0
-function int64_t
-AutoIndentLineAt(Buffer *buffer, int64_t pos)
-{
-    IndentRules *rules = buffer->indent_rules;
-
-    int64_t target_indent_column = 0;
-    int64_t indent_width         = core_config->indent_width;
-
-    LineData *line_data = &buffer->null_line_data;
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos, &line_data);
-
-    int64_t line_start = loc.line_range.start;
-    int64_t first_non_whitespace = FindFirstNonHorzWhitespace(buffer, line_start);
-
-    TokenIterator it = MakeTokenIterator(line_data);
-
-    bool force = false;
-
-    TokenFlags required_flags_mask = TokenFlag_IsPreprocessor|TokenFlag_IsComment;
-    TokenFlags required_flags = 0;
-
-    Token *t = it.token;
-    if (t->pos < loc.line_range.end)
-    {
-        // this is the token we're currently writing
-
-        // if we're in a comment, align within comment,
-        // if we're in a preprocessor directive, align within preprocessor directive
-        required_flags |= t->flags & required_flags_mask;
-
-        IndentState state = rules->states[t->kind];
-        if (state & IndentState_EndRegular)
-        {
-            target_indent_column -= indent_width;
-        }
-        else if (state & IndentState_ForceLeft)
-        {
-            force = true;
-            target_indent_column = 0;
-        }
-    }
-
-    if (!force)
-    {
-        // find anchor
-
-        Token   *anchor          = nullptr;
-        Token   *prev_line_token = nullptr;
-        int64_t  regular_depth   = 0;
-        int64_t  hanging_depth   = 0;
-        int64_t  unfinished_statement_depth = 0;
-
-        for (;;)
-        {
-            t = Prev(&it);
-            if (!t) break;
-
-            if ((t->flags & required_flags_mask) == required_flags)
-            {
-                IndentState state = rules->states[t->kind];
-
-                if (state & IndentState_EndRegular) regular_depth += 1;
-                if (state & IndentState_EndHanging) hanging_depth += 1;
-
-                if (state & IndentState_BeginRegular)
-                {
-                    regular_depth -= 1;
-                    if (regular_depth < 0)
-                    {
-                        anchor = t;
-                        break;
-                    }
-                }
-
-                if (state & IndentState_BeginHanging)
-                {
-                    hanging_depth -= 1;
-                    if (hanging_depth < 0)
-                    {
-                        anchor = t;
-                        break;
-                    }
-                }
-
-                if (HasFlag(t->flags, TokenFlag_LastInLine) &&
-                    (t->kind == Token_StatementEnd))
-                {
-                    unfinished_statement_depth += 1;
-                }
-
-                if (HasFlag(t->flags, TokenFlag_LastInLine) &&
-                    (t->kind != Token_StatementEnd))
-                {
-                    unfinished_statement_depth -= 1;
-                    if (unfinished_statement_depth < 0)
-                    {
-                        anchor = t;
-                    }
-                    break;
-                }
-
-                if (!prev_line_token &&
-                    (regular_depth == 0) &&
-                    (hanging_depth == 0) &&
-                    HasFlag(t->flags, TokenFlag_FirstInLine))
-                {
-                    prev_line_token = t;
-                }
-            }
-        }
-
-        if (prev_line_token)
-        {
-            // see if previous line should override the anchor
-
-            if (anchor)
-            {
-                int64_t prev_line_start = FindLineStart(buffer, prev_line_token->pos);
-                if (prev_line_start > anchor->pos)
-                {
-                    anchor = prev_line_token;
-                }
-            }
-            else
-            {
-                anchor = prev_line_token;
-            }
-        }
-
-        if (anchor)
-        {
-            // determine anchor depth
-
-            Range line_range = EncloseLine(buffer, anchor->pos);
-            int64_t scan_pos = line_range.start;
-            while (scan_pos < line_range.end)
-            {
-                uint8_t c = ReadBufferByte(buffer, scan_pos);
-                scan_pos += 1;
-
-                if (c == ' ')
-                {
-                    target_indent_column += 1;
-                }
-                else if (c == '\t')
-                {
-                    target_indent_column += indent_width;
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            // adjust depth based on anchor indent rules
-
-            IndentState anchor_state = rules->states[anchor->kind];
-            if (anchor->flags & TokenFlag_LastInLine)
-            {
-                anchor_state = rules->unfinished_statement;
-            }
-
-            if (anchor_state & IndentState_BeginRegular)
-            {
-                target_indent_column += indent_width;
-            }
-            else if (anchor_state & IndentState_BeginHanging)
-            {
-                target_indent_column = anchor->pos - line_range.start + 1;
-            }
-        }
-    }
-
-    target_indent_column = Max(0, target_indent_column);
-
-    // emit indentation
-
-    int64_t tabs   = 0;
-    int64_t spaces = 0;
-    if (core_config->indent_with_tabs)
-    {
-        tabs   = target_indent_column / indent_width;
-        spaces = target_indent_column % indent_width;
-    }
-    else
-    {
-        spaces = target_indent_column;
-    }
-
-    String string = PushStringSpace(platform->GetTempArena(), tabs + spaces);
-
-    size_t at = 0;
-    for (int64_t i = 0; i < tabs; i += 1)
-    {
-        string.data[at++] = '\t';
-    }
-    for (int64_t i = 0; i < spaces; i += 1)
-    {
-        string.data[at++] = ' ';
-    }
-    Assert(at == string.size);
-
-    int64_t result = BufferReplaceRange(buffer, MakeRange(line_start, first_non_whitespace), string);
-
-    return result;
-}
-#else
 function int64_t
 AutoIndentLineAt(Buffer *buffer, int64_t pos)
 {
@@ -222,36 +14,49 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
     TokenIterator it = MakeTokenIterator(buffer, first_non_whitespace);
 
     Token *first_token = it.token;
+    if (first_token->pos >= line_end) first_token = nullptr;
 
     Arena *arena = platform->GetTempArena();
     ScopedMemory temp(arena);
 
-    NestPair *first_nest  = nullptr;
-    NestPair *anchor_nest = nullptr;
-    Token *anchor         = nullptr;
-    Token *prev_line      = nullptr;
-    for (;;)
-    {
-        Token *t = Prev(&it);
-        if (!t) break;
+    int nest_stack_at = 0;
+    TokenKind *nest_stack = PushArrayNoClear(arena, 257, TokenKind) + 1;
 
+    Token *anchor = nullptr;
+    Token *t      = Prev(&it);
+
+    bool unfinished_statement = false;
+    if (!(rules->table[t->kind] & IndentRule_AffectsIndent) &&
+        (t->flags & TokenFlag_LastInLine) &&
+        ((t->kind != Token_StatementEnd) &&
+         (t->kind != ',')))
+    {
+        unfinished_statement = true;
+    }
+
+    while (t)
+    {
         if (t->pos >= line_end) continue;
         if (t->pos >= line_start) continue;
 
-        IndentState state = rules->states[t->kind];
-        if (state & IndentState_EndAny)
+        IndentRule state = rules->table[t->kind];
+        if (state & IndentRule_EndAny)
         {
-            NestPair *nest = PushStruct(arena, NestPair);
-            nest->closing_token = GetOtherNestTokenKind(t->kind);
-            SllStackPush(first_nest, nest);
+            if (nest_stack_at < 256)
+            {
+                nest_stack[nest_stack_at++] = GetOtherNestTokenKind(t->kind);
+            }
+            else
+            {
+                INVALID_CODE_PATH;
+            }
         }
 
-        if (state & IndentState_BeginAny)
+        if (state & IndentRule_BeginAny)
         {
-            if (first_nest &&
-                (first_nest->closing_token == t->kind))
+            if (nest_stack[nest_stack_at - 1] == t->kind)
             {
-                anchor_nest = SllStackPop(first_nest);
+                nest_stack_at -= 1;
             }
             else
             {
@@ -260,12 +65,7 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
             }
         }
 
-        if (!prev_line &&
-            !first_nest &&
-            (t->flags & TokenFlag_FirstInLine))
-        {
-            prev_line = t;
-        }
+        t = Prev(&it);
     }
 
     int64_t indent_width = core_config->indent_width;
@@ -274,26 +74,47 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
     if (anchor)
     {
         int64_t start = FindLineStart(buffer, anchor->pos);
-        int64_t depth = anchor->pos - start;
+        int64_t end   = FindFirstNonHorzWhitespace(buffer, start);
+        int64_t indent_depth = end - start;
+        int64_t anchor_depth = anchor->pos - start;
 
-        IndentState anchor_state = rules->states[anchor->kind];
-        if (anchor_state & IndentState_BeginAny)
+        IndentRule anchor_state = rules->table[anchor->kind];
+        if (anchor_state & IndentRule_BeginAny)
         {
-            if (first_token->kind == GetOtherNestTokenKind(anchor->kind))
+            if (first_token &&
+                (first_token->kind == GetOtherNestTokenKind(anchor->kind)))
             {
-                depth = anchor->pos - start;
+                if (anchor_state & IndentRule_Regular)
+                {
+                    indent = indent_depth;
+                }
+                else if (anchor_state & IndentRule_Hanging)
+                {
+                    indent = anchor_depth;
+                }
+                unfinished_statement = false; // TODO: feels like this could be handled "more elegantly"?
             }
-            else if (anchor_state & IndentState_BeginRegular)
+            else if (anchor_state & IndentRule_BeginRegular)
             {
-                depth += indent_width;
+                if (anchor_state & IndentRule_Additive)
+                {
+                    indent = anchor_depth + indent_width;
+                }
+                else
+                {
+                    indent = indent_depth + indent_width;
+                }
             }
-            else if (anchor_state & IndentState_BeginHanging)
+            else if (anchor_state & IndentRule_BeginHanging)
             {
-                depth += anchor->length;
+                indent = anchor_depth + anchor->length;
             }
         }
+    }
 
-        indent = depth;
+    if (unfinished_statement)
+    {
+        indent += indent_width;
     }
 
     indent = Max(0, indent);
@@ -329,15 +150,27 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
 
     return result;
 }
-#endif
 
 function void
 LoadDefaultIndentRules(IndentRules *rules)
 {
-    rules->unfinished_statement       = IndentState_BeginRegular;
-    rules->states[Token_LeftParen]    = IndentState_BeginHanging;
-    rules->states[Token_RightParen]   = IndentState_EndHanging;
-    rules->states[Token_LeftScope]    = IndentState_BeginRegular;
-    rules->states[Token_RightScope]   = IndentState_EndRegular;
-    rules->states[Token_Preprocessor] = IndentState_ForceLeft;
+    ZeroStruct(rules);
+    rules->unfinished_statement      = IndentRule_BeginRegular;
+    rules->table[Token_LeftParen]    = IndentRule_BeginHanging;
+    rules->table[Token_RightParen]   = IndentRule_EndHanging;
+    rules->table[Token_LeftScope]    = IndentRule_Additive|IndentRule_BeginRegular;
+    rules->table[Token_RightScope]   = IndentRule_Additive|IndentRule_EndRegular;
+    rules->table[Token_Preprocessor] = IndentRule_ForceLeft;
+}
+
+function void
+LoadOtherIndentRules(IndentRules *rules)
+{
+    ZeroStruct(rules);
+    rules->unfinished_statement      = IndentRule_BeginRegular;
+    rules->table[Token_LeftParen]    = IndentRule_BeginRegular;
+    rules->table[Token_RightParen]   = IndentRule_EndRegular;
+    rules->table[Token_LeftScope]    = IndentRule_BeginRegular;
+    rules->table[Token_RightScope]   = IndentRule_EndRegular;
+    rules->table[Token_Preprocessor] = IndentRule_ForceLeft;
 }
