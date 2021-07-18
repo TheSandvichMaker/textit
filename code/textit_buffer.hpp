@@ -100,6 +100,7 @@ struct Buffer : TextStorage
     } undo;
 
     struct LanguageSpec *language;
+    struct IndentRules  *indent_rules;
 
     int line_count;
     TokenList tokens;

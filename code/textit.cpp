@@ -126,6 +126,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->undo.at = &result->undo.root;
     result->undo.run_pos = -1;
     result->undo.insert_pos = -1;
+    result->indent_rules = &editor_state->default_indent_rules;
 
     AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
 
@@ -862,6 +863,7 @@ AppUpdateAndRender(Platform *platform_)
 
         LoadDefaultTheme();
         LoadDefaultBindings();
+        LoadDefaultIndentRules(&editor_state->default_indent_rules);
 
         for (int16_t i = 0; i < MAX_BUFFER_COUNT; i += 1)
         {

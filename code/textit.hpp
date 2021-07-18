@@ -87,9 +87,6 @@ struct CoreConfig
 
     bool indent_with_tabs = false;
     int indent_width = 4;
-
-    IndentStyle paren_indent_style = IndentStyle_Hanging;
-    IndentStyle scope_indent_style = IndentStyle_Regular;
 };
 GLOBAL_STATE(CoreConfig, core_config);
 
@@ -159,6 +156,7 @@ struct EditorState
     Font font;
 
     LanguageSpec *cpp_spec;
+    IndentRules default_indent_rules;
 
     TextStorage default_register;
     TextStorage registers[26];

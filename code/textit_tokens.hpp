@@ -24,6 +24,8 @@ enum TokenKind : uint32_t
     Token_RightParen,
     Token_LeftScope,
     Token_RightScope,
+
+    Token_COUNT,
 };
 
 function String
@@ -62,6 +64,7 @@ enum_flags(int, TokenFlags)
     TokenFlag_IsComment      = 0x1,
     TokenFlag_IsPreprocessor = 0x2,
     TokenFlag_FirstInLine    = 0x4,
+    TokenFlag_LastInLine     = 0x8,
 };
 
 struct Token
@@ -188,7 +191,7 @@ Prev(TokenIterator *it)
 
         if (it->index <= 0)
         {
-            it->block = it->block->next;
+            it->block = it->block->prev;
             if (it->block)
             {
                 it->index = it->block->count;

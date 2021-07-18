@@ -23,7 +23,7 @@ AllocateTokenBlock(void)
     return result;
 }
 
-function void
+function Token *
 PushToken(Tokenizer *tok, const Token &t)
 {
     TokenList *list = tok->tokens;
@@ -48,6 +48,8 @@ PushToken(Tokenizer *tok, const Token &t)
 
     block->tokens[block->count++] = t;
     tok->token_count += 1;
+
+    return &block->tokens[block->count - 1];
 }
 
 function int64_t
@@ -119,6 +121,8 @@ TokenizeBuffer(Buffer *buffer)
 
     line_data->tokens = tok->tokens->first;
 
+    Token *prev_token = nullptr;
+
     while (CharsLeft(tok))
     {
         while (CharsLeft(tok))
@@ -130,6 +134,11 @@ TokenizeBuffer(Buffer *buffer)
 
                 if (HasFlag(c_class, Character_VerticalWhitespace))
                 {
+                    if (prev_token)
+                    {
+                        prev_token->flags |= TokenFlag_LastInLine;
+                    }
+
                     at_newline = true;
 
                     if (!tok->continue_next_line)
@@ -321,7 +330,7 @@ TokenizeBuffer(Buffer *buffer)
 
         token_count += 1;
 
-        PushToken(tok, t);
+        prev_token = PushToken(tok, t);
     }
 
     buffer->line_data[line_count - 1].range.end = buffer->count;
