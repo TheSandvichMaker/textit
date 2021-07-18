@@ -109,21 +109,13 @@ IsHeadUtf8Byte(uint8_t b)
 function bool
 IsTrailingUtf8Byte(uint8_t b)
 {
-    if ((b & 0xC0) == 0x80)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    return !!((b & 0xC0) == 0x80);
 }
 
 function bool
 IsUtf8Byte(uint8_t b)
 {
-    return (IsHeadUtf8Byte(b) ||
-            IsTrailingUtf8Byte(b));
+    return b >= 128;
 }
 
 function CharacterClassFlags

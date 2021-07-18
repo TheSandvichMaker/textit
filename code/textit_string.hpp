@@ -37,7 +37,7 @@ template <size_t Capacity>
 struct FixedStringContainer
 {
     static constexpr size_t capacity = Capacity;
-    size_t size;
+    size_t size = 0;
     uint8_t data[Capacity];
 
     String
@@ -61,6 +61,29 @@ struct FixedStringContainer
 
         CopyArray(to_copy, string.data, data + size);
         size += to_copy;
+    }
+
+    void
+    Append(uint8_t character)
+    {
+        if (size < capacity)
+        {
+            data[size++] = character;
+        }
+    }
+
+    void
+    AppendFill(size_t count, uint8_t character)
+    {
+        size_t left = capacity - size;
+        if (count > left) count = left;
+
+        uint8_t *at = data + size;
+        for (size_t i = 0; i < count; i += 1)
+        {
+            *at++ = character;
+        }
+        size += count;
     }
 
     void

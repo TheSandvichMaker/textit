@@ -146,6 +146,13 @@ MakeTokenIterator(Buffer *buffer, int64_t start_pos = 0)
 }
 
 function TokenIterator
+MakeTokenIterator(LineData *line_data)
+{
+    TokenIterator result = MakeTokenIterator(line_data->tokens, line_data->token_offset);
+    return result;
+}
+
+function TokenIterator
 IterateLineTokens(Buffer *buffer, int64_t line)
 {
     LineData *line_data = GetLineData(buffer, line);

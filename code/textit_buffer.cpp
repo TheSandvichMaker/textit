@@ -308,7 +308,7 @@ GetLineRange(Buffer *buffer, int64_t line)
 }
 
 function BufferLocation
-CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
+CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos, LineData **out_line_data = nullptr)
 {
     pos = ClampToBufferRange(buffer, pos);
 
@@ -325,6 +325,8 @@ CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
             result.pos  = Min(pos, data->whitespace_pos);
             result.col  = result.pos - data->range.start;
             result.line_range = data->range;
+
+            if (out_line_data) *out_line_data = data;
 
             break;
         }

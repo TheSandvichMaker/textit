@@ -40,7 +40,7 @@ struct DeferDoodadHelp
 
 #define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
 
-static inline void
+function void
 ZeroSize(size_t size_init, void *data_init)
 {
     size_t size = size_init;
@@ -54,7 +54,7 @@ ZeroSize(size_t size_init, void *data_init)
 #define ZeroStruct(Struct) ZeroSize(sizeof(*(Struct)), Struct)
 #define ZeroArray(Count, Data) ZeroSize(sizeof(*(Data))*(Count), Data)
 
-static inline bool
+function bool
 MemoryIsEqual(size_t Count, void *AInit, void *BInit)
 {
     char *A = (char *)AInit;
@@ -74,7 +74,7 @@ MemoryIsEqual(size_t Count, void *AInit, void *BInit)
 
 #define StructsAreEqual(A, B) (Assert(sizeof(*(A)) == sizeof(*(B))), MemoryIsEqual(sizeof(*(A)), A, B))
 
-static inline void
+function void
 CopySize(size_t Size, const void *SourceInit, void *DestInit)
 {
     const unsigned char *Source = (const unsigned char *)SourceInit;
@@ -105,14 +105,14 @@ struct HashResult
     };
 };
 
-static inline bool
+function bool
 operator == (HashResult a, HashResult b)
 {
     return (a.u64[0] == b.u64[0] &&
             a.u64[1] == b.u64[1]);
 }
 
-static inline HashResult
+function HashResult
 HashData(HashResult seed, size_t len, const void *data_init)
 {
     const char *data = (const char *)data_init;
@@ -143,7 +143,7 @@ HashData(HashResult seed, size_t len, const void *data_init)
     return result;
 }
 
-static inline uint64_t
+function uint64_t
 HashData(uint64_t seed, size_t len, const void *data)
 {
     HashResult full_seed = {};
@@ -154,7 +154,7 @@ HashData(uint64_t seed, size_t len, const void *data)
     return ExtractU64(full_result.m128i, 0);
 }
 
-static inline HashResult
+function HashResult
 HashString(String string)
 {
     HashResult seed = {};
@@ -162,7 +162,7 @@ HashString(String string)
     return result;
 }
 
-static inline uint64_t
+function uint64_t
 HashIntegers(uint64_t a, uint64_t b = 0)
 {
     unsigned char seed[16] =
@@ -178,7 +178,7 @@ HashIntegers(uint64_t a, uint64_t b = 0)
     return *(uint64_t *)&hash;
 }
 
-static inline uint64_t
+function uint64_t
 HashCoordinate(V2i p)
 {
     return HashIntegers(p.x, p.y);
@@ -200,21 +200,21 @@ struct Array
 };
 
 template <typename T>
-static inline T *
+function T *
 begin(Array<T> &array)
 {
     return array.data;
 }
 
 template <typename T>
-static inline T *
+function T *
 end(Array<T> &array)
 {
     return array.data + array.count;
 }
 
 template <typename T>
-static inline void
+function void
 Push(Array<T> *array_init, T item)
 {
     Array<T> &array = *array_init;
@@ -223,7 +223,7 @@ Push(Array<T> *array_init, T item)
 }
 
 template <typename T>
-static inline T
+function T
 RemoveOrdered(Array<T> *array_init, size_t remove_index)
 {
     Array<T> &array = *array_init;
@@ -240,7 +240,7 @@ RemoveOrdered(Array<T> *array_init, size_t remove_index)
     return result;
 }
 
-static inline int32_t
+function int32_t
 SafeTruncateI64(int64_t value)
 {
     Assert((value >= INT32_MIN) &&
@@ -248,7 +248,7 @@ SafeTruncateI64(int64_t value)
     return (int32_t)value;
 }
 
-static inline uint32_t
+function uint32_t
 Permute(uint32_t index, uint32_t len, uint32_t seed)
 {
     // SOURCE: https://andrew-helmer.github.io/permute/

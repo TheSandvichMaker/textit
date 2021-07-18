@@ -574,60 +574,51 @@ COMMAND_PROC(OpenNewLineBelow)
 
 TEXT_COMMAND_PROC(WriteText)
 {
-    View *view = CurrentView(editor);
+    View   *view   = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
+    uint8_t   buf[256];
+    int       buf_at           = 0;
 
-    uint64_t start_ordinal = CurrentUndoOrdinal(buffer);
-    bool should_auto_indent = false;
-    bool should_merge = false;
-    for (size_t i = 0; i < text.size; i += 1)
+    size_t    size             = text.size;
+    uint8_t  *data             = text.data;
+    int       indent_width     = core_config->indent_width;
+    bool      indent_with_tabs = core_config->indent_with_tabs;
+
+    for (size_t i = 0; i < size; i += 1)
     {
-        if (text.data[0] == '\n' ||
-            text.data[0] == '}' ||
-            text.data[0] == '{' ||
-            text.data[0] == '(' ||
-            text.data[0] == ')' ||
-            text.data[0] == '#')
-        {
-            should_auto_indent = true;
-        }
+        uint8_t c = data[i];
 
-        if (text.data[0] != '\n')
+        if (indent_with_tabs && c == '\t')
         {
-            UndoNode *last_undo = CurrentUndoNode(buffer);
+            int left = sizeof(buf) - buf_at;
 
-            String last_text = last_undo->forward;
-            if ((last_undo->pos == pos - 1) &&
-                (last_text.size > 0))
+            int spaces = indent_width;
+            if (spaces > left) spaces = left;
+
+            for (int j = 0; j < spaces; j += 1)
             {
-                if ((text.data[0] == ' ') &&
-                    ((last_text.data[0] == ' ') ||
-                     IsValidIdentifierAscii(last_text.data[0])))
-                {
-                    should_merge = true;
-                }
-                else if (IsValidIdentifierAscii(text.data[0]) &&
-                         IsValidIdentifierAscii(last_text.data[0]))
-                {
-                    should_merge = true;
-                }
+                buf[buf_at++] = ' ';
+            }
+        }
+        else
+        {
+            if (buf_at < sizeof(buf) &&
+                (c == '\n' ||
+                 c == '\t' ||
+                 (c >= ' ' && c <= '~') ||
+                 (c >= 128)))
+            {
+                buf[buf_at++] = c;
             }
         }
     }
-    if (text.data[0] == '\n' || IsPrintableAscii(text.data[0]) || IsUtf8Byte(text.data[0]))
+
+    if (buf_at > 0)
     {
-        int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), text);
-        if (should_auto_indent)
-        {
-            AutoIndentLineAt(buffer, new_pos);
-        }
-    }
-    if (should_merge)
-    {
-        uint64_t end_ordinal = CurrentUndoOrdinal(buffer);
-        MergeUndoHistory(buffer, start_ordinal, end_ordinal);
+        Cursor *cursor = GetCursor(view);
+        int64_t pos = cursor->pos;
+        int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), MakeString(buf_at, buf));
+        AutoIndentLineAt(buffer, new_pos);
     }
 }
