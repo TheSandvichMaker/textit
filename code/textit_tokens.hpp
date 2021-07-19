@@ -18,12 +18,16 @@ enum TokenKind : uint8_t
     Token_OpenBlockComment,
     Token_CloseBlockComment,
     Token_Type,
-    Token_StatementEnd,
 
+    Token_FirstOperator,
+    Token_Equals = Token_FirstOperator,
+    Token_Assignment,
+    Token_NotEquals,
     Token_LeftParen,
     Token_RightParen,
     Token_LeftScope,
     Token_RightScope,
+    Token_LastOperator = Token_RightScope,
 
     // "ghost" tokens, mark-up of the code for convenience that doesn't match actual physical characters
 
@@ -52,11 +56,9 @@ TokenThemeName(TokenKind kind)
         case Token_Type: return "text_type"_str;
     }
     // single character tokens / scopes are dim
-    if (kind < 128               ||
-        kind == Token_LeftParen  ||
-        kind == Token_RightParen ||
-        kind == Token_LeftScope  ||
-        kind == Token_RightScope)
+    if (kind < 128 ||
+        (kind >= Token_FirstOperator &&
+         kind <= Token_LastOperator))
     {
         return "text_foreground_dim"_str;
     }
@@ -80,104 +82,30 @@ struct Token
     int64_t length;
 };
 
-struct TokenBlock;
-
-struct TokenList
-{
-    TokenBlock *first;
-    TokenBlock *last;
-};
-
-#define TOKEN_BLOCK_SIZE 512
-struct TokenBlock
-{
-    TokenBlock *next;
-    TokenBlock *prev;
-    int64_t min_pos;
-    int64_t max_pos;
-    int count;
-    Token tokens[TOKEN_BLOCK_SIZE];
-};
-
 struct TokenIterator
 {
-    TokenBlock *block;
-    int index;
-    int count;
+    Token *tokens;
+    Token *tokens_end;
     Token *token;
 };
-
-function TokenIterator
-MakeTokenIterator(TokenBlock *block, int offset, int count = 0)
-{
-    Assert(offset < block->count);
-
-    TokenIterator result = {};
-    result.block = block;
-    result.index = offset;
-    result.count = count;
-    result.token = &result.block->tokens[result.index];
-    return result;
-}
-
-function TokenIterator
-MakeTokenIterator(TokenList *list, int64_t start_pos = 0)
-{
-    TokenIterator result = {};
-    result.block = list->first;
-    while (result.block && (start_pos >= result.block->max_pos))
-    {
-        result.block = result.block->next;
-    }
-    if (result.block)
-    {
-        for (;;)
-        {
-            Token *t = &result.block->tokens[result.index];
-            if (start_pos >= (t->pos + t->length))
-            {
-                result.index += 1;
-            }
-            else
-            {
-                break;
-            }
-        }
-        result.token = &result.block->tokens[result.index];
-    }
-    return result;
-}
 
 function bool
 IsValid(TokenIterator *it)
 {
-    return !!it->block;
+    return !!it->token;
 }
 
 function Token *
 Next(TokenIterator *it)
 {
     Token *result = nullptr;
-    if (it->block)
+    if (it->token < it->tokens_end)
     {
-        result = &it->block->tokens[it->index];
-        it->token = result;
-
-        it->index += 1;
-        if (it->index >= it->block->count)
-        {
-            it->index = 0;
-            it->block = it->block->next;
-        }
-
-        if (it->count > 0)
-        {
-            it->count -= 1;
-            if (it->count == 0)
-            {
-                it->block = nullptr;
-            }
-        }
+        result = it->token++;
+    }
+    if (it->token >= it->tokens_end)
+    {
+        it->token = nullptr;
     }
     return result;
 }
@@ -186,30 +114,13 @@ function Token *
 Prev(TokenIterator *it)
 {
     Token *result = nullptr;
-    if (it->block)
+    if (it->token > it->tokens)
     {
-        it->index -= 1;
-
-        result = &it->block->tokens[it->index];
-        it->token = result;
-
-        if (it->index <= 0)
-        {
-            it->block = it->block->prev;
-            if (it->block)
-            {
-                it->index = it->block->count;
-            }
-        }
-
-        if (it->count > 0)
-        {
-            it->count -= 1;
-            if (it->count == 0)
-            {
-                it->block = nullptr;
-            }
-        }
+        result = --it->token;
+    }
+    if (it->token <= it->tokens)
+    {
+        it->token = nullptr;
     }
     return result;
 }

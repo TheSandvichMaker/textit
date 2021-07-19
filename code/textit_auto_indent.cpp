@@ -31,15 +31,15 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
     LineData *line_data = &buffer->null_line_data;
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos, &line_data);
 
-    LineData *prev_line_data  = GetLineData(buffer, loc.line - 1);
-    int64_t   prev_line_start = prev_line_data->range.start;
-    int64_t   prev_line_end   = prev_line_data->range.end; (void)prev_line_end;
+    // LineData *prev_line_data  = GetLineData(buffer, loc.line - 1);
+    // int64_t   prev_line_start = prev_line_data->range.start;
+    // int64_t   prev_line_end   = prev_line_data->range.end; (void)prev_line_end;
 
     int64_t line_start           = loc.line_range.start;
     int64_t line_end             = loc.line_range.end;
     int64_t first_non_whitespace = FindFirstNonHorzWhitespace(buffer, line_start);
 
-    TokenIterator it = MakeTokenIterator(buffer, first_non_whitespace);
+    TokenIterator it = SeekTokenIterator(buffer, first_non_whitespace);
 
     bool force_left = false;
 
@@ -61,15 +61,6 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
 
     Token *anchor = nullptr;
     Token *t      = Prev(&it);
-
-    bool unfinished_statement = false;
-    if (!(rules->table[t->kind] & IndentRule_AffectsIndent) &&
-        (t->flags & TokenFlag_LastInLine) &&
-        ((t->kind != Token_StatementEnd) &&
-         (t->kind != ',')))
-    {
-        unfinished_statement = true;
-    }
 
     while (t)
     {
@@ -104,6 +95,37 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
         t = Prev(&it);
     }
 
+    Token *override_anchor = nullptr;
+    IndentRule override_rule = 0;
+
+    // now we have the anchor to start with, do a forward pass for refinement,
+    // I am too stupid to do this logic in the reverse pass (or it's actually
+    // just not practical)
+    for (;;)
+    {
+        t = Next(&it);
+        if (!t) break;
+
+        if (t->pos >= line_start) break;
+
+        IndentRule rule = rules->table[t->kind];
+        if (!override_anchor &&
+            (t->flags & TokenFlag_LastInLine) &&
+            !(rule & IndentRule_StatementEnd) &&
+            !(rule & IndentRule_AffectsIndent))
+        {
+            override_anchor = t;
+            override_rule   = IndentRule_PushIndent;
+        }
+
+        if (rule & IndentRule_StatementEnd)
+        {
+            override_anchor = nullptr;
+        }
+    }
+
+    if (override_anchor) anchor = override_anchor;
+
     int64_t indent_width = core_config->indent_width;
     int64_t indent       = 0;
     int64_t align        = 0;
@@ -129,12 +151,12 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
             }
             else
             {
-                anchor_depth += 1;
                 if (!finished_counting_indent)
                 {
                     finished_counting_indent = true;
                     indent_depth = anchor_depth;
                 }
+                anchor_depth += 1;
             }
         }
 
@@ -148,6 +170,11 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
         indent = indent_depth;
 
         IndentRule anchor_rule = rules->table[anchor->kind];
+        if (override_anchor)
+        {
+            anchor_rule = override_rule;
+        }
+
         if (anchor_rule & IndentRule_PushIndent)
         {
             if (anchor_rule & IndentRule_Hanging)
@@ -167,12 +194,6 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
                 }
             }
 
-            if (prev_line_start > anchor->pos)
-            {
-                align = CountIndentationDepth(buffer, prev_line_start, indent_width) - indent;
-                unfinished_statement = false;
-            }
-
             if (first_token &&
                 (first_token->kind == GetOtherNestTokenKind(anchor->kind)))
             {
@@ -185,14 +206,8 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
                     indent = indent_depth;
                     align  = 0;
                 }
-                unfinished_statement = false; // TODO: feels like this could be handled "more elegantly"?
             }
         }
-    }
-
-    if (unfinished_statement)
-    {
-        indent += indent_width;
     }
 
     indent = Max(0, indent);
@@ -243,9 +258,11 @@ LoadDefaultIndentRules(IndentRules *rules)
     rules->unfinished_statement      = IndentRule_PushIndent;
     rules->table[Token_LeftParen]    = IndentRule_PushIndent|IndentRule_Hanging;
     rules->table[Token_RightParen]   = IndentRule_PopIndent|IndentRule_Hanging;
-    rules->table[Token_LeftScope]    = IndentRule_PushIndent|IndentRule_Additive;
-    rules->table[Token_RightScope]   = IndentRule_PopIndent|IndentRule_Additive;
+    rules->table[Token_LeftScope]    = IndentRule_PushIndent;
+    rules->table[Token_RightScope]   = IndentRule_PopIndent;
     rules->table[Token_Preprocessor] = IndentRule_ForceLeft;
+    rules->table[(TokenKind)';']     = IndentRule_StatementEnd;
+    rules->table[(TokenKind)',']     = IndentRule_StatementEnd;
 }
 
 function void
@@ -258,4 +275,6 @@ LoadOtherIndentRules(IndentRules *rules)
     rules->table[Token_LeftScope]    = IndentRule_PushIndent;
     rules->table[Token_RightScope]   = IndentRule_PopIndent;
     rules->table[Token_Preprocessor] = IndentRule_ForceLeft;
+    rules->table[(TokenKind)';']     = IndentRule_StatementEnd;
+    rules->table[(TokenKind)',']     = IndentRule_StatementEnd;
 }

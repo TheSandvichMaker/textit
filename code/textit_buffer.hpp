@@ -69,9 +69,8 @@ struct LineData
     Range range;
     int64_t whitespace_pos;
     LineFlags flags;
-    int token_offset;
     int token_count;
-    TokenBlock *tokens;
+    Token *tokens;
 };
 
 #define TEXTIT_BUFFER_SIZE Megabytes(128)
@@ -80,6 +79,8 @@ struct Buffer : TextStorage
 {
     BufferID id;
     BufferFlags flags;
+
+    bool bulk_edit;
 
     Arena arena;
     String name;
@@ -102,11 +103,10 @@ struct Buffer : TextStorage
     struct LanguageSpec *language;
     struct IndentRules  *indent_rules;
 
-    int line_count;
-    TokenList tokens;
-
     LineData null_line_data;
-    LineData line_data[1000000];
+
+    VirtualArray<Token, 32'000'000> tokens;
+    VirtualArray<LineData, 8'000'000> line_data;
 };
 
 function Buffer *GetBuffer(BufferID id);
@@ -123,7 +123,7 @@ IsInBufferRange(Buffer *buffer, int64_t pos)
 function bool
 LineIsInBuffer(Buffer *buffer, int64_t line)
 {
-    return ((line >= 0) && (line < buffer->line_count));
+    return ((line >= 0) && (line < buffer->line_data.count));
 }
 
 function int64_t
@@ -141,23 +141,36 @@ BufferRange(Buffer *buffer)
 }
 
 function TokenIterator
-MakeTokenIterator(Buffer *buffer, int64_t start_pos = 0)
+MakeTokenIterator(Buffer *buffer, int index, int count = 0)
 {
-    return MakeTokenIterator(&buffer->tokens, start_pos);
-}
+    int max_count = buffer->tokens.count - index;
+    if (count <= 0 || count > max_count) count = max_count;
 
-function TokenIterator
-MakeTokenIterator(LineData *line_data)
-{
-    TokenIterator result = MakeTokenIterator(line_data->tokens, line_data->token_offset);
+    TokenIterator result = {};
+    result.tokens = &buffer->tokens[index];
+    result.tokens_end = &result.tokens[count];
+    result.token = result.tokens;
     return result;
 }
 
 function TokenIterator
-IterateLineTokens(Buffer *buffer, int64_t line)
+SeekTokenIterator(Buffer *buffer, int64_t start_pos = 0)
 {
-    LineData *line_data = GetLineData(buffer, line);
-    TokenIterator result = MakeTokenIterator(line_data->tokens, line_data->token_offset, line_data->token_count);
+    TokenIterator result = {};
+    result.tokens     = buffer->tokens.data;
+    result.tokens_end = result.tokens + buffer->tokens.count;
+
+    int64_t token_count = buffer->tokens.count;
+    for (int index = 0; index < token_count; index += 1)
+    {
+        Token *t = &buffer->tokens[index];
+        if (t->pos >= start_pos)
+        {
+            result.token = t;
+            break;
+        }
+    }
+
     return result;
 }
 

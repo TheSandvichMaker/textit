@@ -11,6 +11,7 @@ struct View
     BufferID buffer;
 
     int64_t sticky_col;
+    int64_t repeat_value;
 
     Rect2i viewport;
     int64_t actual_viewport_line_height;

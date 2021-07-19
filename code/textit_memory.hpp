@@ -240,4 +240,84 @@ PushArrayContainer(Arena *arena, size_t capacity)
     return result;
 }
 
+template <typename T, unsigned Capacity>
+struct VirtualArray
+{
+    static constexpr unsigned capacity = Capacity;
+    unsigned count;
+    unsigned committed;
+    T *data;
+
+    T &
+    operator [] (size_t index)
+    {
+        AssertSlow(index < count);
+        return data[index];
+    }
+
+    T *
+    End()
+    {
+        return data + count;
+    }
+
+    void
+    Clear()
+    {
+        // TODO: Decommit behaviour
+        count = 0;
+    }
+
+    unsigned
+    EnsureSpace(unsigned push_count = 1)
+    {
+        unsigned new_count = count + push_count;
+        if (new_count > capacity)
+        {
+            new_count = capacity;
+        }
+        unsigned diff = new_count - count;
+
+        if (!data)
+        {
+            size_t to_reserve = AlignPow2(sizeof(T)*capacity, platform->allocation_granularity);
+            data = (T *)platform->ReserveMemory(to_reserve, 0, LOCATION_STRING("Virtual Array"));
+        }
+
+        if (new_count > committed)
+        {
+            size_t to_commit = AlignPow2(sizeof(T)*diff, platform->page_size);
+            size_t count_committed = to_commit / sizeof(T);
+
+            void *result = platform->CommitMemory(data + committed, to_commit);
+            committed += (unsigned)count_committed;
+
+            Assert(result);
+        }
+
+        return diff;
+    }
+
+    T *
+    Push(unsigned push_count = 1)
+    {
+        unsigned real_push_count = EnsureSpace(push_count);
+        T *result = &data[count];
+        count += real_push_count;
+        return result;
+    }
+
+    T *
+    Push(const T &item)
+    {
+        if (EnsureSpace(1) == 0)
+        {
+            INVALID_CODE_PATH;
+        }
+        T *result = &data[count++];
+        *result = item;
+        return result;
+    }
+};
+
 #endif /* TEXTIT_MEMORY_HPP */

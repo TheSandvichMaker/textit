@@ -5,51 +5,10 @@ AllocateLineData(void)
     return result;
 }
 
-function TokenBlock *
-AllocateTokenBlock(void)
-{
-    if (!editor_state->first_free_token_block)
-    {
-        editor_state->first_free_token_block = PushStructNoClear(&editor_state->transient_arena, TokenBlock);
-        editor_state->first_free_token_block->next = nullptr;
-        editor_state->first_free_token_block->prev = nullptr;
-    }
-    TokenBlock *result = editor_state->first_free_token_block;
-    editor_state->first_free_token_block = result->next;
-
-    ZeroStruct(result);
-    result->min_pos = INT64_MAX;
-    result->max_pos = INT64_MIN;
-    return result;
-}
-
 function Token *
 PushToken(Tokenizer *tok, const Token &t)
 {
-    TokenList *list = tok->tokens;
-    if (!list->first ||
-        list->last->count >= (int64_t)ArrayCount(list->last->tokens))
-    {
-        TokenBlock *block = AllocateTokenBlock();
-        if (list->first)
-        {
-            block->prev = list->last;
-            list->last = list->last->next = block;
-        }
-        else
-        {
-            list->first = list->last = block;
-        }
-    }
-    TokenBlock *block = list->last;
-
-    if (t.pos < block->min_pos) block->min_pos = t.pos;
-    if (t.pos + t.length > block->max_pos) block->max_pos = t.pos + t.length;
-
-    block->tokens[block->count++] = t;
-    tok->token_count += 1;
-
-    return &block->tokens[block->count - 1];
+    return tok->buffer->tokens.Push(t);
 }
 
 function int64_t
@@ -79,17 +38,15 @@ Peek(Tokenizer *tok, int64_t index = 0)
     }
 }
 
-function void
-FreeTokens(TokenList *list)
+function bool
+Match(Tokenizer *tok, uint8_t c)
 {
-    if (list->last)
+    if (Peek(tok) == c)
     {
-        list->last->next = editor_state->first_free_token_block;
+        tok->at += 1;
+        return true;
     }
-    editor_state->first_free_token_block = list->first;
-
-    list->first = nullptr;
-    list->last  = nullptr;
+    return false;
 }
 
 function void
@@ -103,12 +60,11 @@ TokenizeBuffer(Buffer *buffer)
     tok->at = tok->start;
     tok->end = buffer->text + buffer->count;
 
-    FreeTokens(&buffer->tokens);
-    tok->tokens = &buffer->tokens;
+    buffer->tokens.Clear();
+    buffer->line_data.Clear();
 
     LanguageSpec *language = buffer->language;
 
-    int64_t token_count = 0;
     PlatformHighResTime start_time = platform->GetTime();
 
     int line_count = 1;
@@ -116,10 +72,10 @@ TokenizeBuffer(Buffer *buffer)
 
     bool at_newline = true;
 
-    LineData *line_data = &buffer->line_data[0];
+    LineData *line_data = buffer->line_data.Push();
     ZeroStruct(line_data);
 
-    line_data->tokens = tok->tokens->first;
+    line_data->tokens = &buffer->tokens[buffer->tokens.count];
 
     Token *prev_token = nullptr;
 
@@ -160,7 +116,7 @@ TokenizeBuffer(Buffer *buffer)
                     }
 
                     line_data->range.end = tok->at - tok->start;
-                    line_data->token_count = tok->token_count - tokens_at_start_of_line;
+                    line_data->token_count = buffer->tokens.count - tokens_at_start_of_line;
                     
                     line_count += 1;
                     Assert(line_count <= 1000000);
@@ -169,13 +125,12 @@ TokenizeBuffer(Buffer *buffer)
                     // new line data
                     //
 
-                    line_data = &buffer->line_data[line_count - 1];
+                    line_data = buffer->line_data.Push();
                     ZeroStruct(line_data);
 
                     line_data->range.start = tok->at - tok->start;
-                    line_data->tokens = tok->tokens->last;
-                    line_data->token_offset = line_data->tokens->count;
-                    tokens_at_start_of_line = tok->token_count;
+                    line_data->tokens = &buffer->tokens[buffer->tokens.count];
+                    tokens_at_start_of_line = buffer->tokens.count;
                 }
             }
             else
@@ -290,13 +245,36 @@ TokenizeBuffer(Buffer *buffer)
                 }
             } break;
 
+            case '=':
+            {
+                if (Match(tok, '='))
+                {
+                    t.kind = Token_Equals;
+                }
+                else
+                {
+                    t.kind = Token_Assignment;
+                }
+            } break;
+
+            case '!':
+            {
+                if (Match(tok, '='))
+                {
+                    t.kind = Token_NotEquals;
+                }
+                else
+                {
+                    t.kind = (TokenKind)'!';
+                }
+            } break;
+
             case '\\':
             {
                 t.kind = (TokenKind)c;
                 tok->continue_next_line = true;
             } break;
 
-            case ';': { t.kind = Token_StatementEnd; } break;
             case '(': { t.kind = Token_LeftParen; } break;
             case ')': { t.kind = Token_RightParen; } break;
             case '{': { t.kind = Token_LeftScope; } break;
@@ -329,27 +307,24 @@ TokenizeBuffer(Buffer *buffer)
         }
 #endif
 
-        token_count += 1;
-
         prev_token = PushToken(tok, t);
     }
 
     buffer->line_data[line_count - 1].range.end = buffer->count;
-    buffer->line_count = line_count;
 
     PlatformHighResTime end_time = platform->GetTime();
 
-#if 0
+#if 1
     double total_time = platform->SecondsElapsed(start_time, end_time);
 
     platform->DebugPrint("Total time: %fms for %lld tokens, %lld characters (%fns/tok, %fns/char).\n",
                          1000.0*total_time,
-                         token_count,
+                         buffer->tokens.count,
                          buffer->count,
-                         1'000'000'000.0*total_time / (double)token_count,
+                         1'000'000'000.0*total_time / (double)buffer->tokens.count,
                          1'000'000'000.0*total_time / (double)buffer->count);
     platform->DebugPrint("%f megatokens/s, %fmb/s\n", 
-                         (double)token_count / (1'000'000.0*total_time),
+                         (double)buffer->tokens.count / (1'000'000.0*total_time),
                          (double)buffer->count / (1'000'000.0*total_time));
 #endif
 }

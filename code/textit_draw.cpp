@@ -52,6 +52,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     Color text_foreground              = GetThemeColor("text_foreground"_str);
     Color text_foreground_dim          = GetThemeColor("text_foreground_dim"_str);
     Color text_foreground_dimmer       = GetThemeColor("text_foreground_dimmer"_str);
+    Color text_foreground_dimmest      = GetThemeColor("text_foreground_dimmest"_str);
     Color text_background              = GetThemeColor("text_background"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
     Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
@@ -71,9 +72,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     Range selection = SanitizeRange(cursor->selection);
 
-    TokenBlock *block = buffer->tokens.first;
-
-    int64_t token_index = 0;
+    Token *token = buffer->tokens.data;
+    Token *token_end = token + buffer->tokens.count;
 
     int64_t scan_line = 0;
     int64_t pos = 0;
@@ -90,16 +90,15 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         {
             pos += 1;
         }
-        if (block)
+
+        if (token < token_end &&
+            pos >= token->pos + token->length)
         {
-            if (pos >= block->max_pos)
-            {
-                block = block->next;
-            }
+            token++;
         }
     }
 
-    int64_t line_count = buffer->line_count;
+    int64_t line_count = buffer->line_data.count;
     int64_t bounds_height = GetHeight(bounds) - 2;
     int64_t scrollbar_size = Max(1, bounds_height*bounds_height / line_count);
     int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*bounds_height / line_count);
@@ -111,45 +110,16 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                  MakeWall(Wall_Top|Wall_Bottom, text_foreground, MakeColor(127, 127, 127)));
     }
 
-    if (block)
-    {
-        while (token_index < block->count)
-        {
-            Token *t = &block->tokens[token_index];
-            if (pos >= t->pos + t->length)
-            {
-                token_index += 1;
-            }
-            else
-            {
-                break;
-            }
-        }
-    }
-
     Token null_token = {};
     null_token.kind = Token_Identifier;
     null_token.pos  = INT64_MAX;
 
-    Token *token = (block ? &block->tokens[token_index] : &null_token);
     while (pos < buffer->count)
     {
         if (pos >= token->pos + token->length)
         {
-            token_index += 1;
-
-            if (block &&
-                token_index >= block->count)
-            {
-                block = block->next;
-                token_index = 0;
-            }
-
-            if (block)
-            {
-                token = &block->tokens[token_index];
-            }
-            else
+            token++;
+            if (token >= token_end)
             {
                 token = &null_token;
             }
@@ -206,109 +176,129 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         }
 
         uint8_t b = buffer->text[pos];
-        if (b == '\t')
+
+        Color foreground = color;
+        Color background = text_background;
+
+        bool renderable = (b == ' ' || b == '\t' || IsPrintableAscii(b));
+
+        bool force_right_align = false;
+        int64_t advance = 1;
+        String string = MakeString(1, &buffer->text[pos]);
+        if ((b == '\r' || b == '\n') && core_config->visualize_newlines)
         {
-            if (core_config->visualize_whitespace)
+            if (b == '\r' && ReadBufferByte(buffer, pos + 1) == '\n')
             {
-                Sprite sprite = MakeSprite('t', text_foreground_dimmer, text_background);
-                if (draw_cursor && (pos == cursor_pos))
-                {
-                    Swap(sprite.foreground, sprite.background);
-                }
-                PushTile(Layer_Text, at_p, sprite);
+                string = PushTempStringF("\\r\\n");
+                advance = 2;
             }
-            at_p.x += core_config->indent_width;
-            pos += 1;
-        }
-        else if (b == ' ' || IsPrintableAscii(b))
-        {
-            Sprite sprite = MakeSprite(b, color, text_background);
-
-            if (core_config->visualize_whitespace &&
-                (b == ' '))
+            else if (b == '\r')
             {
-                if (ReadBufferByte(buffer, pos - 1) == ' ' ||
-                    ReadBufferByte(buffer, pos + 1) == ' ')
-                {
-                    sprite.glyph = '.';
-                    sprite.foreground = text_foreground_dimmer;
-                }
-            }
-
-            if (draw_cursor &&
-                (editor_state->edit_mode == EditMode_Command) &&
-                (pos >= selection.start && pos <= selection.end))
-            {
-                sprite.background = selection_background;
-                sprite.foreground.r = 255 - selection_background.r;
-                sprite.foreground.g = 255 - selection_background.g;
-                sprite.foreground.b = 255 - selection_background.b;
-            }
-            if (draw_cursor && (pos == cursor_pos))
-            {
-                Swap(sprite.foreground, sprite.background);
-            }
-            PushTile(Layer_Text, at_p, sprite);
-            at_p.x += 1;
-            pos += 1;
-        }
-        else
-        {
-            Color foreground = unrenderable_text_foreground;
-            Color background = unrenderable_text_background;
-            if (draw_cursor && (pos == cursor_pos))
-            {
-                Swap(foreground, background);
-            }
-
-            if (draw_cursor &&
-                (editor_state->edit_mode == EditMode_Command) &&
-                (pos >= selection.start && pos <= selection.end))
-            {
-                background = selection_background;
-                foreground.r = 255 - selection_background.r;
-                foreground.g = 255 - selection_background.g;
-                foreground.b = 255 - selection_background.b;
-            }
-
-            int64_t advance = 1;
-            String string = {};
-            if (b == '\r')
-            {
-                if (core_config->visualize_newlines) string = PushTempStringF("\\r");
+                string = PushTempStringF("\\r");
             }
             else if (b == '\n')
             {
-                if (core_config->visualize_newlines) string = PushTempStringF("\\n");
+                string = PushTempStringF("\\n");
             }
             else
             {
-                ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
-                string = PushTempStringF("\\u%x", unicode.codepoint);
-                advance = unicode.advance;
+                INVALID_CODE_PATH;
             }
-            for (size_t i = 0; i < string.size; ++i)
+            foreground = text_foreground_dimmest;
+            background = text_background;
+            force_right_align = core_config->right_align_visualized_newlines;
+        }
+        else if (b == '\n' && core_config->visualize_newlines)
+        {
+            string = PushTempStringF("\\n");
+            foreground = text_foreground_dimmest;
+            background = text_background;
+        }
+        else if (b == ' ' && core_config->visualize_whitespace)
+        {
+            if (ReadBufferByte(buffer, pos - 1) == ' ' ||
+                ReadBufferByte(buffer, pos + 1) == ' ')
             {
-                PushTile(Layer_Text, at_p, MakeSprite(string.data[i], foreground, background));
-                at_p.x += 1;
-                if (at_p.x >= (bounds.max.x - 2))
-                {
-                    PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
-
-                    at_p.x = left - 1;
-                    at_p.y -= 1;
-
-                    if (at_p.y <= bounds.min.y)
-                    {
-                        return actual_line_height;
-                    }
-                }
+                string = PushTempStringF(".");
+                foreground = text_foreground_dimmer;
+                background = text_background;
             }
-            pos += advance;
+        }
+        else if (b == '\t' && core_config->visualize_whitespace)
+        {
+            string = PushStringSpace(platform->GetTempArena(), core_config->indent_width);
+            if (string.size >= 2)
+            {
+                string.data[0] = '\\';
+                string.data[1] = 't';
+                for (size_t i = 2; i < string.size; i += 1) string.data[i] = ' ';
+            }
+            else if (string.size == 1)
+            {
+                string.data[1] = 't';
+                for (size_t i = 1; i < string.size; i += 1) string.data[i] = ' ';
+            }
+            foreground = text_foreground_dimmer;
+            background = text_background;
+        }
+        else if (!renderable)
+        {
+            ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
+            string = PushTempStringF("\\u%x", unicode.codepoint);
+            advance = unicode.advance;
+            foreground = unrenderable_text_foreground;
+            background = unrenderable_text_background;
         }
 
-        if (b == '\n')
+        if (draw_cursor &&
+            (editor_state->edit_mode == EditMode_Command) &&
+            (pos >= selection.start && pos <= selection.end))
         {
+            background = selection_background;
+            foreground.r = 255 - selection_background.r;
+            foreground.g = 255 - selection_background.g;
+            foreground.b = 255 - selection_background.b;
+        }
+
+        if (draw_cursor && (pos == cursor_pos))
+        {
+            Swap(foreground, background);
+        }
+
+        int64_t at_x = at_p.x;
+        int64_t at_y = at_p.y;
+
+        if (force_right_align)
+        {
+            at_x = bounds.max.x - 2 - string.size;
+        }
+
+        for (size_t i = 0; i < string.size; ++i)
+        {
+            PushTile(Layer_Text, MakeV2i(at_x, at_y), MakeSprite(string.data[i], foreground, background));
+            at_x += 1;
+            if (at_x > (bounds.max.x - 2))
+            {
+                PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
+
+                at_x = left - 1;
+                at_y -= 1;
+
+                if (at_y <= bounds.min.y)
+                {
+                    return actual_line_height;
+                }
+            }
+        }
+
+        at_p.x = at_x;
+        at_p.y = at_y;
+
+        int64_t newline_length = PeekNewline(buffer, pos);
+        if (newline_length > 0)
+        {
+            advance = newline_length;
+
             at_p.x = left;
             at_p.y -= 1;
 
@@ -321,6 +311,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 return actual_line_height;
             }
         }
+
+        pos += advance;
     }
 
     if (at_p.y > bounds.min.y)
@@ -371,10 +363,12 @@ DrawView(View *view, bool is_active_window)
 
     PushRectOutline(Layer_Text, bounds, text_foreground, text_background);
     DrawLine(MakeV2i(bounds.min.x + 2, bounds.max.y - 1),
-             PushTempStringF("%hd:%.*s - scroll: %d, line: %lld, col: %lld",
+             PushTempStringF("%hd:%.*s - pos: %lld, scroll: %d, line: %lld, col: %lld, repeat: %lld",
                              buffer->id.index, StringExpand(buffer->name),
+                             cursor->pos,
                              view->scroll_at,
-                             loc.line, loc.col),
+                             loc.line, loc.col,
+                             view->repeat_value),
              filebar_text_foreground, filebar_text_background, GetWidth(bounds) - 4);
 
     return DrawTextArea(view, bounds, is_active_window);

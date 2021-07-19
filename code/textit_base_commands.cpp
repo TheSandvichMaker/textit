@@ -48,7 +48,6 @@ COMMAND_PROC(EnterCommandMode,
     editor->next_edit_mode = EditMode_Command;
 
     Buffer *buffer = CurrentBuffer(editor);
-    FlushBufferedUndo(buffer);
     MergeUndoHistory(buffer, editor->enter_text_mode_undo_ordinal, buffer->undo.current_ordinal);
 
     View *view = CurrentView(editor);
@@ -198,7 +197,7 @@ MOVEMENT_PROC(EncloseNextScope)
     int64_t pos = cursor->pos;
     Range result = MakeRange(pos);
 
-    TokenIterator it = MakeTokenIterator(buffer, pos);
+    TokenIterator it = SeekTokenIterator(buffer, pos);
 
     TokenKind opening_kind = Token_None;
     TokenKind closing_kind = Token_None;
@@ -312,7 +311,8 @@ COMMAND_PROC(BackspaceChar)
             break;
         }
     }
-    if ((consecutive_space_count % core_config->indent_width) == 0)
+    if ((consecutive_space_count > 0) &&
+        ((consecutive_space_count % core_config->indent_width) == 0))
     {
         to_delete = core_config->indent_width;
     }

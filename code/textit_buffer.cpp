@@ -321,7 +321,7 @@ CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos, LineData **out_line_
     BufferLocation result = {};
 
     // TODO: Binary search
-    for (int64_t line = 0; line < buffer->line_count; line += 1)
+    for (int64_t line = 0; line < buffer->line_data.count; line += 1)
     {
         LineData *data = &buffer->line_data[line];
         if ((pos >= data->range.start) &&
@@ -346,7 +346,7 @@ CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
 {
     BufferLocation result = {};
     if ((line >= 0) &&
-        (line < buffer->line_count))
+        (line < buffer->line_data.count))
     {
         LineData *data = &buffer->line_data[line];
         Range whitespace_range = MakeRange(data->range.start, data->whitespace_pos);
@@ -506,21 +506,24 @@ CurrentUndoOrdinal(Buffer *buffer)
 function void
 MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
 {
-    Assert(last_ordinal >= first_ordinal);
+    if (last_ordinal >= first_ordinal)
+    {
+        FlushBufferedUndo(buffer);
 
-    UndoNode *node = buffer->undo.at;
-    while (node && node->ordinal > last_ordinal)
-    {
-        node = node->parent;
-    }
-    while (node && node->ordinal > first_ordinal)
-    {
-        node->ordinal = first_ordinal;
-        node = node->parent;
-    }
-    if (buffer->undo.current_ordinal == last_ordinal)
-    {
-        buffer->undo.current_ordinal = first_ordinal + 1;
+        UndoNode *node = buffer->undo.at;
+        while (node && node->ordinal > last_ordinal)
+        {
+            node = node->parent;
+        }
+        while (node && node->ordinal > first_ordinal)
+        {
+            node->ordinal = first_ordinal;
+            node = node->parent;
+        }
+        if (buffer->undo.current_ordinal == last_ordinal)
+        {
+            buffer->undo.current_ordinal = first_ordinal + 1;
+        }
     }
 }
 
@@ -569,6 +572,22 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
 
 }
 
+function void
+BufferBeginBulkEdit(Buffer *buffer)
+{
+    Assert(!buffer->bulk_edit);
+    buffer->bulk_edit = true;
+}
+
+function void
+BufferEndBulkEdit(Buffer *buffer)
+{
+    Assert(buffer->bulk_edit);
+    buffer->bulk_edit = false;
+
+    TokenizeBuffer(buffer);
+}
+
 function int64_t
 BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 {
@@ -582,7 +601,10 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     int64_t delta = range.start - range.end + (int64_t)text.size;
     OnBufferChanged(buffer, range.start, delta);
 
-    TokenizeBuffer(buffer);
+    if (!buffer->bulk_edit)
+    {
+        TokenizeBuffer(buffer);
+    }
 
     return result;
 }

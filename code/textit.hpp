@@ -83,11 +83,12 @@ function void DestroyWindow(Window *window);
 
 struct CoreConfig
 {
-    bool visualize_newlines = true;
-    bool visualize_whitespace = true;
+    bool visualize_newlines              = true;
+    bool right_align_visualized_newlines = true;
+    bool visualize_whitespace            = true;
 
-    bool indent_with_tabs = true;
-    int indent_width = 4;
+    bool indent_with_tabs                = true;
+    int  indent_width                    = 4;
 };
 GLOBAL_STATE(CoreConfig, core_config);
 
@@ -187,14 +188,13 @@ struct EditorState
     V2i screen_mouse_p;
     V2i text_mouse_p;
 
+    int64_t last_repeat;
     Command *last_movement;
     Command *last_movement_for_change;
     Command *last_change;
     bool clutch;
 
     uint64_t enter_text_mode_undo_ordinal;
-
-    TokenBlock *first_free_token_block;
 
     int debug_delay;
     int debug_delay_frame_count;

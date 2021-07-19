@@ -48,6 +48,7 @@ LoadDefaultTheme()
     SetThemeColor("text_foreground"_str, MakeColor(255, 255, 255));
     SetThemeColor("text_foreground_dim"_str, MakeColor(192, 192, 192));
     SetThemeColor("text_foreground_dimmer"_str, MakeColor(128, 128, 128));
+    SetThemeColor("text_foreground_dimmest"_str, MakeColor(4*12, 4*20, 4*32));
     SetThemeColor("text_background"_str, MakeColor(12, 20, 32));
     SetThemeColor("filebar_text_foreground"_str, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_background"_str, MakeColor(192, 255, 128));

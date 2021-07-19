@@ -764,66 +764,84 @@ HandleViewEvents(ViewID view_id)
             bool shift_down = event->shift_down;
             bool ctrl_shift_down = ctrl_down && shift_down;
 
-#if 0
-            if (event->input_code == PlatformInputCode_Shift)
+            bool consumed_digit = false;
+            if (editor_state->edit_mode == EditMode_Command &&
+                event->input_code >= PlatformInputCode_0 &&
+                event->input_code <= PlatformInputCode_9)
             {
-                editor_state->clutch = !editor_state->clutch;
-                if (!editor_state->clutch)
+                if (event->input_code > PlatformInputCode_0 ||
+                    view->repeat_value > 0)
                 {
-                    buffer->mark = buffer->cursor;
-                }
-            }
-            else if (shift_down)
-            {
-                editor_state->clutch = true;
-            }
+                    consumed_digit = true;
 
-            if (event->input_code == PlatformInputCode_Escape)
-            {
-                editor_state->clutch = false;
-                buffer->mark = buffer->cursor;
-            }
-#else
-            editor_state->clutch = shift_down;
-#endif
+                    int64_t digit = (int64_t)(event->input_code - PlatformInputCode_0);
+                    view->repeat_value *= 10;
+                    view->repeat_value += digit;
 
-            Binding *binding = &bindings->map[event->input_code];
-            Command *command = binding->regular;
-            if (ctrl_shift_down && binding->ctrl_shift)
-            {
-                command = binding->ctrl_shift;
-            }
-            else if (ctrl_down && binding->ctrl)
-            {
-                command = binding->ctrl;
-            }
-            else if (shift_down && binding->shift)
-            {
-                command = binding->shift;
-            }
-
-            if (command)
-            {
-                if (AreEqual(command->name, "RepeatLastCommand"_str))
-                {
-                    ExecuteCommand(view, editor_state->last_movement_for_change);
-                    editor_state->last_movement = editor_state->last_movement_for_change;
-                    ExecuteCommand(view, editor_state->last_change);
-                }
-                else
-                {
-                    ExecuteCommand(view, command);
-                    switch (command->kind)
+                    if (view->repeat_value > 9999)
                     {
-                        INCOMPLETE_SWITCH;
-
-                        case Command_Movement: { editor_state->last_movement = command; } break;
-                        case Command_Change:
-                        {
-                            editor_state->last_movement_for_change = editor_state->last_movement;
-                            editor_state->last_change = command;
-                        } break;
+                        view->repeat_value = 9999;
                     }
+                }
+            }
+
+            if (!consumed_digit)
+            {
+                editor_state->clutch = shift_down;
+
+                Binding *binding = &bindings->map[event->input_code];
+                Command *command = binding->regular;
+                if (ctrl_shift_down && binding->ctrl_shift)
+                {
+                    command = binding->ctrl_shift;
+                }
+                else if (ctrl_down && binding->ctrl)
+                {
+                    command = binding->ctrl;
+                }
+                else if (shift_down && binding->shift)
+                {
+                    command = binding->shift;
+                }
+
+                if (command)
+                {
+                    uint64_t undo_ordinal = CurrentUndoOrdinal(buffer);
+
+                    int64_t repeat = Max(1, view->repeat_value);
+                    view->repeat_value = 0;
+
+                    if (AreEqual(command->name, "RepeatLastCommand"_str))
+                    {
+                        for (int64_t i = 0; i < repeat*editor_state->last_repeat; i += 1)
+                        {
+                            ExecuteCommand(view, editor_state->last_movement_for_change);
+                            ExecuteCommand(view, editor_state->last_change);
+                        }
+                        editor_state->last_movement = editor_state->last_movement_for_change;
+                    }
+                    else
+                    {
+                        for (int64_t i = 0; i < repeat; i += 1)
+                        {
+                            ExecuteCommand(view, command);
+                        }
+                        switch (command->kind)
+                        {
+                            INCOMPLETE_SWITCH;
+
+                            case Command_Movement: { editor_state->last_movement = command; } break;
+                            case Command_Change:
+                            {
+                                editor_state->last_movement_for_change = editor_state->last_movement;
+                                editor_state->last_change = command;
+                            } break;
+                        }
+
+                        editor_state->last_repeat = repeat;
+                    }
+
+                    MergeUndoHistory(buffer, undo_ordinal, CurrentUndoOrdinal(buffer));
                 }
             }
         }

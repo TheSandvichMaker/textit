@@ -9,7 +9,9 @@ enum_flags(uint8_t, IndentRule)
     IndentRule_ForceLeft     = 0x8,
     IndentRule_Additive      = 0x10,
 
-    IndentRule_AffectsIndent = 0xFF,
+    IndentRule_AffectsIndent = 0x1|0x2|0x4|0x8|0x10,
+
+    IndentRule_StatementEnd  = 0x20,
 };
 
 struct IndentRules
@@ -27,8 +29,6 @@ GetOtherNestTokenKind(TokenKind kind)
         case Token_RightParen:   return Token_LeftParen;
         case Token_LeftScope:    return Token_RightScope;
         case Token_RightScope:   return Token_LeftScope;
-        case Token_LineEnd:      return Token_StatementEnd;
-        case Token_StatementEnd: return Token_LineEnd;
     }
     return Token_None;
 }

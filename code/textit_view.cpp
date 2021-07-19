@@ -38,6 +38,8 @@ UndoOnce(View *view)
     Buffer *buffer = GetBuffer(view);
     auto undo = &buffer->undo;
 
+    BufferBeginBulkEdit(buffer);
+
     UndoNode *node = undo->at;
     while (node->parent)
     {
@@ -59,6 +61,8 @@ UndoOnce(View *view)
         }
     }
 
+    BufferEndBulkEdit(buffer);
+
     return result;
 }
 
@@ -70,6 +74,8 @@ RedoOnce(View *view)
     Buffer *buffer = GetBuffer(view);
     auto undo = &buffer->undo;
     
+    BufferBeginBulkEdit(buffer);
+
     UndoNode *node = NextChild(undo->at);
     while (node)
     {
@@ -92,6 +98,8 @@ RedoOnce(View *view)
             break;
         }
     }
+
+    BufferEndBulkEdit(buffer);
 
     return result;
 }

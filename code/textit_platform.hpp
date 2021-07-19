@@ -483,6 +483,7 @@ struct Platform
     PlatformJobQueue *low_priority_queue;
 
     size_t page_size;
+    size_t allocation_granularity;
     void *(*AllocateMemory)(size_t size, uint32_t flags, const char *tag);
     void *(*ReserveMemory)(size_t size, uint32_t flags, const char *tag);
     void *(*CommitMemory)(void *location, size_t size);

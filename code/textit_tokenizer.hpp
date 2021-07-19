@@ -22,9 +22,6 @@ struct Tokenizer
 
     TokenizeFlags flags;
 
-    int token_count;
-    TokenList *tokens;
-
     bool continue_next_line;
     bool in_line_comment;
     bool in_preprocessor;
