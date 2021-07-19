@@ -297,6 +297,26 @@ COMMAND_PROC(BackspaceChar)
     {
         to_delete = newline_length;
     }
+
+    int64_t line_start = FindLineStart(buffer, pos);
+
+    int64_t consecutive_space_count = 0;
+    for (int64_t at = pos - 1; at > line_start; at -= 1)
+    {
+        if (ReadBufferByte(buffer, at) == ' ')
+        {
+            consecutive_space_count += 1;
+        }
+        else
+        {
+            break;
+        }
+    }
+    if ((consecutive_space_count % core_config->indent_width) == 0)
+    {
+        to_delete = core_config->indent_width;
+    }
+
     pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos - to_delete, to_delete), ""_str);
     SetCursor(view, pos);
 }
@@ -613,11 +633,19 @@ TEXT_COMMAND_PROC(WriteText)
     bool        indent_with_tabs = core_config->indent_with_tabs;
     LineEndKind line_end_kind    = buffer->line_end;
 
+    bool should_auto_indent = false;
     for (size_t i = 0; i < size; i += 1)
     {
         uint8_t c = data[i];
+        
+        if (c == '\n' ||
+            c == '}' ||
+            c == ')')
+        {
+            should_auto_indent = true;
+        }
 
-        if (indent_with_tabs && c == '\t')
+        if (!indent_with_tabs && c == '\t')
         {
             int left = sizeof(buf) - buf_at;
 
@@ -652,6 +680,9 @@ TEXT_COMMAND_PROC(WriteText)
         Cursor *cursor = GetCursor(view);
         int64_t pos = cursor->pos;
         int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), MakeString(buf_at, buf));
-        AutoIndentLineAt(buffer, new_pos);
+        if (should_auto_indent)
+        {
+            AutoIndentLineAt(buffer, new_pos);
+        }
     }
 }
