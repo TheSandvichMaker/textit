@@ -83,9 +83,10 @@ function void DestroyWindow(Window *window);
 
 struct CoreConfig
 {
-    bool visualize_newlines = false;
+    bool visualize_newlines = true;
+    bool visualize_whitespace = true;
 
-    bool indent_with_tabs = false;
+    bool indent_with_tabs = true;
     int indent_width = 4;
 };
 GLOBAL_STATE(CoreConfig, core_config);

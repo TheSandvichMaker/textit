@@ -241,7 +241,7 @@ FindLineEnd(Buffer *buffer, int64_t pos, bool include_newline = false)
         {
             if (include_newline)
             {
-                result += newline_length;
+                result += newline_length + 1;
             }
             break;
         }

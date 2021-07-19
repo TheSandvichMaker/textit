@@ -50,6 +50,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     Color text_comment                 = GetThemeColor("text_comment"_str);
     Color text_preprocessor            = GetThemeColor("text_preprocessor"_str);
     Color text_foreground              = GetThemeColor("text_foreground"_str);
+    Color text_foreground_dim          = GetThemeColor("text_foreground_dim"_str);
+    Color text_foreground_dimmer       = GetThemeColor("text_foreground_dimmer"_str);
     Color text_background              = GetThemeColor("text_background"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
     Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
@@ -104,7 +106,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     for (int i = 0; i < scrollbar_size; i += 1)
     {
-        PushTile(Layer_Text, MakeV2i(bounds.max.x - 1, bounds.max.y - 2 - i - scrollbar_offset), MakeWall(Wall_Top|Wall_Bottom, text_foreground, MakeColor(127, 127, 127)));
+        PushTile(Layer_Text,
+                 MakeV2i(bounds.max.x - 1, bounds.max.y - 2 - i - scrollbar_offset),
+                 MakeWall(Wall_Top|Wall_Bottom, text_foreground, MakeColor(127, 127, 127)));
     }
 
     if (block)
@@ -202,9 +206,35 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         }
 
         uint8_t b = buffer->text[pos];
-        if (b == ' ' || IsPrintableAscii(b))
+        if (b == '\t')
         {
-            Sprite sprite = MakeSprite(buffer->text[pos], color, text_background);
+            if (core_config->visualize_whitespace)
+            {
+                Sprite sprite = MakeSprite('t', text_foreground_dimmer, text_background);
+                if (draw_cursor && (pos == cursor_pos))
+                {
+                    Swap(sprite.foreground, sprite.background);
+                }
+                PushTile(Layer_Text, at_p, sprite);
+            }
+            at_p.x += core_config->indent_width;
+            pos += 1;
+        }
+        else if (b == ' ' || IsPrintableAscii(b))
+        {
+            Sprite sprite = MakeSprite(b, color, text_background);
+
+            if (core_config->visualize_whitespace &&
+                (b == ' '))
+            {
+                if (ReadBufferByte(buffer, pos - 1) == ' ' ||
+                    ReadBufferByte(buffer, pos + 1) == ' ')
+                {
+                    sprite.glyph = '.';
+                    sprite.foreground = text_foreground_dimmer;
+                }
+            }
+
             if (draw_cursor &&
                 (editor_state->edit_mode == EditMode_Command) &&
                 (pos >= selection.start && pos <= selection.end))

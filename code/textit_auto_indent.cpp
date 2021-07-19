@@ -70,13 +70,46 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
 
     int64_t indent_width = core_config->indent_width;
     int64_t indent       = 0;
+    int64_t align        = 0;
 
     if (anchor)
     {
         int64_t start = FindLineStart(buffer, anchor->pos);
-        int64_t end   = FindFirstNonHorzWhitespace(buffer, start);
-        int64_t indent_depth = end - start;
-        int64_t anchor_depth = anchor->pos - start;
+
+        int64_t anchor_depth = 0;
+        int64_t indent_depth = 0;
+        bool finished_counting_indent = false;
+
+        for (int64_t at = start; at < anchor->pos && IsInBufferRange(buffer, at); at += 1)
+        {
+            uint8_t c = ReadBufferByte(buffer, at);
+            if (c == ' ')
+            {
+                anchor_depth += 1;
+            }
+            else if (c == '\t')
+            {
+                anchor_depth += indent_width;
+            }
+            else
+            {
+                anchor_depth += 1;
+                if (!finished_counting_indent)
+                {
+                    finished_counting_indent = true;
+                    indent_depth = anchor_depth;
+                }
+            }
+        }
+
+        if (!finished_counting_indent)
+        {
+            indent_depth = anchor_depth;
+        }
+
+        int64_t anchor_delta = anchor_depth - indent_depth;
+
+        indent = indent_depth;
 
         IndentRule anchor_state = rules->table[anchor->kind];
         if (anchor_state & IndentRule_BeginAny)
@@ -86,11 +119,11 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
             {
                 if (anchor_state & IndentRule_Regular)
                 {
-                    indent = indent_depth;
+                    /* indent = indent_depth; */
                 }
                 else if (anchor_state & IndentRule_Hanging)
                 {
-                    indent = anchor_depth;
+                    align = anchor_delta;
                 }
                 unfinished_statement = false; // TODO: feels like this could be handled "more elegantly"?
             }
@@ -98,7 +131,8 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
             {
                 if (anchor_state & IndentRule_Additive)
                 {
-                    indent = anchor_depth + indent_width;
+                    indent = indent_depth + indent_width;
+                    align = anchor_delta;
                 }
                 else
                 {
@@ -107,7 +141,7 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
             }
             else if (anchor_state & IndentRule_BeginHanging)
             {
-                indent = anchor_depth + anchor->length;
+                align = anchor_delta + anchor->length;
             }
         }
     }
@@ -132,6 +166,8 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
     {
         spaces = indent;
     }
+
+    spaces += align;
 
     String string = PushStringSpace(platform->GetTempArena(), tabs + spaces);
 

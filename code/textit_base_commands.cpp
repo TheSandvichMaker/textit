@@ -591,10 +591,11 @@ COMMAND_PROC(OpenNewLineBelow)
 
     CMD_EnterTextMode(editor);
 
+    String line_end = LineEndString(buffer->line_end);
+
     int64_t insert_pos = FindLineEnd(buffer, cursor->pos, true);
-    // TODO: Get newline type from buffer
-    int64_t new_pos = BufferReplaceRange(buffer, MakeRange(insert_pos), "\n"_str);
-    new_pos = AutoIndentLineAt(buffer, new_pos);
+    BufferReplaceRange(buffer, MakeRange(insert_pos), line_end);
+    int64_t new_pos = AutoIndentLineAt(buffer, insert_pos);
     SetCursor(view, new_pos);
 }
 
@@ -603,13 +604,14 @@ TEXT_COMMAND_PROC(WriteText)
     View   *view   = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
-    uint8_t   buf[256];
-    int       buf_at           = 0;
+    uint8_t     buf[256];
+    int         buf_at           = 0;
 
-    size_t    size             = text.size;
-    uint8_t  *data             = text.data;
-    int       indent_width     = core_config->indent_width;
-    bool      indent_with_tabs = core_config->indent_with_tabs;
+    size_t      size             = text.size;
+    uint8_t    *data             = text.data;
+    int         indent_width     = core_config->indent_width;
+    bool        indent_with_tabs = core_config->indent_with_tabs;
+    LineEndKind line_end_kind    = buffer->line_end;
 
     for (size_t i = 0; i < size; i += 1)
     {
@@ -626,6 +628,11 @@ TEXT_COMMAND_PROC(WriteText)
             {
                 buf[buf_at++] = ' ';
             }
+        }
+        else if ((line_end_kind == LineEnd_CRLF) && (c == '\n'))
+        {
+            buf[buf_at++] = '\r';
+            buf[buf_at++] = '\n';
         }
         else
         {
