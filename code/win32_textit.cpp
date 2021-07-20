@@ -1,6 +1,11 @@
 #include "win32_textit.hpp"
-
 #include "textit_string.cpp"
+
+#include <d3d11_1.h>
+#include <d3dcompiler.h>
+
+#define CheckHr(hr) if (FAILED(hr)) { goto bail; }
+#define CheckedRelease(ptr) if (ptr) { ptr->Release(); ptr = nullptr; }
 
 //
 // TODO: Run game on separate thread from the windows guff
@@ -16,11 +21,15 @@ static WINDOWPLACEMENT g_window_position = { sizeof(g_window_position) };
 static Win32State win32_state;
 static Platform platform_;
 
+static bool g_use_d3d = true;
+
+#if 0
 extern "C"
 {
 __declspec(dllexport) unsigned long NvOptimusEnablement        = 1;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
+#endif
 
 function bool
 Win32_NextEvent(PlatformEvent **out_event, PlatformEventFilter filter)
@@ -874,6 +883,182 @@ Win32_CreateWindow(HINSTANCE instance, int x, int y, int w, int h, const wchar_t
     return window_handle;
 }
 
+struct D3D_State
+{
+    ID3D11Device           *base_device;
+    ID3D11DeviceContext    *base_device_context;
+    IDXGIDevice1           *dxgi_device;
+    IDXGIAdapter           *dxgi_adapter;
+    IDXGIFactory2          *dxgi_factory;
+    ID3D11Device1          *device;
+    ID3D11DeviceContext1   *device_context;
+    IDXGISwapChain1        *swap_chain;
+    ID3D11Texture2D        *back_buffer;
+    ID3D11Texture2D        *cpu_buffer;
+
+    DWORD display_width, display_height;
+} d3d;
+
+function bool
+D3D_Initialize(HWND window)
+{
+    bool result = false;
+
+    HRESULT hr;
+
+    {
+        D3D_FEATURE_LEVEL feature_levels[] = { D3D_FEATURE_LEVEL_11_0 };
+
+        hr = D3D11CreateDevice(nullptr,
+                               D3D_DRIVER_TYPE_HARDWARE,
+                               nullptr,
+                               D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                               feature_levels,
+                               ArrayCount(feature_levels),
+                               D3D11_SDK_VERSION,
+                               &d3d.base_device,
+                               nullptr,
+                               &d3d.base_device_context);
+        CheckHr(hr);
+    }
+
+    hr = d3d.base_device->QueryInterface(__uuidof(ID3D11Device1), (void **)&d3d.device);
+    CheckHr(hr);
+
+    hr = d3d.base_device_context->QueryInterface(__uuidof(ID3D11DeviceContext1), (void **)&d3d.device_context);
+    CheckHr(hr);
+
+    hr = d3d.device->QueryInterface(__uuidof(IDXGIDevice1), (void **)&d3d.dxgi_device);
+    CheckHr(hr);
+
+    hr = d3d.dxgi_device->GetAdapter(&d3d.dxgi_adapter);
+    CheckHr(hr);
+
+    hr = d3d.dxgi_adapter->GetParent(__uuidof(IDXGIFactory2), (void **)&d3d.dxgi_factory);
+    CheckHr(hr);
+
+    {
+        RECT rect;
+        GetClientRect(window, &rect);
+
+        d3d.display_width  = rect.left;
+        d3d.display_height = rect.bottom;
+        
+        DXGI_SWAP_CHAIN_DESC1 swap_chain_desc = {};
+        swap_chain_desc.Width              = d3d.display_width;
+        swap_chain_desc.Height             = d3d.display_height;
+        swap_chain_desc.Format             = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+        swap_chain_desc.Stereo             = FALSE;
+        swap_chain_desc.SampleDesc.Count   = 1;
+        swap_chain_desc.SampleDesc.Quality = 0;
+        swap_chain_desc.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        swap_chain_desc.BufferCount        = 2;
+        swap_chain_desc.Scaling            = DXGI_SCALING_STRETCH;
+        swap_chain_desc.SwapEffect         = DXGI_SWAP_EFFECT_DISCARD;
+        swap_chain_desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
+        swap_chain_desc.Flags              = 0;
+
+        hr = d3d.dxgi_factory->CreateSwapChainForHwnd(d3d.device, window, &swap_chain_desc, nullptr, nullptr, &d3d.swap_chain);
+        CheckHr(hr);
+    }
+
+    result = true;
+
+bail:
+    if (!result)
+    {
+        CheckedRelease(d3d.base_device);
+        CheckedRelease(d3d.base_device_context);
+        CheckedRelease(d3d.device);
+        CheckedRelease(d3d.device_context);
+        CheckedRelease(d3d.dxgi_device);
+        CheckedRelease(d3d.dxgi_adapter);
+        CheckedRelease(d3d.dxgi_factory);
+        CheckedRelease(d3d.swap_chain);          
+        CheckedRelease(d3d.back_buffer);        
+        CheckedRelease(d3d.cpu_buffer);        
+    }
+
+    return result;
+}
+
+function Bitmap
+D3D_LockCpuBuffer(DWORD width, DWORD height)
+{
+    Bitmap result = {};
+
+    HRESULT hr;
+
+    if (width != d3d.display_width ||
+        height != d3d.display_height)
+    {
+        CheckedRelease(d3d.back_buffer);
+        CheckedRelease(d3d.cpu_buffer);
+
+        d3d.display_width = width;
+        d3d.display_height = height;
+
+        if (width && height)
+        {
+            hr = d3d.swap_chain->ResizeBuffers(1, width, height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+            Assert(SUCCEEDED(hr));
+
+            hr = d3d.swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&d3d.back_buffer);
+            Assert(SUCCEEDED(hr));
+
+            D3D11_TEXTURE2D_DESC tex_desc = {};
+            tex_desc.Width              = width;
+            tex_desc.Height             = height;
+            tex_desc.MipLevels          = 1;
+            tex_desc.ArraySize          = 1;
+            tex_desc.Format             = DXGI_FORMAT_B8G8R8A8_UNORM;
+            tex_desc.SampleDesc.Count   = 1;
+            tex_desc.SampleDesc.Quality = 0;
+            tex_desc.Usage              = D3D11_USAGE_DYNAMIC;
+            tex_desc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
+            tex_desc.CPUAccessFlags     = D3D11_CPU_ACCESS_WRITE;
+
+            hr = d3d.device->CreateTexture2D(&tex_desc, NULL, &d3d.cpu_buffer);
+            Assert(SUCCEEDED(hr));
+        }
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped;
+
+    hr = d3d.device_context->Map(d3d.cpu_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    Assert(SUCCEEDED(hr));
+
+    result.w     = (int)width;
+    result.h     = (int)height;
+    result.pitch = (int)(mapped.RowPitch / sizeof(Color));
+    result.data  = (Color *)mapped.pData;
+
+    return result;
+}
+
+function void
+D3D_UnlockCpuBuffer(void)
+{
+    d3d.device_context->Unmap(d3d.cpu_buffer, 0);
+    d3d.device_context->CopyResource(d3d.back_buffer, d3d.cpu_buffer);
+}
+
+function void
+D3D_Present(void)
+{
+    HRESULT hr = d3d.swap_chain->Present(1, 0);
+    if (hr == DXGI_STATUS_OCCLUDED)
+    {
+        // window is not visible, so no vsync is possible,
+        // sleep a bit instead.
+        Sleep(5);
+    }
+    else
+    {
+        Assert(SUCCEEDED(hr));
+    }
+}
+
 function PlatformEvent *
 PushEvent()
 {
@@ -1517,6 +1702,11 @@ main(int, char **)
 
     win32_state.window = window;
 
+    if (g_use_d3d)
+    {
+        g_use_d3d = D3D_Initialize(window);
+    }
+
     ShowWindow(window, SW_SHOW);
 
     BOOL composition_enabled;
@@ -1697,22 +1887,36 @@ main(int, char **)
             SetCursor(arrow_cursor);
         }
 
-        Win32_ResizeOffscreenBuffer(&platform->backbuffer,
-                                    platform->render_w,
-                                    platform->render_h);
-
-        Bitmap *buffer = &platform->backbuffer;
+        if (g_use_d3d)
+        {
+            platform->backbuffer = D3D_LockCpuBuffer(platform->render_w, platform->render_h);
+        }
+        else
+        {
+            Win32_ResizeOffscreenBuffer(&platform->backbuffer,
+                                        platform->render_w,
+                                        platform->render_h);
+        }
 
         if (app_code->valid)
         {
             app_code->UpdateAndRender(platform);
             platform->exe_reloaded = false;
         }
-        Win32_DisplayOffscreenBuffer(window, buffer);
 
-        if (composition_enabled)
+        if (g_use_d3d)
         {
-            DwmFlush();
+            D3D_UnlockCpuBuffer();
+            D3D_Present();
+        }
+        else
+        {
+            Win32_DisplayOffscreenBuffer(window, &platform->backbuffer);
+
+            if (composition_enabled)
+            {
+                DwmFlush();
+            }
         }
 
         PlatformHighResTime frame_end_time = Win32_GetTime();

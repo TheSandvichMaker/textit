@@ -7,7 +7,7 @@ set SANITIZE_FLAGS=/Od /MT -DTEXTIT_INTERNAL=1 -DTEXTIT_SLOW=1 -fsanitize=addres
 set DEBUG_FLAGS=/Od /MTd -DTEXTIT_INTERNAL=1 -DTEXTIT_SLOW=1 
 set RELEASE_FLAGS=/O2 /MT
 set LINKER_FLAGS=/opt:ref /incremental:no
-set LINKER_LIBRARIES=user32.lib gdi32.lib dwmapi.lib
+set LINKER_LIBRARIES=user32.lib gdi32.lib dwmapi.lib d3d11.lib d3dcompiler.lib
 
 set FLAGS=%SHARED_FLAGS%
 echo]

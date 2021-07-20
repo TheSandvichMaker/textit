@@ -845,6 +845,8 @@ HandleViewEvents(ViewID view_id)
                 }
             }
         }
+
+        Assert(!buffer->bulk_edit);
     }
 }
 

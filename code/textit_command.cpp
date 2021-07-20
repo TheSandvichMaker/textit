@@ -35,6 +35,7 @@ LoadDefaultBindings()
     command->map['B'].regular                      = FindCommand("MoveLeftIdentifier"_str);
     command->map['I'].regular                      = FindCommand("EnterTextMode"_str);
     command->map['A'].regular                      = FindCommand("Append"_str);
+    command->map['A'].shift                        = FindCommand("AppendAtEnd"_str);
     command->map['X'].regular                      = FindCommand("DeleteChar"_str);
     command->map['U'].regular                      = FindCommand("UndoOnce"_str);
     command->map['R'].ctrl                         = FindCommand("RedoOnce"_str);

@@ -21,6 +21,12 @@ COMMAND_PROC(Exit, "Exit the editor"_str)
     platform->exit_requested = true;
 }
 
+COMMAND_PROC(qa, "Exit the editor"_str)
+{
+    UNUSED_VARIABLE(editor);
+    platform->exit_requested = true;
+}
+
 COMMAND_PROC(ToggleVisualizeNewlines)
 {
     UNUSED_VARIABLE(editor);
@@ -42,6 +48,15 @@ COMMAND_PROC(Append)
     CMD_EnterTextMode(editor);
 }
 
+COMMAND_PROC(AppendAtEnd)
+{
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+    cursor->pos = FindLineEnd(buffer, cursor->pos) + 1;
+    CMD_EnterTextMode(editor);
+}
+
 COMMAND_PROC(EnterCommandMode,
              "Enter Command Mode"_str)
 {
@@ -55,6 +70,7 @@ COMMAND_PROC(EnterCommandMode,
 
     BufferLocation loc = CalculateRelativeMove(buffer, cursor, MakeV2i(-1, 0));
     cursor->pos = loc.pos;
+    cursor->selection = MakeRange(cursor->pos);
     cursor->sticky_col = loc.col;
 }
 
@@ -639,7 +655,7 @@ TEXT_COMMAND_PROC(WriteText)
         uint8_t c = data[i];
         
         if (c == '\n' ||
-            c == '}' ||
+            c == '}'  ||
             c == ')')
         {
             should_auto_indent = true;
@@ -664,7 +680,7 @@ TEXT_COMMAND_PROC(WriteText)
         }
         else
         {
-            if (buf_at < sizeof(buf) &&
+            if (buf_at < (int)sizeof(buf) &&
                 (c == '\n' ||
                  c == '\t' ||
                  (c >= ' ' && c <= '~') ||

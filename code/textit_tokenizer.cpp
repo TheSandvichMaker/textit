@@ -185,6 +185,7 @@ TokenizeBuffer(Buffer *buffer)
                 }
                 else
                 {
+parse_operator:
                     t.kind = (TokenKind)c;
                 }
             } break;
@@ -217,6 +218,38 @@ TokenizeBuffer(Buffer *buffer)
                     t.kind = Token_OpenBlockComment;
                     tok->at += 1;
                     tok->block_comment_count += 1;
+                }
+            } break;
+
+            case '<':
+            {
+                if (tok->in_preprocessor)
+                {
+                    t.kind = Token_String;
+                    while (CharsLeft(tok))
+                    {
+                        if ((Peek(tok, 0) == '\r' && Peek(tok, 1) == '\n') ||
+                            Peek(tok, 0) == '\n')
+                        {
+                            if (Peek(tok, -1) != '\\')
+                            {
+                                break;
+                            }
+
+                            if (Peek(tok) == '\r') tok->at += 1;
+                        }
+
+                        if (Match(tok, '>'))
+                        {
+                            break;
+                        }
+
+                        tok->at += 1;
+                    }
+                }
+                else
+                {
+                    goto parse_operator;
                 }
             } break;
 

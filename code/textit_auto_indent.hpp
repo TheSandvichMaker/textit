@@ -29,6 +29,7 @@ GetOtherNestTokenKind(TokenKind kind)
         case Token_RightParen:   return Token_LeftParen;
         case Token_LeftScope:    return Token_RightScope;
         case Token_RightScope:   return Token_LeftScope;
+        INCOMPLETE_SWITCH;
     }
     return Token_None;
 }

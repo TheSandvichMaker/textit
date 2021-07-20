@@ -5,6 +5,8 @@
 #include "textit_image.cpp"
 #include "textit_render.cpp"
 
+#include <windows.h>
+
 // here's some japanese: この野郎！！
 
 // Ryan's text controls example: https://hatebin.com/ovcwtpsfmj
