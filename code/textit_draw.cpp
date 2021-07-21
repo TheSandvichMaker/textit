@@ -54,23 +54,22 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     Color text_foreground_dimmer       = GetThemeColor("text_foreground_dimmer"_str);
     Color text_foreground_dimmest      = GetThemeColor("text_foreground_dimmest"_str);
     Color text_background              = GetThemeColor("text_background"_str);
+    Color text_background_unreachable  = GetThemeColor("text_background_unreachable"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
     Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
     Color selection_background         = GetThemeColor("selection_background"_str);
 
     int64_t actual_line_height = 0;
 
-#if 0
     if (view->scroll_at < 0)
     {
-        at_p.y += view->scroll_at;
+        at_p.y -= view->scroll_at;
         PushRect(Layer_Text,
-                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, at_p.y + 1),
-                                  MakeV2i(bounds.max.x - 1, bounds.max.y - 1)),
-                 MakeColor(32, 32, 32));
-        actual_line_height += at_p.y - bounds.min.y + 1;
+                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, bounds.min.y + 1),
+                                  MakeV2i(bounds.max.x - 1, at_p.y)),
+                 text_background_unreachable);
+        actual_line_height += -view->scroll_at;
     }
-#endif
 
     Range selection = SanitizeRange(cursor->selection);
 
@@ -162,19 +161,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         if (buffer->text[pos] == '\0')
         {
             break;
-        }
-
-        if (at_p.x >= (bounds.max.x - 2))
-        {
-            PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
-
-            at_p.x = left - 1;
-            at_p.y += 1;
-
-            if (at_p.y >= bounds.max.y)
-            {
-                return actual_line_height;
-            }
         }
 
         uint8_t b = buffer->text[pos];
@@ -317,16 +303,14 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         pos += advance;
     }
 
-#if 0
     if (at_p.y < bounds.max.y)
     {
         PushRect(Layer_Text,
-                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, bounds.min.y + 1),
-                                  MakeV2i(bounds.max.x - 1, at_p.y + 1)),
-                 MakeColor(32, 32, 32));
-        actual_line_height += (at_p.y - bounds.min.y);
+                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, at_p.y),
+                                  MakeV2i(bounds.max.x - 1, bounds.max.y)),
+                 text_background_unreachable);
+        actual_line_height += bounds.max.y - at_p.y;
     }
-#endif
 
     return actual_line_height;
 }

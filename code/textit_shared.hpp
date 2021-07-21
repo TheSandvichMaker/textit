@@ -41,14 +41,24 @@ struct DeferDoodadHelp
 #define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
 
 function void
+SetMemory(size_t size, void *data, char value)
+{
+    __stosb((unsigned char *)data, value, size);
+}
+
+function void
 ZeroSize(size_t size_init, void *data_init)
 {
+#if COMPILER_MSVC
+    SetMemory(size_init, data_init, 0);
+#else
     size_t size = size_init;
     char *data = (char *)data_init;
     while (size--)
     {
         *data++ = 0;
     }
+#endif
 }
 
 #define ZeroStruct(Struct) ZeroSize(sizeof(*(Struct)), Struct)

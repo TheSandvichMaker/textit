@@ -1,4 +1,4 @@
-static inline void
+function void
 InitializeRenderState(Arena *arena, Bitmap *target, Font *font)
 {
     render_state->target     = target;
@@ -55,20 +55,20 @@ InitializeRenderState(Arena *arena, Bitmap *target, Font *font)
     render_state->wall_segment_lookup[Wall_Right|Wall_Bottom]                                        = 218;
 }
 
-static inline V2i
+function V2i
 ViewportRelative(V2i p)
 {
     p.y = render_state->viewport.max.y - p.y - 1;
     return p;
 }
 
-static inline V2i
+function V2i
 GlyphDim(Font *font)
 {
     return MakeV2i(font->glyph_w, font->glyph_h);
 }
 
-static inline Bitmap
+function Bitmap
 PushBitmap(Arena *arena, int w, int h)
 {
     Bitmap result = {};
@@ -79,7 +79,7 @@ PushBitmap(Arena *arena, int w, int h)
     return result;
 }
 
-static inline Sprite
+function Sprite
 MakeWall(uint32_t wall_flags, Color foreground = COLOR_WHITE, Color background = COLOR_BLACK)
 {
     Sprite result = {};
@@ -99,22 +99,18 @@ MakeWall(uint32_t wall_flags, Color foreground = COLOR_WHITE, Color background =
     return result;
 }
 
-static inline void
-ClearBitmap(Bitmap *bitmap, Color clear_color = MakeColor(0, 0, 0, 0))
+function void
+ClearBitmap(Bitmap *bitmap)
 {
     Color *row = bitmap->data;
     for (int64_t y = 0; y < bitmap->h; ++y)
     {
-        Color *at = row;
-        for (int64_t x = 0; x < bitmap->w; ++x)
-        {
-            *at++ = clear_color;
-        }
+        ZeroSize(sizeof(Color)*bitmap->w, row);
         row += bitmap->pitch;
     }
 }
 
-static inline void
+function void
 BlitRect(Bitmap *bitmap, Rect2i rect, Color color)
 {
     rect = Intersect(rect, MakeRect2iMinMax(MakeV2i(0, 0), MakeV2i(bitmap->w, bitmap->h)));
@@ -125,7 +121,7 @@ BlitRect(Bitmap *bitmap, Rect2i rect, Color color)
     }
 }
 
-static inline void
+function void
 BlitBitmap(Bitmap *dest, Bitmap *source, V2i p)
 {
     int64_t source_min_x = Max(0, -p.x);
@@ -152,7 +148,7 @@ BlitBitmap(Bitmap *dest, Bitmap *source, V2i p)
     }
 }
 
-static inline void
+function void
 BlitBitmapMask(Bitmap *dest, Bitmap *source, V2i p, Color foreground, Color background)
 {
     int64_t source_min_x = Max(0, -p.x);
@@ -188,7 +184,7 @@ BlitBitmapMask(Bitmap *dest, Bitmap *source, V2i p, Color foreground, Color back
     }
 }
 
-static inline Bitmap
+function Bitmap
 MakeBitmapView(Bitmap *source, Rect2i rect)
 {
     rect = Intersect(rect, 0, 0, source->w, source->h);
@@ -201,7 +197,7 @@ MakeBitmapView(Bitmap *source, Rect2i rect)
     return result;
 }
 
-static inline Rect2i
+function Rect2i
 GetGlyphRect(Font *font, Glyph glyph)
 {
     AssertSlow(glyph < font->glyph_count);
@@ -211,7 +207,7 @@ GetGlyphRect(Font *font, Glyph glyph)
     return result;
 }
 
-static inline void
+function void
 BlitCharMask(Bitmap *dest, Font *font, V2i p, Glyph glyph, Color foreground, Color background)
 {
     if (glyph < font->glyph_count)
@@ -221,7 +217,7 @@ BlitCharMask(Bitmap *dest, Font *font, V2i p, Glyph glyph, Color foreground, Col
     }
 }
 
-static inline RenderCommand *
+function RenderCommand *
 PushRenderCommand(RenderLayer layer, RenderCommandKind kind)
 {
     RenderCommand *command = &render_state->null_command;
@@ -251,7 +247,7 @@ PushRenderCommand(RenderLayer layer, RenderCommandKind kind)
     return command;
 }
 
-static inline void
+function void
 EndPushRenderCommand(RenderCommand *command)
 {
     if (command != &render_state->null_command)
@@ -261,7 +257,7 @@ EndPushRenderCommand(RenderCommand *command)
     }
 }
 
-static inline void
+function void
 PushTile(RenderLayer layer, V2i tile_p, Sprite sprite)
 {
     RenderCommand *command = PushRenderCommand(layer, RenderCommand_Sprite);
@@ -269,7 +265,7 @@ PushTile(RenderLayer layer, V2i tile_p, Sprite sprite)
     command->sprite = sprite;
 }
 
-static inline void
+function void
 PushText(RenderLayer layer, V2i p, String text, Color foreground, Color background)
 {
     V2i at = p;
@@ -286,7 +282,7 @@ PushText(RenderLayer layer, V2i p, String text, Color foreground, Color backgrou
     }
 }
 
-static inline void
+function void
 PushRect(RenderLayer layer, const Rect2i &rect, Color color)
 {
     RenderCommand *command = PushRenderCommand(layer, RenderCommand_Rect);
@@ -294,7 +290,7 @@ PushRect(RenderLayer layer, const Rect2i &rect, Color color)
     command->color = color;
 }
 
-static inline void
+function void
 PushRectOutline(RenderLayer layer, const Rect2i &rect, Color foreground, Color background)
 {
     uint32_t left   = Wall_Left;
@@ -367,7 +363,7 @@ PLATFORM_JOB(TiledRenderJob)
     Rect2i clip_rect = params->clip_rect;
 
     Bitmap target = MakeBitmapView(params->target, clip_rect);
-    ClearBitmap(&target, COLOR_BLACK);
+    ClearBitmap(&target);
 
     char *command_buffer = render_state->command_buffer;
     RenderSortKey *sort_keys = (RenderSortKey *)(command_buffer + render_state->cb_sort_key_at);
@@ -421,7 +417,7 @@ PLATFORM_JOB(TiledRenderJob)
     }
 }
 
-static inline void
+function void
 MergeSortInternal(uint32_t count, uint32_t *a, uint32_t *b)
 {
     if (count <= 1)
@@ -458,14 +454,14 @@ MergeSortInternal(uint32_t count, uint32_t *a, uint32_t *b)
     }
 }
 
-static inline void
+function void
 MergeSort(uint32_t count, uint32_t *a, uint32_t *b)
 {
     CopyArray(count, a, b);
     MergeSortInternal(count, a, b);
 }
 
-static inline void
+function void
 RadixSort(uint32_t count, uint32_t *data, uint32_t *temp)
 {
     uint32_t *source = data;
@@ -502,7 +498,7 @@ RadixSort(uint32_t count, uint32_t *data, uint32_t *temp)
     }
 }
 
-static inline void
+function void
 RenderCommandsToBitmap(Bitmap *target)
 {
     Rect2i target_bounds = MakeRect2iMinDim(0, 0, target->w, target->h);
@@ -554,7 +550,7 @@ EndRender(void)
     }
 }
 
-static inline void
+function void
 PrintRenderCommandsUnderCursor(void)
 {
     char *command_buffer = render_state->command_buffer;

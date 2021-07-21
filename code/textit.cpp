@@ -741,8 +741,9 @@ ExecuteCommand(View *view, Command *command)
 function void
 HandleViewEvents(ViewID view_id)
 {
-    for (PlatformEvent *event = nullptr;
-         platform->NextEvent(&event, PlatformEventFilter_ANY);
+    PlatformEvent event;
+    for (PlatformEventIterator it = platform->IterateEvents(PlatformEventFilter_ANY);
+         platform->NextEvent(&it, &event);
          )
     {
         View *view = GetView(view_id);
@@ -752,29 +753,29 @@ HandleViewEvents(ViewID view_id)
 
         Cursor *cursor = GetCursor(view);
         BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
-        if ((event->type == PlatformEvent_Text) && bindings->text_command)
+        if ((event.type == PlatformEvent_Text) && bindings->text_command)
         {
-            String text = MakeString(event->text_length, event->text);
+            String text = MakeString(event.text_length, event.text);
             bindings->text_command->text(editor_state, text);
         }
-        else if (MatchFilter(event->type, PlatformEventFilter_Input) &&
-                 event->pressed)
+        else if (MatchFilter(event.type, PlatformEventFilter_Input) &&
+                 event.pressed)
         {
-            bool ctrl_down = event->ctrl_down;
-            bool shift_down = event->shift_down;
+            bool ctrl_down = event.ctrl_down;
+            bool shift_down = event.shift_down;
             bool ctrl_shift_down = ctrl_down && shift_down;
 
             bool consumed_digit = false;
             if (editor_state->edit_mode == EditMode_Command &&
-                event->input_code >= PlatformInputCode_0 &&
-                event->input_code <= PlatformInputCode_9)
+                event.input_code >= PlatformInputCode_0 &&
+                event.input_code <= PlatformInputCode_9)
             {
-                if (event->input_code > PlatformInputCode_0 ||
+                if (event.input_code > PlatformInputCode_0 ||
                     view->repeat_value > 0)
                 {
                     consumed_digit = true;
 
-                    int64_t digit = (int64_t)(event->input_code - PlatformInputCode_0);
+                    int64_t digit = (int64_t)(event.input_code - PlatformInputCode_0);
                     view->repeat_value *= 10;
                     view->repeat_value += digit;
 
@@ -789,7 +790,7 @@ HandleViewEvents(ViewID view_id)
             {
                 editor_state->clutch = shift_down;
 
-                Binding *binding = &bindings->map[event->input_code];
+                Binding *binding = &bindings->map[event.input_code];
                 Command *command = binding->regular;
                 if (ctrl_shift_down && binding->ctrl_shift)
                 {
@@ -938,13 +939,14 @@ AppUpdateAndRender(Platform *platform_)
         {
             editor_state->clutch = false;
 
-            for (PlatformEvent *event = nullptr;
-                 platform->NextEvent(&event, PlatformEventFilter_Text|PlatformEventFilter_Keyboard);
+            PlatformEvent event;
+            for (PlatformEventIterator it = platform->IterateEvents(PlatformEventFilter_Text|PlatformEventFilter_Keyboard);
+                 platform->NextEvent(&it, &event);
                  )
             {
-                if (event->type == PlatformEvent_Text)
+                if (event.type == PlatformEvent_Text)
                 {
-                    String text = MakeString(event->text_length, event->text);
+                    String text = MakeString(event.text_length, event.text);
 
                     for (size_t i = 0; i < text.size; i += 1)
                     {
@@ -964,11 +966,11 @@ AppUpdateAndRender(Platform *platform_)
                         }
                     }
                 }
-                else if (event->type == PlatformEvent_KeyDown)
+                else if (event.type == PlatformEvent_KeyDown)
                 {
                     editor_state->cycling_predictions = false;
 
-                    switch (event->input_code)
+                    switch (event.input_code)
                     {
                         INCOMPLETE_SWITCH;
 

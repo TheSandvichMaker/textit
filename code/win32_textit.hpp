@@ -74,6 +74,8 @@ struct Win32State
     Arena arena;
     Arena temp_arena;
 
+    bool window_class_registered;
+    WNDCLASSW window_class;
     HWND window;
 
     wchar_t *exe_folder;
@@ -82,12 +84,19 @@ struct Win32State
 
     DWORD thread_local_index;
 
+    TicketMutex allocation_mutex;
     Win32AllocationHeader allocation_sentinel;
 
     TicketMutex log_mutex;
     int log_line_count;
     int log_line_first;
     PlatformLogLine log_lines[PLATFORM_MAX_LOG_LINES];
+
+    volatile uint32_t event_read_index;
+    volatile uint32_t event_write_index;
+    uint32_t working_write_index;
+    PlatformEvent null_event;
+    PlatformEvent events[64];
 };
 
 #endif /* WIN32_TEXTIT_HPP */

@@ -99,6 +99,9 @@
 
 #define ALWAYS_INLINE __forceinline
 
+#define WRITE_BARRIER _WriteBarrier()
+#define READ_BARRIER _ReadBarrier()
+
 static inline uint32_t
 AtomicAdd(volatile uint32_t *dest, uint32_t value)
 {
@@ -446,6 +449,12 @@ enum PlatformFontRasterFlags_ENUM : PlatformFontRasterFlags
     PlatformFontRasterFlag_DoNotMapUnicode = 0x2, // screw you, windows
 };
 
+struct PlatformEventIterator
+{
+    PlatformEventFilter filter;
+    uint32_t index;
+};
+
 struct Platform
 {
     bool exit_requested;
@@ -458,9 +467,14 @@ struct Platform
 
     float dt;
 
+    TicketMutex event_lock;
+    PlatformEvent *queue_first_event;
+    PlatformEvent *queue_last_event;
     PlatformEvent *first_event;
     PlatformEvent *last_event;
-    bool (*NextEvent)(PlatformEvent **out_event, PlatformEventFilter filter);
+
+    PlatformEventIterator (*IterateEvents)(PlatformEventFilter filter);
+    bool (*NextEvent)(PlatformEventIterator *it, PlatformEvent *out_event);
     void (*PushTickEvent)(void);
 
     int32_t mouse_x, mouse_y, mouse_y_flipped;

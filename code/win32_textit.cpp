@@ -14,7 +14,7 @@
 // Although for just showing textures a jank immediate mode OpenGL context would work fine
 //
 
-static bool g_running;
+static volatile bool g_running;
 static LARGE_INTEGER g_perf_freq;
 static WINDOWPLACEMENT g_window_position = { sizeof(g_window_position) };
 
@@ -23,42 +23,58 @@ static Platform platform_;
 
 static bool g_use_d3d = true;
 
-#if 0
-extern "C"
+function PlatformEventIterator
+Win32_IterateEvents(PlatformEventFilter filter)
 {
-__declspec(dllexport) unsigned long NvOptimusEnablement        = 1;
-__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+    PlatformEventIterator result = {};
+    result.filter = filter;
+    result.index  = win32_state.event_read_index;
+    return result;
 }
-#endif
 
 function bool
-Win32_NextEvent(PlatformEvent **out_event, PlatformEventFilter filter)
+Win32_NextEvent(PlatformEventIterator *it, PlatformEvent *out_event)
 {
     bool result = false;
 
-    PlatformEvent *it = *out_event;
-    if (!it)
+    uint32_t write_index = win32_state.working_write_index;
+    while (it->index != write_index)
     {
-        it = platform->first_event;
-    }
-    else
-    {
-        it = it->next;
-    }
-
-    while (it)
-    {
-        if (!it->consumed_ && MatchFilter(it->type, filter))
+        int event_index = it->index % ArrayCount(win32_state.events);
+        PlatformEvent *event = &win32_state.events[event_index];
+        if (!event->consumed_ && MatchFilter(event->type, it->filter))
         {
-            result = true;
-            it->consumed_ = true;
-            *out_event = it;
+            result           = true;
+            event->consumed_ = true;
+            *out_event       = *event;
             break;
         }
-        it = it->next;
+        it->index += 1;
     }
 
     return result;
+}
+
+function void
+PushEvent(const PlatformEvent &event)
+{
+    uint32_t read_index  = win32_state.event_read_index;
+    uint32_t write_index = win32_state.event_write_index;
+    uint32_t size = write_index - read_index;
+
+    if (size < ArrayCount(win32_state.events))
+    {
+        win32_state.events[write_index % ArrayCount(win32_state.events)] = event;
+        win32_state.event_write_index = write_index + 1;
+    }
+}
+
+static void
+Win32_PushTickEvent(void)
+{
+    PlatformEvent event = {};
+    event.type = PlatformEvent_Tick;
+    PushEvent(event);
 }
 
 static void *
@@ -75,10 +91,12 @@ Win32_Reserve(size_t size, uint32_t flags, const char *tag)
     header->flags = flags;
     header->tag = tag;
 
+    BeginTicketMutex(&win32_state.allocation_mutex);
     header->next = &win32_state.allocation_sentinel;
     header->prev = win32_state.allocation_sentinel.prev;
     header->next->prev = header;
     header->prev->next = header;
+    EndTicketMutex(&win32_state.allocation_mutex);
 
     return header->base;
 }
@@ -116,17 +134,18 @@ Win32_Deallocate(void *pointer)
     if (pointer)
     {
         Win32AllocationHeader *header = (Win32AllocationHeader *)((char *)pointer - platform->page_size);
+        BeginTicketMutex(&win32_state.allocation_mutex);
         header->prev->next = header->next;
         header->next->prev = header->prev;
+        EndTicketMutex(&win32_state.allocation_mutex);
         VirtualFree(header, 0, MEM_RELEASE);
     }
 }
 
 function wchar_t *
-Win32_FormatLastError(void)
+Win32_FormatError(HRESULT error)
 {
     wchar_t *message = NULL;
-    DWORD error = GetLastError() & 0xFFFF;
 
     FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER| 
                    FORMAT_MESSAGE_FROM_SYSTEM|
@@ -143,7 +162,16 @@ Win32_FormatLastError(void)
 function void
 Win32_DisplayLastError(void)
 {
-    wchar_t *message = Win32_FormatLastError();
+    DWORD error = GetLastError() & 0xFFFF;
+    wchar_t *message = Win32_FormatError(error);
+    MessageBoxW(0, message, L"Error", MB_OK);
+    LocalFree(message);
+}
+
+function void
+Win32_DisplayError(HRESULT hr)
+{
+    wchar_t *message = Win32_FormatError(hr);
     MessageBoxW(0, message, L"Error", MB_OK);
     LocalFree(message);
 }
@@ -338,6 +366,8 @@ Win32_LogPrint(PlatformLogLevel level, char *fmt, ...)
     va_start(args, fmt);
     char *formatted = FormatStringV(arena, fmt, args);
     va_end(args);
+
+    Win32_DebugPrint("LOG MESSAGE: %s\n", formatted);
 
     char *at = formatted;
     while (*at)
@@ -604,8 +634,8 @@ Win32_GetFileSize(String filename)
 {
     size_t result = 0;
 
-    ScopedMemory filename_temp_memory(&win32_state.temp_arena);
-    wchar_t *file_wide = Win32_Utf8ToUtf16(&win32_state.temp_arena, (char *)filename.data, (int)filename.size);
+    ScopedMemory filename_temp_memory(platform->GetTempArena());
+    wchar_t *file_wide = Win32_Utf8ToUtf16(platform->GetTempArena(), (char *)filename.data, (int)filename.size);
 
     HANDLE handle = CreateFileW(file_wide, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     if (handle != INVALID_HANDLE_VALUE)
@@ -631,8 +661,8 @@ Win32_ReadFileInto(size_t buffer_size, void *buffer, String filename)
 
     size_t result = 0;
 
-    ScopedMemory filename_temp_memory(&win32_state.temp_arena);
-    wchar_t *file_wide = Win32_Utf8ToUtf16(&win32_state.temp_arena, (char *)filename.data, (int)filename.size);
+    ScopedMemory filename_temp_memory(platform->GetTempArena());
+    wchar_t *file_wide = Win32_Utf8ToUtf16(platform->GetTempArena(), (char *)filename.data, (int)filename.size);
 
     HANDLE handle = CreateFileW(file_wide, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     if (handle != INVALID_HANDLE_VALUE)
@@ -680,8 +710,8 @@ Win32_ReadFile(Arena *arena, String filename)
 {
     String result = {};
 
-    ScopedMemory filename_temp_memory(&win32_state.temp_arena);
-    wchar_t *file_wide = Win32_Utf8ToUtf16(&win32_state.temp_arena, (char *)filename.data, (int)filename.size);
+    ScopedMemory filename_temp_memory(platform->GetTempArena());
+    wchar_t *file_wide = Win32_Utf8ToUtf16(platform->GetTempArena(), (char *)filename.data, (int)filename.size);
 
     HANDLE handle = CreateFileW(file_wide, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     if (handle != INVALID_HANDLE_VALUE)
@@ -756,7 +786,7 @@ function void
 Win32_ResizeOffscreenBuffer(Bitmap *buffer, int32_t w, int32_t h)
 {
     if (buffer->data &&
-        (w != buffer->w) &&
+        (w != buffer->w) ||
         (h != buffer->h))
     {
         Win32_Deallocate(buffer->data);
@@ -817,6 +847,7 @@ Win32_WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
             g_running = false;
         } break;
 
+#if 0
         case WM_PAINT:
         {
             PAINTSTRUCT paint;
@@ -833,6 +864,7 @@ Win32_WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
 
             EndPaint(window, &paint);
         } break;
+#endif
         
         default:
         {
@@ -843,8 +875,23 @@ Win32_WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
 }
 
 static HWND
-Win32_CreateWindow(HINSTANCE instance, int x, int y, int w, int h, const wchar_t *title)
+Win32_CreateWindow(HINSTANCE instance, int x, int y, int w, int h, const wchar_t *title, bool no_redirection_bitmap)
 {
+    if (!win32_state.window_class_registered)
+    {
+        win32_state.window_class.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
+        win32_state.window_class.lpfnWndProc = Win32_WindowProc;
+        win32_state.window_class.hInstance = instance;
+        win32_state.window_class.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+        win32_state.window_class.lpszClassName = L"Win32WindowClass";
+
+        win32_state.window_class_registered = RegisterClassW(&win32_state.window_class);
+        if (!win32_state.window_class_registered)
+        {
+            Win32_ExitWithLastError();
+        }
+    }
+
     int window_x = x;
     int window_y = y;
     int render_w = w;
@@ -856,24 +903,15 @@ Win32_CreateWindow(HINSTANCE instance, int x, int y, int w, int h, const wchar_t
     int window_w = window_rect.right - window_rect.left;
     int window_h = window_rect.bottom - window_rect.top;
 
-    WNDCLASSW window_class = {};
-    window_class.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
-    window_class.lpfnWndProc = Win32_WindowProc;
-    window_class.hInstance = instance;
-    window_class.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    window_class.lpszClassName = L"Win32WindowClass";
-
-    if (!RegisterClassW(&window_class))
-    {
-        Win32_ExitWithLastError();
-    }
-
-    HWND window_handle = CreateWindowW(window_class.lpszClassName,
-                                       title,
-                                       WS_OVERLAPPEDWINDOW,
-                                       window_x, window_y,
-                                       window_w, window_h,
-                                       NULL, NULL, instance, NULL);
+    DWORD extended_style = 0;
+    if (no_redirection_bitmap) extended_style |= WS_EX_NOREDIRECTIONBITMAP;
+    HWND window_handle = CreateWindowExW(extended_style,
+                                         win32_state.window_class.lpszClassName,
+                                         title,
+                                         WS_OVERLAPPEDWINDOW,
+                                         window_x, window_y,
+                                         window_w, window_h,
+                                         NULL, NULL, instance, NULL);
 
     if (!window_handle)
     {
@@ -927,7 +965,7 @@ D3D_Initialize(HWND window)
         hr = D3D11CreateDevice(nullptr,
                                D3D_DRIVER_TYPE_HARDWARE,
                                nullptr,
-                               D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                               D3D11_CREATE_DEVICE_DEBUG|D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                                feature_levels,
                                ArrayCount(feature_levels),
                                D3D11_SDK_VERSION,
@@ -962,14 +1000,14 @@ D3D_Initialize(HWND window)
         DXGI_SWAP_CHAIN_DESC1 swap_chain_desc = {};
         swap_chain_desc.Width              = d3d.display_width;
         swap_chain_desc.Height             = d3d.display_height;
-        swap_chain_desc.Format             = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+        swap_chain_desc.Format             = DXGI_FORMAT_B8G8R8A8_UNORM;
         swap_chain_desc.Stereo             = FALSE;
         swap_chain_desc.SampleDesc.Count   = 1;
         swap_chain_desc.SampleDesc.Quality = 0;
         swap_chain_desc.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         swap_chain_desc.BufferCount        = 2;
-        swap_chain_desc.Scaling            = DXGI_SCALING_STRETCH;
-        swap_chain_desc.SwapEffect         = DXGI_SWAP_EFFECT_DISCARD;
+        swap_chain_desc.Scaling            = DXGI_SCALING_NONE;
+        swap_chain_desc.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         swap_chain_desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
         swap_chain_desc.Flags              = 0;
 
@@ -982,6 +1020,7 @@ D3D_Initialize(HWND window)
 bail:
     if (!result)
     {
+        Win32_LogPrint(PlatformLogLevel_Warning, "Failed to initialize D3D11. Falling back to GDI.");
         D3D_Deinitialize();
     }
 
@@ -989,7 +1028,7 @@ bail:
 }
 
 function Bitmap
-D3D_LockCpuBuffer(DWORD width, DWORD height)
+D3D_AcquireCpuBuffer(DWORD width, DWORD height)
 {
     Bitmap result = {};
 
@@ -1006,7 +1045,7 @@ D3D_LockCpuBuffer(DWORD width, DWORD height)
 
         if (width && height)
         {
-            hr = d3d.swap_chain->ResizeBuffers(1, width, height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+            hr = d3d.swap_chain->ResizeBuffers(2, width, height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
             Assert(SUCCEEDED(hr));
 
             hr = d3d.swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&d3d.back_buffer);
@@ -1043,7 +1082,7 @@ D3D_LockCpuBuffer(DWORD width, DWORD height)
 }
 
 function void
-D3D_UnlockCpuBuffer(void)
+D3D_ReleaseCpuBuffer(void)
 {
     d3d.device_context->Unmap(d3d.cpu_buffer, 0);
     d3d.device_context->CopyResource(d3d.back_buffer, d3d.cpu_buffer);
@@ -1063,28 +1102,6 @@ D3D_Present(void)
     {
         Assert(SUCCEEDED(hr));
     }
-}
-
-function PlatformEvent *
-PushEvent()
-{
-    PlatformEvent *result = PushStruct(&win32_state.temp_arena, PlatformEvent);
-    if (platform->first_event)
-    {
-        platform->last_event = platform->last_event->next = result;
-    }
-    else
-    {
-        platform->first_event = platform->last_event = result;
-    }
-    return result;
-}
-
-static void
-Win32_PushTickEvent(void)
-{
-    PlatformEvent *event = PushEvent();
-    event->type = PlatformEvent_Tick;
 }
 
 static bool
@@ -1622,6 +1639,148 @@ Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, Platfo
     return result;
 }
 
+static DWORD WINAPI
+Win32_AppThread(LPVOID userdata)
+{
+    UNUSED_VARIABLE(userdata);
+
+    HWND window = win32_state.window;
+
+    win32_state.exe_folder = FindExeFolderLikeAMonkeyInAMonkeySuit();
+    win32_state.dll_path   = FormatWString(&win32_state.arena, L"\\\\?\\%s\\textit.dll", win32_state.exe_folder);
+
+    Win32AppCode *app_code = &win32_state.app_code;
+    if (!Win32_LoadAppCode(app_code))
+    {
+        platform->ReportError(PlatformError_Fatal, "Could not load app code");
+    }
+     platform->exe_reloaded = true;
+
+    ThreadLocalContext tls_context = {};
+    Win32_InitializeTLSForThread(&tls_context);
+
+    HCURSOR arrow_cursor = LoadCursorW(nullptr, IDC_ARROW);
+    ShowWindow(window, SW_SHOW);
+
+    BOOL composition_enabled;
+    if (DwmIsCompositionEnabled(&composition_enabled) != S_OK)
+    {
+        Win32_DisplayLastError();
+    }
+
+    double smooth_frametime = 1.0f / 60.0f;
+    PlatformHighResTime frame_start_time = Win32_GetTime();
+
+    platform->dt = 1.0f / 60.0f;
+
+    while (g_running)
+    {
+        win32_state.working_write_index = win32_state.event_write_index;
+
+        {
+            ThreadLocalContext *context = &tls_context;
+            Swap(context->temp_arena, context->prev_temp_arena);
+            Clear(context->temp_arena);
+        }
+
+        RECT client_rect;
+        GetClientRect(window, &client_rect);
+
+        int32_t client_w = client_rect.right;
+        int32_t client_h = client_rect.bottom;
+
+        platform->render_w = client_w;
+        platform->render_h = client_h;
+
+        POINT cursor_pos;
+        GetCursorPos(&cursor_pos);
+        ScreenToClient(window, &cursor_pos);
+
+        platform->mouse_x = cursor_pos.x;
+        platform->mouse_y = client_h - cursor_pos.y - 1;
+        platform->mouse_y_flipped = cursor_pos.y;
+        platform->mouse_in_window = (platform->mouse_x >= 0 && platform->mouse_x < client_w &&
+                                     platform->mouse_y >= 0 && platform->mouse_y < client_h);
+
+        if (platform->mouse_in_window)
+        {
+            SetCursor(arrow_cursor);
+        }
+
+        if (g_use_d3d)
+        {
+            platform->backbuffer = D3D_AcquireCpuBuffer(platform->render_w, platform->render_h);
+        }
+        else
+        {
+            Win32_ResizeOffscreenBuffer(&platform->backbuffer,
+                                        platform->render_w,
+                                        platform->render_h);
+        }
+
+        if (app_code->valid)
+        {
+            app_code->UpdateAndRender(platform);
+            platform->exe_reloaded = false;
+        }
+
+        if (g_use_d3d)
+        {
+            D3D_ReleaseCpuBuffer();
+            D3D_Present();
+        }
+        else
+        {
+            Win32_DisplayOffscreenBuffer(window, &platform->backbuffer);
+
+            if (composition_enabled)
+            {
+                DwmFlush();
+            }
+        }
+
+        win32_state.event_read_index = win32_state.working_write_index;
+
+        PlatformHighResTime frame_end_time = Win32_GetTime();
+        double seconds_elapsed = Win32_SecondsElapsed(frame_start_time, frame_end_time);
+        Swap(frame_start_time, frame_end_time);
+
+        smooth_frametime = 0.9f*smooth_frametime + 0.1f*seconds_elapsed;
+
+        String_utf16 user_title = Win32_Utf8ToUtf16(platform->GetTempArena(), platform->window_title);
+
+        wchar_t *title = FormatWString(platform->GetTempArena(),
+                                       L"%.*s - frame time: %fms, fps: %f\n",
+                                       StringExpand(user_title),
+                                       1000.0*smooth_frametime,
+                                       1.0 / smooth_frametime);
+        SetWindowTextW(window, title);
+
+        platform->dt = (float)seconds_elapsed;
+        if (platform->dt > 1.0f / 15.0f)
+        {
+            platform->dt = 1.0f / 15.0f;
+        }
+
+        uint64_t last_write_time = Win32_GetLastWriteTime(win32_state.dll_path);
+        if (app_code->last_write_time != last_write_time)
+        {
+            for (int attempt = 0; attempt < 100; ++attempt)
+            {
+                if (Win32_LoadAppCode(app_code))
+                {
+                    platform->exe_reloaded = true;
+                    break;
+                }
+
+                Sleep(100);
+            }
+        }
+    }
+
+    return 0;
+}
+
 int
 main(int, char **)
 // WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int show_cmd)
@@ -1646,6 +1805,7 @@ main(int, char **)
 
     platform->page_size              = system_info.dwPageSize;
     platform->allocation_granularity = system_info.dwAllocationGranularity;
+    platform->IterateEvents          = Win32_IterateEvents;
     platform->NextEvent              = Win32_NextEvent;
     platform->PushTickEvent          = Win32_PushTickEvent;
     platform->high_priority_queue    = &high_priority_queue;
@@ -1677,11 +1837,15 @@ main(int, char **)
     platform->ReadClipboard          = Win32_ReadClipboard;
     platform->SleepThread            = Win32_SleepThread;
 
+    //
+
     win32_state.thread_local_index = TlsAlloc();
     if (win32_state.thread_local_index == TLS_OUT_OF_INDEXES)
     {
         Win32_ExitWithLastError();
     }
+
+    //
 
     ThreadLocalContext tls_context = {};
     Win32_InitializeTLSForThread(&tls_context);
@@ -1689,48 +1853,38 @@ main(int, char **)
     Win32_InitializeJobQueue(&high_priority_queue, 8);
     Win32_InitializeJobQueue(&low_priority_queue, 4);
 
-    win32_state.exe_folder = FindExeFolderLikeAMonkeyInAMonkeySuit();
-    win32_state.dll_path   = FormatWString(&win32_state.arena, L"\\\\?\\%s\\textit.dll", win32_state.exe_folder);
-
-    Win32AppCode *app_code = &win32_state.app_code;
-    if (!Win32_LoadAppCode(app_code))
-    {
-        platform->ReportError(PlatformError_Fatal, "Could not load app code");
-    }
-     platform->exe_reloaded = true;
-
-    HCURSOR arrow_cursor = LoadCursorW(nullptr, IDC_ARROW);
-    HWND window = Win32_CreateWindow(instance, 32, 32, 720, 480, L"Textit");
+    HWND window = Win32_CreateWindow(instance, 32, 32, 720, 480, L"Textit", g_use_d3d);
     if (!window)
     {
         platform->ReportError(PlatformError_Fatal, "Could not create window");
     }
 
-    win32_state.window = window;
-
     if (g_use_d3d)
     {
         g_use_d3d = D3D_Initialize(window);
+        if (!g_use_d3d)
+        {
+            DestroyWindow(window);
+            window = Win32_CreateWindow(instance, 32, 32, 720, 480, L"Textit", false);
+            if (!window)
+            {
+                platform->ReportError(PlatformError_Fatal, "Could not create window");
+            }
+        }
     }
 
-    ShowWindow(window, SW_SHOW);
-
-    BOOL composition_enabled;
-    if (DwmIsCompositionEnabled(&composition_enabled) != S_OK)
-    {
-        Win32_DisplayLastError();
-    }
-
-    double smooth_frametime = 1.0f / 60.0f;
-    PlatformHighResTime frame_start_time = Win32_GetTime();
-
-    platform->dt = 1.0f / 60.0f;
+    win32_state.window = window;
 
     g_running = true;
+
+    WRITE_BARRIER;
+
+    HANDLE app_thread_handle = CreateThread(0, 0, Win32_AppThread, nullptr, 0, nullptr);
+    CloseHandle(app_thread_handle);
+
     while (g_running)
     {
-        Clear(&win32_state.temp_arena);
-
+        // TODO: seems a bit redundant in some ways
         {
             ThreadLocalContext *context = &tls_context;
             Swap(context->temp_arena, context->prev_temp_arena);
@@ -1738,7 +1892,6 @@ main(int, char **)
         }
 
         bool exit_requested = false;
-        platform->first_event = platform->last_event = nullptr;
 
         wchar_t last_char = 0;
 
@@ -1767,14 +1920,15 @@ main(int, char **)
 
                     if (!Win32_HandleSpecialKeys(window, vk_code, pressed, alt_down))
                     {
-                        PlatformEvent *event = PushEvent();
-                        event->type = (pressed ? PlatformEvent_KeyDown : PlatformEvent_KeyUp);
-                        event->pressed = pressed;
-                        // TODO: event->repeat
-                        event->alt_down = alt_down;
-                        event->ctrl_down = ctrl_down;
-                        event->shift_down = shift_down;
-                        event->input_code = (PlatformInputCode)vk_code; // I gave myself a 1:1 mapping of VK codes to platform input codes, so that's nice.
+                        PlatformEvent event = {};
+                        event.type = (pressed ? PlatformEvent_KeyDown : PlatformEvent_KeyUp);
+                        event.pressed = pressed;
+                        // TODO: event.repeat
+                        event.alt_down = alt_down;
+                        event.ctrl_down = ctrl_down;
+                        event.shift_down = shift_down;
+                        event.input_code = (PlatformInputCode)vk_code; // I gave myself a 1:1 mapping of VK codes to platform input codes, so that's nice.
+                        PushEvent(event);
 
                         TranslateMessage(&message);
                     }
@@ -1789,44 +1943,47 @@ main(int, char **)
                 case WM_XBUTTONDOWN:
                 case WM_XBUTTONUP:
                 {
-                    PlatformEvent *event = PushEvent();
-                    event->pressed = (message.message == WM_LBUTTONDOWN ||
-                                      message.message == WM_MBUTTONDOWN ||
-                                      message.message == WM_RBUTTONDOWN ||
-                                      message.message == WM_XBUTTONDOWN);
-                    event->type = (event->pressed ? PlatformEvent_MouseDown : PlatformEvent_MouseUp);
+                    PlatformEvent event = {};
+
+                    event.pressed = (message.message == WM_LBUTTONDOWN ||
+                                     message.message == WM_MBUTTONDOWN ||
+                                     message.message == WM_RBUTTONDOWN ||
+                                     message.message == WM_XBUTTONDOWN);
+                    event.type = (event.pressed ? PlatformEvent_MouseDown : PlatformEvent_MouseUp);
                     switch (message.message)
                     {
                         case WM_LBUTTONDOWN: case WM_LBUTTONUP:
                         {
-                            event->input_code = PlatformInputCode_LButton;
+                            event.input_code = PlatformInputCode_LButton;
                         } break;
                         case WM_MBUTTONDOWN: case WM_MBUTTONUP:
                         {
-                            event->input_code = PlatformInputCode_MButton;
+                            event.input_code = PlatformInputCode_MButton;
                         } break;
                         case WM_RBUTTONDOWN: case WM_RBUTTONUP:
                         {
-                            event->input_code = PlatformInputCode_RButton;
+                            event.input_code = PlatformInputCode_RButton;
                         } break;
                         case WM_XBUTTONDOWN: case WM_XBUTTONUP:
                         {
                             if (GET_XBUTTON_WPARAM(message.wParam) == XBUTTON1)
                             {
-                                event->input_code = PlatformInputCode_XButton1;
+                                event.input_code = PlatformInputCode_XButton1;
                             }
                             else
                             {
                                 Assert(GET_XBUTTON_WPARAM(message.wParam) == XBUTTON2);
-                                event->input_code = PlatformInputCode_XButton2;
+                                event.input_code = PlatformInputCode_XButton2;
                             }
                         } break;
                     }
+
+                    PushEvent(event);
                 } break;
 
                 case WM_CHAR:
                 {
-                    PlatformEvent *event = PushEvent();
+                    PlatformEvent event = {};
 
                     wchar_t chars[3] = {};
 
@@ -1852,8 +2009,10 @@ main(int, char **)
                             chars[0] = L'\n';
                         }
                     }
-                    event->type = PlatformEvent_Text;
-                    event->text = Win32_Utf16ToUtf8(&win32_state.temp_arena, chars, &event->text_length);
+                    event.type = PlatformEvent_Text;
+                    event.text = Win32_Utf16ToUtf8(platform->GetTempArena(), chars, &event.text_length);
+
+                    PushEvent(event);
                 } break;
 
                 case WM_IME_CHAR:
@@ -1866,98 +2025,6 @@ main(int, char **)
                     TranslateMessage(&message);
                     DispatchMessageW(&message);
                 } break;
-            }
-        }
-
-        RECT client_rect;
-        GetClientRect(window, &client_rect);
-
-        int32_t client_w = client_rect.right;
-        int32_t client_h = client_rect.bottom;
-
-        platform->render_w = client_w;
-        platform->render_h = client_h;
-
-        POINT cursor_pos;
-        GetCursorPos(&cursor_pos);
-        ScreenToClient(window, &cursor_pos);
-
-        platform->mouse_x = cursor_pos.x;
-        platform->mouse_y = client_h - cursor_pos.y - 1;
-        platform->mouse_y_flipped = cursor_pos.y;
-        platform->mouse_in_window = (platform->mouse_x >= 0 && platform->mouse_x < client_w &&
-                                     platform->mouse_y >= 0 && platform->mouse_y < client_h);
-
-        if (platform->mouse_in_window)
-        {
-            SetCursor(arrow_cursor);
-        }
-
-        if (g_use_d3d)
-        {
-            platform->backbuffer = D3D_LockCpuBuffer(platform->render_w, platform->render_h);
-        }
-        else
-        {
-            Win32_ResizeOffscreenBuffer(&platform->backbuffer,
-                                        platform->render_w,
-                                        platform->render_h);
-        }
-
-        if (app_code->valid)
-        {
-            app_code->UpdateAndRender(platform);
-            platform->exe_reloaded = false;
-        }
-
-        if (g_use_d3d)
-        {
-            D3D_UnlockCpuBuffer();
-            D3D_Present();
-        }
-        else
-        {
-            Win32_DisplayOffscreenBuffer(window, &platform->backbuffer);
-
-            if (composition_enabled)
-            {
-                DwmFlush();
-            }
-        }
-
-        PlatformHighResTime frame_end_time = Win32_GetTime();
-        double seconds_elapsed = Win32_SecondsElapsed(frame_start_time, frame_end_time);
-        Swap(frame_start_time, frame_end_time);
-
-        smooth_frametime = 0.9f*smooth_frametime + 0.1f*seconds_elapsed;
-
-        String_utf16 user_title = Win32_Utf8ToUtf16(&win32_state.temp_arena, platform->window_title);
-
-        wchar_t *title = FormatWString(&win32_state.temp_arena,
-                                       L"%.*s - frame time: %fms, fps: %f\n",
-                                       StringExpand(user_title),
-                                       1000.0*smooth_frametime,
-                                       1.0 / smooth_frametime);
-        SetWindowTextW(window, title);
-
-        platform->dt = (float)seconds_elapsed;
-        if (platform->dt > 1.0f / 15.0f)
-        {
-            platform->dt = 1.0f / 15.0f;
-        }
-
-        uint64_t last_write_time = Win32_GetLastWriteTime(win32_state.dll_path);
-        if (app_code->last_write_time != last_write_time)
-        {
-            for (int attempt = 0; attempt < 100; ++attempt)
-            {
-                if (Win32_LoadAppCode(app_code))
-                {
-                    platform->exe_reloaded = true;
-                    break;
-                }
-
-                Sleep(100);
             }
         }
 
@@ -1998,4 +2065,6 @@ main(int, char **)
         Win32_ReportError(PlatformError_Nonfatal, "Potential Memory Leak Detected");
     }
 #endif
+
+    ExitProcess(0);
 }
