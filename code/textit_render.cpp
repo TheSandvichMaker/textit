@@ -206,7 +206,7 @@ GetGlyphRect(Font *font, Glyph glyph)
 {
     AssertSlow(glyph < font->glyph_count);
     uint32_t glyph_x = font->glyph_w*(glyph % font->glyphs_per_row);
-    uint32_t glyph_y = font->glyph_h*(font->glyphs_per_col - (glyph / font->glyphs_per_col) - 1);
+    uint32_t glyph_y = font->glyph_h*(glyph / font->glyphs_per_col);
     Rect2i result = MakeRect2iMinDim(glyph_x, glyph_y, font->glyph_w, font->glyph_h);
     return result;
 }
@@ -316,10 +316,10 @@ PushRectOutline(RenderLayer layer, const Rect2i &rect, Color foreground, Color b
 
     PushRect(layer, MakeRect2iMinMax(rect.min + MakeV2i(1, 1), rect.max - MakeV2i(1, 1)), background);
 
-    PushTile(layer, rect.min, MakeWall(right|top, foreground, background));
-    PushTile(layer, MakeV2i(rect.max.x - 1, rect.min.y), MakeWall(left|top, foreground, background));
-    PushTile(layer, rect.max - MakeV2i(1, 1), MakeWall(left|bottom, foreground, background));
-    PushTile(layer, MakeV2i(rect.min.x, rect.max.y - 1), MakeWall(right|bottom, foreground, background));
+    PushTile(layer, rect.min, MakeWall(right|bottom, foreground, background));
+    PushTile(layer, MakeV2i(rect.max.x - 1, rect.min.y), MakeWall(left|bottom, foreground, background));
+    PushTile(layer, rect.max - MakeV2i(1, 1), MakeWall(left|top, foreground, background));
+    PushTile(layer, MakeV2i(rect.min.x, rect.max.y - 1), MakeWall(right|top, foreground, background));
 
     for (int64_t x = rect.min.x + 1; x < rect.max.x - 1; ++x)
     {

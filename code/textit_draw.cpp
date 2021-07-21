@@ -45,7 +45,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     bool draw_cursor = is_active_window;
 
     int64_t left = bounds.min.x + 2;
-    V2i at_p = MakeV2i(left, bounds.max.y - 2);
+    V2i at_p = MakeV2i(left, bounds.min.y + 1);
 
     Color text_comment                 = GetThemeColor("text_comment"_str);
     Color text_preprocessor            = GetThemeColor("text_preprocessor"_str);
@@ -60,6 +60,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     int64_t actual_line_height = 0;
 
+#if 0
     if (view->scroll_at < 0)
     {
         at_p.y += view->scroll_at;
@@ -67,8 +68,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                  MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, at_p.y + 1),
                                   MakeV2i(bounds.max.x - 1, bounds.max.y - 1)),
                  MakeColor(32, 32, 32));
-        actual_line_height += ((bounds.max.y - 1) - at_p.y);
+        actual_line_height += at_p.y - bounds.min.y + 1;
     }
+#endif
 
     Range selection = SanitizeRange(cursor->selection);
 
@@ -106,7 +108,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     for (int i = 0; i < scrollbar_size; i += 1)
     {
         PushTile(Layer_Text,
-                 MakeV2i(bounds.max.x - 1, bounds.max.y - 2 - i - scrollbar_offset),
+                 MakeV2i(bounds.max.x - 1, bounds.min.y + i + 1 + scrollbar_offset),
                  MakeWall(Wall_Top|Wall_Bottom, text_foreground, MakeColor(127, 127, 127)));
     }
 
@@ -167,9 +169,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
 
             at_p.x = left - 1;
-            at_p.y -= 1;
+            at_p.y += 1;
 
-            if (at_p.y <= bounds.min.y)
+            if (at_p.y >= bounds.max.y)
             {
                 return actual_line_height;
             }
@@ -282,9 +284,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
 
                 at_x = left - 1;
-                at_y -= 1;
+                at_y += 1;
 
-                if (at_y <= bounds.min.y)
+                if (at_y >= bounds.max.y - 1)
                 {
                     return actual_line_height;
                 }
@@ -300,9 +302,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             advance = newline_length;
 
             at_p.x = left;
-            at_p.y -= 1;
+            at_p.y += 1;
 
-            if (at_p.y > bounds.min.y)
+            if (at_p.y < bounds.max.y - 1)
             {
                 actual_line_height += 1;
             }
@@ -315,7 +317,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         pos += advance;
     }
 
-    if (at_p.y > bounds.min.y)
+#if 0
+    if (at_p.y < bounds.max.y)
     {
         PushRect(Layer_Text,
                  MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, bounds.min.y + 1),
@@ -323,7 +326,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                  MakeColor(32, 32, 32));
         actual_line_height += (at_p.y - bounds.min.y);
     }
-
+#endif
 
     return actual_line_height;
 }
@@ -362,7 +365,7 @@ DrawView(View *view, bool is_active_window)
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
 
     PushRectOutline(Layer_Text, bounds, text_foreground, text_background);
-    DrawLine(MakeV2i(bounds.min.x + 2, bounds.max.y - 1),
+    DrawLine(MakeV2i(bounds.min.x + 2, bounds.min.y),
              PushTempStringF("%hd:%.*s - pos: %lld, scroll: %d, line: %lld, col: %lld, repeat: %lld",
                              buffer->id.index, StringExpand(buffer->name),
                              cursor->pos,
@@ -380,7 +383,7 @@ DrawCommandLineInput()
     Color text_foreground = GetThemeColor("text_foreground"_str);
     Color text_background = GetThemeColor("text_background"_str);
 
-    V2i p = MakeV2i(2, 0);
+    V2i p = MakeV2i(2, render_state->viewport.max.y - 1);
     if (editor_state->command_line_prediction_count > 0)
     {
         int prediction_offset = 1;
@@ -394,7 +397,7 @@ DrawCommandLineInput()
                 color = MakeColor(192, 127, 127);
             }
 
-            DrawLine(p + MakeV2i(0, prediction_offset), other_prediction->name, color, text_background);
+            DrawLine(p + MakeV2i(0, -prediction_offset), other_prediction->name, color, text_background);
             prediction_offset += 1;
         }
     }

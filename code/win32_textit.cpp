@@ -789,7 +789,7 @@ Win32_DisplayOffscreenBuffer(HWND window, Bitmap *buffer)
     BITMAPINFOHEADER *bitmap_header = &bitmap_info.bmiHeader;
     bitmap_header->biSize = sizeof(*bitmap_header);
     bitmap_header->biWidth = buffer->w;
-    bitmap_header->biHeight = buffer->h;
+    bitmap_header->biHeight = -buffer->h;
     bitmap_header->biPlanes = 1;
     bitmap_header->biBitCount = 32;
     bitmap_header->biCompression = BI_RGB;
@@ -899,6 +899,21 @@ struct D3D_State
     DWORD display_width, display_height;
 } d3d;
 
+function void
+D3D_Deinitialize(void)
+{
+    CheckedRelease(d3d.base_device);
+    CheckedRelease(d3d.base_device_context);
+    CheckedRelease(d3d.device);
+    CheckedRelease(d3d.device_context);
+    CheckedRelease(d3d.dxgi_device);
+    CheckedRelease(d3d.dxgi_adapter);
+    CheckedRelease(d3d.dxgi_factory);
+    CheckedRelease(d3d.swap_chain);          
+    CheckedRelease(d3d.back_buffer);        
+    CheckedRelease(d3d.cpu_buffer);        
+}
+
 function bool
 D3D_Initialize(HWND window)
 {
@@ -967,16 +982,7 @@ D3D_Initialize(HWND window)
 bail:
     if (!result)
     {
-        CheckedRelease(d3d.base_device);
-        CheckedRelease(d3d.base_device_context);
-        CheckedRelease(d3d.device);
-        CheckedRelease(d3d.device_context);
-        CheckedRelease(d3d.dxgi_device);
-        CheckedRelease(d3d.dxgi_adapter);
-        CheckedRelease(d3d.dxgi_factory);
-        CheckedRelease(d3d.swap_chain);          
-        CheckedRelease(d3d.back_buffer);        
-        CheckedRelease(d3d.cpu_buffer);        
+        D3D_Deinitialize();
     }
 
     return result;
@@ -1565,7 +1571,7 @@ Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, Platfo
         BITMAPINFOHEADER *header = &font_bitmap_info.bmiHeader;
         header->biSize        = sizeof(*header);
         header->biWidth       = 16*size.cx;
-        header->biHeight      = 16*size.cy;
+        header->biHeight      = -16*size.cy;
         header->biPlanes      = 1;
         header->biBitCount    = 32;
         header->biCompression = BI_RGB;
@@ -1582,8 +1588,8 @@ Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, Platfo
             out_font->glyph_h        = size.cy;
             out_font->glyphs_per_row = 16;
             out_font->glyphs_per_col = 16;
-            out_font->w              = header->biWidth;
-            out_font->h              = header->biHeight;
+            out_font->w              = 16*size.cx;
+            out_font->h              = 16*size.cy;
             out_font->pitch          = out_font->w;
             out_font->data           = (Color *)font_bits;
 
@@ -1965,7 +1971,11 @@ main(int, char **)
 
     Win32_CloseJobQueue(platform->high_priority_queue);
     Win32_CloseJobQueue(platform->low_priority_queue);
-    Win32_ResizeOffscreenBuffer(&platform->backbuffer, 0, 0);
+
+    if (!g_use_d3d)
+    {
+        Win32_ResizeOffscreenBuffer(&platform->backbuffer, 0, 0);
+    }
 
     bool leaked_memory = false;
     for (Win32AllocationHeader *header = win32_state.allocation_sentinel.next;
