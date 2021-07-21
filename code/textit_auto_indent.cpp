@@ -23,20 +23,28 @@ CountIndentationDepth(Buffer *buffer, int64_t pos, int64_t indent_width)
     return result;
 }
 
-function int64_t
-AutoIndentLineAt(Buffer *buffer, int64_t pos)
+struct IndentationResult
 {
+    short tabs;
+    short spaces;
+    int columns;
+};
+
+function IndentationResult
+GetIndentationForLine(Buffer *buffer, int64_t line)
+{
+    IndentationResult result = {};
+    if (!LineIsInBuffer(buffer, line))
+    {
+        return result;
+    }
+
     IndentRules *rules = buffer->indent_rules;
 
-    LineData *line_data = &buffer->null_line_data;
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos, &line_data);
+    LineData *line_data = GetLineData(buffer, line);
 
-    // LineData *prev_line_data  = GetLineData(buffer, loc.line - 1);
-    // int64_t   prev_line_start = prev_line_data->range.start;
-    // int64_t   prev_line_end   = prev_line_data->range.end; (void)prev_line_end;
-
-    int64_t line_start           = loc.line_range.start;
-    int64_t line_end             = loc.line_range.end;
+    int64_t line_start           = line_data->range.start;
+    int64_t line_end             = line_data->range.end;
     int64_t first_non_whitespace = FindFirstNonHorzWhitespace(buffer, line_start);
 
     TokenIterator it = SeekTokenIterator(buffer, first_non_whitespace);
@@ -112,7 +120,7 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
         if (!override_anchor &&
             (t->flags & TokenFlag_LastInLine) &&
             !(rule & IndentRule_StatementEnd) &&
-            !(rule & IndentRule_AffectsIndent))
+            !(rule & IndentRule_PushIndent))
         {
             override_anchor = t;
             override_rule   = IndentRule_PushIndent;
@@ -233,21 +241,41 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
     }
     spaces += align;
 
-    String string = PushStringSpace(platform->GetTempArena(), tabs + spaces);
+    result.tabs    = (short)tabs;
+    result.spaces  = (short)spaces;
+    result.columns = (int)(indent + align);
+
+    return result;
+}
+
+function int64_t
+AutoIndentLineAt(Buffer *buffer, int64_t pos)
+{
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos); // TODO: Some redundancy here, where 
+                                                                      // this function can already provide
+                                                                      // the line data, but instead it is
+                                                                      // re-got using the line passed below
+
+    // TODO: More redundancy
+    int64_t line_start           = loc.line_range.start;
+    int64_t first_non_whitespace = FindFirstNonHorzWhitespace(buffer, line_start);
+
+    IndentationResult indentation = GetIndentationForLine(buffer, loc.line);
+
+    String string = PushStringSpace(platform->GetTempArena(), indentation.tabs + indentation.spaces);
 
     size_t at = 0;
-    for (int64_t i = 0; i < tabs; i += 1)
+    for (int64_t i = 0; i < indentation.tabs; i += 1)
     {
         string.data[at++] = '\t';
     }
-    for (int64_t i = 0; i < spaces; i += 1)
+    for (int64_t i = 0; i < indentation.spaces; i += 1)
     {
         string.data[at++] = ' ';
     }
     Assert(at == string.size);
 
     int64_t result = BufferReplaceRange(buffer, MakeRange(line_start, first_non_whitespace), string);
-
     return result;
 }
 

@@ -480,7 +480,7 @@ COMMAND_PROC(FocusWindowRight, "Focus the next window on the right"_str)
     }
 }
 
-COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str)
+COMMAND_PROC(FocusWindowDown, "Focus the next window down"_str)
 {
     Window *window = editor->active_window;
 
@@ -507,7 +507,7 @@ COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str)
     }
 }
 
-COMMAND_PROC(FocusWindowDown, "Focus the next window down"_str)
+COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str)
 {
     Window *window = editor->active_window;
 

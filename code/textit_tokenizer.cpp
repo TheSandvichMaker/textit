@@ -61,6 +61,7 @@ TokenizeBuffer(Buffer *buffer)
     tok->end = buffer->text + buffer->count;
 
     buffer->tokens.Clear();
+    buffer->tokens.EnsureSpace(1); // TODO: jank alert? forcing the allocation so that line_data->tokens below will not be null
     buffer->line_data.Clear();
 
     LanguageSpec *language = buffer->language;
@@ -75,7 +76,7 @@ TokenizeBuffer(Buffer *buffer)
     LineData *line_data = buffer->line_data.Push();
     ZeroStruct(line_data);
 
-    line_data->tokens = &buffer->tokens[buffer->tokens.count];
+    line_data->tokens = buffer->tokens.data;
 
     Token *prev_token = nullptr;
 

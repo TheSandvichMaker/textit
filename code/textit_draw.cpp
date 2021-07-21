@@ -73,31 +73,13 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     Range selection = SanitizeRange(cursor->selection);
 
-    Token *token = buffer->tokens.data;
+    int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
+    LineData *line_data = GetLineData(buffer, scan_line);
+
+    Token *token = line_data->tokens;
     Token *token_end = token + buffer->tokens.count;
 
-    int64_t scan_line = 0;
-    int64_t pos = 0;
-    while ((scan_line < view->scroll_at) &&
-           (pos < buffer->count))
-    {
-        int64_t newline_length = PeekNewline(buffer, pos);
-        if (newline_length)
-        {
-            pos += newline_length;
-            scan_line += 1;
-        }
-        else
-        {
-            pos += 1;
-        }
-
-        if (token < token_end &&
-            pos >= token->pos + token->length)
-        {
-            token++;
-        }
-    }
+    int64_t pos = line_data->range.start;
 
     int64_t line_count = buffer->line_data.count;
     int64_t bounds_height = GetHeight(bounds) - 2;
@@ -144,7 +126,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 if (kind)
                 {
                     color = GetThemeColor(TokenThemeName(kind));
-                    token->kind = kind; // HIGHLY QUESTIONABLE!
+                    token->kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
+                                        // but maybe it should be moved outside of the actual drawing function
                 }
             }
         }
@@ -286,6 +269,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         if (newline_length > 0)
         {
             advance = newline_length;
+
+            scan_line += 1;
 
             at_p.x = left;
             at_p.y += 1;

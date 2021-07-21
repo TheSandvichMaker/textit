@@ -761,9 +761,14 @@ HandleViewEvents(ViewID view_id)
         else if (MatchFilter(event.type, PlatformEventFilter_Input) &&
                  event.pressed)
         {
-            bool ctrl_down = event.ctrl_down;
+            bool ctrl_down  = event.ctrl_down;
             bool shift_down = event.shift_down;
-            bool ctrl_shift_down = ctrl_down && shift_down;
+            bool alt_down   = event.alt_down;
+
+            Modifiers modifiers = 0;
+            if (ctrl_down)  modifiers |= Modifier_Ctrl;
+            if (shift_down) modifiers |= Modifier_Shift;
+            if (alt_down)   modifiers |= Modifier_Alt;
 
             bool consumed_digit = false;
             if (editor_state->edit_mode == EditMode_Command &&
@@ -790,21 +795,7 @@ HandleViewEvents(ViewID view_id)
             {
                 editor_state->clutch = shift_down;
 
-                Binding *binding = &bindings->map[event.input_code];
-                Command *command = binding->regular;
-                if (ctrl_shift_down && binding->ctrl_shift)
-                {
-                    command = binding->ctrl_shift;
-                }
-                else if (ctrl_down && binding->ctrl)
-                {
-                    command = binding->ctrl;
-                }
-                else if (shift_down && binding->shift)
-                {
-                    command = binding->shift;
-                }
-
+                Command *command = bindings->by_code[event.input_code].by_modifiers[modifiers];
                 if (command)
                 {
                     uint64_t undo_ordinal = CurrentUndoOrdinal(buffer);

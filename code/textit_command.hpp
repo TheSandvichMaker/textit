@@ -13,16 +13,10 @@ enum CommandKind
     Command_Change,
 };
 
-enum_flags(int, MoveFlags)
-{
-    MoveFlag_Sticky = 0x1,
-};
-
 struct Move
 {
     Range selection;
     int64_t pos;
-    MoveFlags flags;
 };
 
 function Move
@@ -68,8 +62,7 @@ typedef void (*ChangeProc)(EditorState *editor, Range range);
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), (void *)&Paste(CHG_, name));               \
     static void Paste(CHG_, name)(EditorState *editor, Range range)
 
-typedef uint32_t CommandFlags;
-enum CommandFlags_ENUM : CommandFlags
+enum_flags(int, CommandFlags)
 {
     Command_Visible = 0x1,
 };
@@ -147,41 +140,23 @@ struct CommandRegisterHelper
         }
     }
 };
-#define REGISTER_COMMAND(name) CommandRegisterHelper Paste(command_, __COUNTER__)(StringLiteral(#name), name);
 
-enum BindingModifier
+enum_flags(int, Modifiers)
 {
-    BindMod_None,
-    BindMod_Ctrl,
+    Modifier_Alt   = 0x1,
+    Modifier_Shift = 0x2,
+    Modifier_Ctrl  = 0x4,
 };
 
 struct Binding
 {
-    Command *regular;
-    Command *ctrl;
-    Command *shift;
-    Command *ctrl_shift;
+    Command *by_modifiers[9];
 };
-
-struct BindingKey
-{
-    PlatformInputCode code;
-    BindingModifier mod;
-};
-
-function BindingKey
-MakeBindingKey(PlatformInputCode code, BindingModifier mod = BindMod_None)
-{
-    BindingKey result;
-    result.code = code;
-    result.mod = mod;
-    return result;
-}
 
 struct BindingMap
 {
     Command *text_command;
-    Binding map[PlatformInputCode_COUNT];
+    Binding by_code[PlatformInputCode_COUNT];
 };
 
 #endif /* TEXTIT_COMMAND_HPP */

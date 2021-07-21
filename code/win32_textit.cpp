@@ -1713,9 +1713,7 @@ Win32_AppThread(LPVOID userdata)
         }
         else
         {
-            Win32_ResizeOffscreenBuffer(&platform->backbuffer,
-                                        platform->render_w,
-                                        platform->render_h);
+            Win32_ResizeOffscreenBuffer(&platform->backbuffer, platform->render_w, platform->render_h);
         }
 
         if (app_code->valid)

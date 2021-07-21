@@ -102,7 +102,7 @@
 #define WRITE_BARRIER _WriteBarrier()
 #define READ_BARRIER _ReadBarrier()
 
-static inline uint32_t
+function uint32_t
 AtomicAdd(volatile uint32_t *dest, uint32_t value)
 {
     // NOTE: This returns the value _before_ adding
@@ -110,7 +110,7 @@ AtomicAdd(volatile uint32_t *dest, uint32_t value)
     return result;
 }
 
-static inline uint32_t
+function uint32_t
 AtomicIncrement(volatile uint32_t *dest)
 {
     // NOTE: This returns the value _before_ adding
@@ -118,7 +118,7 @@ AtomicIncrement(volatile uint32_t *dest)
     return result;
 }
 
-static inline uint32_t
+function uint32_t
 AtomicExchange(volatile int32_t *dest, int32_t value)
 {
     // NOTE: This returns the value _before_ exchanging
@@ -126,7 +126,7 @@ AtomicExchange(volatile int32_t *dest, int32_t value)
     return result;
 }
 
-static inline uint32_t
+function uint32_t
 AtomicExchange(volatile uint32_t *dest, uint32_t value)
 {
     // NOTE: This returns the value _before_ exchanging
@@ -134,14 +134,14 @@ AtomicExchange(volatile uint32_t *dest, uint32_t value)
     return result;
 }
 
-static inline void *
+function void *
 AtomicExchange(void *volatile *dest, void *value)
 {
     void *result = InterlockedExchangePointer(dest, value);
     return result;
 }
 
-static inline uint32_t
+function uint32_t
 GetThreadID()
 {
     uint8_t *thread_local_storage = (uint8_t *)__readgsqword(0x30);
@@ -149,7 +149,7 @@ GetThreadID()
     return thread_id;
 }
 #elif COMPILER_LLVM
-static inline uint32_t
+function uint32_t
 AtomicAdd(volatile uint32_t *dest, uint32_t value)
 {
     // NOTE: This returns the value _before_ adding
@@ -164,7 +164,7 @@ struct TicketMutex
     volatile uint32_t serving;
 };
 
-static inline void
+function void
 BeginTicketMutex(TicketMutex *mutex)
 {
     uint32_t ticket = AtomicAdd(&mutex->ticket, 1);
@@ -174,7 +174,7 @@ BeginTicketMutex(TicketMutex *mutex)
     }
 }
 
-static inline void
+function void
 EndTicketMutex(TicketMutex *mutex)
 {
     AtomicAdd(&mutex->serving, 1);
@@ -208,14 +208,15 @@ enum PlatformEventFilter_ENUM : PlatformEventFilter
     PlatformEventFilter_ANY       = 0xFFFFFFFF,
 };
 
-static inline bool
+function bool
 MatchFilter(PlatformEventType type, PlatformEventFilter filter)
 {
     bool result = !!(filter & (1 << (type - 1)));
     return result;
 }
 
-enum PlatformInputCode
+typedef int PlatformInputCode;
+enum PlatformInputCode_ENUM : PlatformInputCode
 {
     //
     // Key codes
@@ -383,8 +384,6 @@ enum PlatformInputCode
 
 struct PlatformEvent
 {
-    PlatformEvent *next;
-
     PlatformEventType type;
 
     bool alt_down;
@@ -467,12 +466,6 @@ struct Platform
 
     float dt;
 
-    TicketMutex event_lock;
-    PlatformEvent *queue_first_event;
-    PlatformEvent *queue_last_event;
-    PlatformEvent *first_event;
-    PlatformEvent *last_event;
-
     PlatformEventIterator (*IterateEvents)(PlatformEventFilter filter);
     bool (*NextEvent)(PlatformEventIterator *it, PlatformEvent *out_event);
     void (*PushTickEvent)(void);
@@ -528,7 +521,7 @@ struct Platform
 
 static Platform *platform;
 
-static inline void
+function void
 LeaveUnhandled(PlatformEvent *event)
 {
     event->consumed_ = false;
