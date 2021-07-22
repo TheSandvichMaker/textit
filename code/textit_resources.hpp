@@ -34,7 +34,7 @@ struct ResourceID
     }
 };
 
-using BufferID = ResourceID<struct BufferIDTag>;
-using ViewID   = ResourceID<struct ViewIDTag>;
+typedef ResourceID<struct BufferIDTag> BufferID;
+typedef ResourceID<struct ViewIDTag> ViewID;
 
 #endif /* TEXTIT_RESOURCES_HPP */

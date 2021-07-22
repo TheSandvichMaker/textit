@@ -25,18 +25,19 @@ CountIndentationDepth(Buffer *buffer, int64_t pos, int64_t indent_width)
 
 struct IndentationResult
 {
-    short tabs;
-    short spaces;
+    int tabs;
+    int spaces;
     int columns;
+    Range old_range;
 };
 
-function IndentationResult
-GetIndentationForLine(Buffer *buffer, int64_t line)
+function void
+GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
 {
-    IndentationResult result = {};
+    ZeroStruct(result);
     if (!LineIsInBuffer(buffer, line))
     {
-        return result;
+        return;
     }
 
     IndentRules *rules = buffer->indent_rules;
@@ -120,7 +121,7 @@ GetIndentationForLine(Buffer *buffer, int64_t line)
         if (!override_anchor &&
             (t->flags & TokenFlag_LastInLine) &&
             !(rule & IndentRule_StatementEnd) &&
-            !(rule & IndentRule_PushIndent))
+            !(rule & IndentRule_AffectsIndent))
         {
             override_anchor = t;
             override_rule   = IndentRule_PushIndent;
@@ -241,11 +242,10 @@ GetIndentationForLine(Buffer *buffer, int64_t line)
     }
     spaces += align;
 
-    result.tabs    = (short)tabs;
-    result.spaces  = (short)spaces;
-    result.columns = (int)(indent + align);
-
-    return result;
+    result->tabs      = (short)tabs;
+    result->spaces    = (short)spaces;
+    result->columns   = (int)(indent + align);
+    result->old_range = MakeRange(line_start, first_non_whitespace);
 }
 
 function int64_t
@@ -256,11 +256,8 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
                                                                       // the line data, but instead it is
                                                                       // re-got using the line passed below
 
-    // TODO: More redundancy
-    int64_t line_start           = loc.line_range.start;
-    int64_t first_non_whitespace = FindFirstNonHorzWhitespace(buffer, line_start);
-
-    IndentationResult indentation = GetIndentationForLine(buffer, loc.line);
+    IndentationResult indentation;
+    GetIndentationForLine(buffer, loc.line, &indentation);
 
     String string = PushStringSpace(platform->GetTempArena(), indentation.tabs + indentation.spaces);
 
@@ -275,7 +272,7 @@ AutoIndentLineAt(Buffer *buffer, int64_t pos)
     }
     Assert(at == string.size);
 
-    int64_t result = BufferReplaceRange(buffer, MakeRange(line_start, first_non_whitespace), string);
+    int64_t result = BufferReplaceRange(buffer, indentation.old_range, string);
     return result;
 }
 

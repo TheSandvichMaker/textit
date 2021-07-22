@@ -847,25 +847,22 @@ Win32_WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
             g_running = false;
         } break;
 
-#if 0
-        case WM_PAINT:
+        case WM_SIZING:
         {
-            PAINTSTRUCT paint;
-            BeginPaint(window, &paint);
+            RECT *rect = (RECT *)l_param;
 
-            RECT client_rect;
-            GetClientRect(window, &client_rect);
+            int w = rect->right - rect->left;
+            int h = rect->bottom - rect->top;
 
-            platform->render_w = client_rect.right;
-            platform->render_h = client_rect.bottom;
+            w = platform->window_resize_snap_w*((w + platform->window_resize_snap_w - 1) / platform->window_resize_snap_w);
+            h = platform->window_resize_snap_h*((h + platform->window_resize_snap_h - 1) / platform->window_resize_snap_h);
 
-            Win32_ResizeOffscreenBuffer(&platform->backbuffer, platform->render_w, platform->render_h);
-            Win32_DisplayOffscreenBuffer(window, &platform->backbuffer);
+            rect->right = rect->left + w;
+            rect->bottom = rect->top + h;
 
-            EndPaint(window, &paint);
+            result = true;
         } break;
-#endif
-        
+
         default:
         {
             result = DefWindowProcW(window, message, w_param, l_param);
@@ -905,6 +902,7 @@ Win32_CreateWindow(HINSTANCE instance, int x, int y, int w, int h, const wchar_t
 
     DWORD extended_style = 0;
     if (no_redirection_bitmap) extended_style |= WS_EX_NOREDIRECTIONBITMAP;
+
     HWND window_handle = CreateWindowExW(extended_style,
                                          win32_state.window_class.lpszClassName,
                                          title,
@@ -996,7 +994,7 @@ D3D_Initialize(HWND window)
 
         d3d.display_width  = rect.left;
         d3d.display_height = rect.bottom;
-        
+
         DXGI_SWAP_CHAIN_DESC1 swap_chain_desc = {};
         swap_chain_desc.Width              = d3d.display_width;
         swap_chain_desc.Height             = d3d.display_height;
@@ -1034,7 +1032,7 @@ D3D_AcquireCpuBuffer(DWORD width, DWORD height)
 
     HRESULT hr;
 
-    if (width != d3d.display_width ||
+    if (width  != d3d.display_width ||
         height != d3d.display_height)
     {
         CheckedRelease(d3d.back_buffer);
@@ -1381,7 +1379,7 @@ static void
 Win32_InitializeJobQueue(PlatformJobQueue *queue, int thread_count)
 {
     queue->stop = CreateEventA(NULL, TRUE, FALSE, NULL);
-    queue->done = CreateEventA(NULL, TRUE, FALSE, NULL);
+    queue->done = CreateEventA(NULL, TRUE, TRUE, NULL);
     queue->run = CreateSemaphoreA(NULL, 0, thread_count, NULL);
 
     queue->tls = PushArray(&win32_state.arena, thread_count, ThreadLocalContext);
@@ -1431,7 +1429,10 @@ Win32_AddJob(PlatformJobQueue *queue, void *params, PlatformJobProc *proc)
 static void
 Win32_WaitForJobs(PlatformJobQueue *queue)
 {
-    WaitForSingleObject(queue->done, INFINITE);
+    if (queue->jobs_in_flight > 0)
+    {
+        WaitForSingleObject(queue->done, INFINITE);
+    }
 }
 
 static void
@@ -1851,6 +1852,9 @@ main(int, char **)
     Win32_InitializeJobQueue(&high_priority_queue, 8);
     Win32_InitializeJobQueue(&low_priority_queue, 4);
 
+    platform->window_resize_snap_w = 1;
+    platform->window_resize_snap_h = 1;
+
     HWND window = Win32_CreateWindow(instance, 32, 32, 720, 480, L"Textit", g_use_d3d);
     if (!window)
     {
@@ -1894,7 +1898,7 @@ main(int, char **)
         wchar_t last_char = 0;
 
         MSG message;
-        while (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
+        while (GetMessageW(&message, 0, 0, 0))
         {
             switch (message.message)
             {

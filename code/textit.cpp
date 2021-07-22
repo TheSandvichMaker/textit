@@ -738,14 +738,18 @@ ExecuteCommand(View *view, Command *command)
     }
 }
 
-function void
+function bool
 HandleViewEvents(ViewID view_id)
 {
+    bool result = false;
+
     PlatformEvent event;
     for (PlatformEventIterator it = platform->IterateEvents(PlatformEventFilter_ANY);
          platform->NextEvent(&it, &event);
          )
     {
+        result = true;
+
         View *view = GetView(view_id);
         Buffer *buffer = GetBuffer(view);
 
@@ -840,6 +844,8 @@ HandleViewEvents(ViewID view_id)
 
         Assert(!buffer->bulk_edit);
     }
+
+    return result;
 }
 
 void
@@ -871,6 +877,10 @@ AppUpdateAndRender(Platform *platform_)
             platform->ReportError(PlatformError_Nonfatal, "Failed to load ttf font. Trying fallback bmp font.");
             editor_state->font = LoadFontFromDisk(&editor_state->transient_arena, "font8x16_slim.bmp"_str, 8, 16);
         }
+
+        platform->window_resize_snap_w = editor_state->font.glyph_w;
+        platform->window_resize_snap_h = editor_state->font.glyph_h;
+
         InitializeRenderState(&editor_state->transient_arena, &platform->backbuffer, &editor_state->font);
 
         LoadDefaultTheme();
@@ -919,11 +929,13 @@ AppUpdateAndRender(Platform *platform_)
 
     BeginRender();
 
+    bool handled_any_events = false;
+
     switch (editor_state->input_mode)
     {
         case InputMode_Editor:
         {
-            HandleViewEvents(editor_state->active_window->view);
+            handled_any_events = HandleViewEvents(editor_state->active_window->view);
         } break;
 
         case InputMode_CommandLine:
@@ -935,6 +947,8 @@ AppUpdateAndRender(Platform *platform_)
                  platform->NextEvent(&it, &event);
                  )
             {
+                handled_any_events = true;
+
                 if (event.type == PlatformEvent_Text)
                 {
                     String text = MakeString(event.text_length, event.text);
@@ -1085,12 +1099,15 @@ AppUpdateAndRender(Platform *platform_)
         } break;
     }
 
-    RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
-    DrawWindows(&editor_state->root_window);
-
-    if (editor_state->input_mode)
+    if (handled_any_events)
     {
-        DrawCommandLineInput();
+        RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
+        DrawWindows(&editor_state->root_window);
+
+        if (editor_state->input_mode)
+        {
+            DrawCommandLineInput();
+        }
     }
     EndRender();
 

@@ -146,11 +146,11 @@ union RenderSortKey
 struct RenderCommand
 {
     RenderCommandKind kind;
+    Rect2i rect;
 
     V2i p;
     Sprite sprite;
 
-    Rect2i rect;
     Color color;
 };
 
@@ -161,6 +161,8 @@ struct RenderState
     Bitmap *target;
 
     Font *fonts[Layer_COUNT];
+
+    uint64_t *prev_dirty_rects;
 
     Rect2i viewport;
 

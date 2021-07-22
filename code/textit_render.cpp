@@ -248,21 +248,14 @@ PushRenderCommand(RenderLayer layer, RenderCommandKind kind)
 }
 
 function void
-EndPushRenderCommand(RenderCommand *command)
-{
-    if (command != &render_state->null_command)
-    {
-        // render_state->command_buffer_hash = HashData(render_state->command_buffer_hash, sizeof(*sort_key), sort_key);
-        // render_state->command_buffer_hash = HashData(render_state->command_buffer_hash, sizeof(*command), command);
-    }
-}
-
-function void
 PushTile(RenderLayer layer, V2i tile_p, Sprite sprite)
 {
     RenderCommand *command = PushRenderCommand(layer, RenderCommand_Sprite);
     command->p = tile_p;
     command->sprite = sprite;
+
+    command->rect.min = tile_p;
+    command->rect.max = tile_p + MakeV2i(1, 1);
 }
 
 function void
@@ -347,6 +340,15 @@ BeginRender(void)
 
     Swap(render_state->command_buffer_hash, render_state->prev_command_buffer_hash);
     render_state->command_buffer_hash = 0;
+
+    // TODO: Parameterize
+    int tile_count_x = 8;
+    int tile_count_y = 8;
+
+    if (!render_state->prev_dirty_rects)
+    {
+        render_state->prev_dirty_rects = PushArray(arena, tile_count_x*tile_count_y, uint64_t);
+    }
 }
 
 struct TiledRenderJobParams
@@ -363,7 +365,6 @@ PLATFORM_JOB(TiledRenderJob)
     Rect2i clip_rect = params->clip_rect;
 
     Bitmap target = MakeBitmapView(params->target, clip_rect);
-    ClearBitmap(&target);
 
     char *command_buffer = render_state->command_buffer;
     RenderSortKey *sort_keys = (RenderSortKey *)(command_buffer + render_state->cb_sort_key_at);
@@ -520,23 +521,66 @@ RenderCommandsToBitmap(Bitmap *target)
     int tile_count = tile_count_x*tile_count_y;
     TiledRenderJobParams *tiles = PushArray(render_state->arena, tile_count, TiledRenderJobParams);
 
-    int tile_w = (target->w + tile_count_x - 1) / tile_count_x;
-    int tile_h = (target->h + tile_count_y - 1) / tile_count_y;
+    uint64_t *prev_dirty_rects = render_state->prev_dirty_rects;
+    uint64_t *dirty_rects = PushArray(render_state->arena, tile_count, uint64_t);
+
+    int64_t viewport_w = GetWidth(render_state->viewport);
+    int64_t viewport_h = GetHeight(render_state->viewport);
+    int64_t tile_w = (viewport_w + tile_count_x - 1) / tile_count_x;
+    int64_t tile_h = (viewport_h + tile_count_y - 1) / tile_count_y;
+
+    char *command_buffer = render_state->command_buffer;
+    RenderSortKey *end = (RenderSortKey *)(command_buffer + render_state->cb_size);
+    for (RenderSortKey *at = sort_keys; at < end; at += 1)
+    {
+        RenderCommand *command = (RenderCommand *)(command_buffer + at->offset);
+        Rect2i rect = command->rect;
+
+        int64_t min_x = rect.min.x / tile_w;
+        int64_t min_y = rect.min.y / tile_h;
+        int64_t max_x = (rect.max.x + tile_w - 1) / tile_w;
+        int64_t max_y = (rect.max.y + tile_h - 1) / tile_h;
+
+        min_x = Max(min_x, 0);
+        min_y = Max(min_y, 0);
+        max_x = Min(max_x, 8);
+        max_y = Min(max_y, 8);
+
+        for (int64_t y = min_y; y < max_y; y += 1)
+        for (int64_t x = min_x; x < max_x; x += 1)
+        {
+            HashResult seed = {};
+            seed.u64[0] = dirty_rects[y*tile_count_x + x];
+            dirty_rects[y*tile_count_x + x] = HashData(seed, sizeof(*command), command).u64[0];
+        }
+    }
+
+    // int tile_w = (target->w + tile_count_x - 1) / tile_count_x;
+    // int tile_h = (target->h + tile_count_y - 1) / tile_count_y;
+
+    V2i glyph_dim = GlyphDim(&editor_state->font);
 
     for (int tile_y = 0; tile_y < tile_count_y; ++tile_y)
     for (int tile_x = 0; tile_x < tile_count_x; ++tile_x)
     {
         int tile_index = tile_y*tile_count_x + tile_x;
 
-        TiledRenderJobParams *params = &tiles[tile_index];
-        params->target = target;
+        if (dirty_rects[tile_index] != prev_dirty_rects[tile_index])
+        {
+            TiledRenderJobParams *params = &tiles[tile_index];
+            params->target = target;
 
-        Rect2i clip_rect = MakeRect2iMinDim(tile_x*tile_w, tile_y*tile_h, tile_w, tile_h);
-        clip_rect = Intersect(clip_rect, target_bounds); 
-        params->clip_rect = clip_rect;
+            Rect2i clip_rect = MakeRect2iMinDim(tile_x*tile_w, tile_y*tile_h, tile_w, tile_h);
+            clip_rect.min *= glyph_dim;
+            clip_rect.max *= glyph_dim;
+            clip_rect = Intersect(clip_rect, target_bounds); 
+            params->clip_rect = clip_rect;
 
-        platform->AddJob(platform->high_priority_queue, params, TiledRenderJob);
+            platform->AddJob(platform->high_priority_queue, params, TiledRenderJob);
+        }
     }
+
+    render_state->prev_dirty_rects = dirty_rects;
 
     platform->WaitForJobs(platform->high_priority_queue);
 }
@@ -544,10 +588,7 @@ RenderCommandsToBitmap(Bitmap *target)
 static void
 EndRender(void)
 {
-    // if (render_state->command_buffer_hash != render_state->prev_command_buffer_hash)
-    {
-        RenderCommandsToBitmap(render_state->target);
-    }
+    RenderCommandsToBitmap(render_state->target);
 }
 
 function void

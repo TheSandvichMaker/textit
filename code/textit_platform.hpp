@@ -474,6 +474,8 @@ struct Platform
     int32_t mouse_dx, mouse_dy;
     int32_t mouse_in_window;
 
+    int32_t window_resize_snap_w, window_resize_snap_h;
+
     int32_t render_w, render_h;
     Bitmap backbuffer;
 
