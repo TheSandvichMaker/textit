@@ -303,8 +303,6 @@ PushRectOutline(RenderLayer layer, const Rect2i &rect, Color foreground, Color b
     }
 #endif
 
-    PushRect(layer, MakeRect2iMinMax(rect.min + MakeV2i(1, 1), rect.max - MakeV2i(1, 1)), background);
-
     PushTile(layer, rect.min, MakeWall(right|bottom, foreground, background));
     PushTile(layer, MakeV2i(rect.max.x - 1, rect.min.y), MakeWall(left|bottom, foreground, background));
     PushTile(layer, rect.max - MakeV2i(1, 1), MakeWall(left|top, foreground, background));

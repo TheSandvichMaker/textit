@@ -38,14 +38,13 @@ function int64_t
 DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 {
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
-
-    int64_t cursor_pos = cursor->pos;
 
     bool draw_cursor = is_active_window;
 
-    int64_t left = bounds.min.x + 2;
-    V2i at_p = MakeV2i(left, bounds.min.y + 1);
+    bool visualize_newlines              = core_config->visualize_newlines;
+    bool right_align_visualized_newlines = core_config->right_align_visualized_newlines; (void)right_align_visualized_newlines;
+    bool visualize_whitespace            = core_config->visualize_whitespace; (void)visualize_whitespace;
+    bool show_line_numbers               = core_config->show_line_numbers;
 
     Color text_comment                 = GetThemeColor("text_comment"_str);
     Color text_preprocessor            = GetThemeColor("text_preprocessor"_str);
@@ -55,246 +54,245 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     Color text_foreground_dimmest      = GetThemeColor("text_foreground_dimmest"_str);
     Color text_background              = GetThemeColor("text_background"_str);
     Color text_background_unreachable  = GetThemeColor("text_background_unreachable"_str);
+    Color text_background_highlighted  = GetThemeColor("text_background_highlighted"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
     Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
     Color selection_background         = GetThemeColor("selection_background"_str);
 
+    Rect2i inner_bounds = bounds;
+    inner_bounds.min += MakeV2i(2, 1);
+    inner_bounds.max -= MakeV2i(2, 1);
+
+    V2i top_left = inner_bounds.min;
+
+    int64_t buffer_line_count = buffer->line_data.count;
+
+    int64_t min_line = view->scroll_at;
+    int64_t max_line = view->scroll_at + GetHeight(inner_bounds);
+
+    min_line = Clamp(min_line, 0, buffer_line_count);
+    max_line = Clamp(max_line, 0, buffer_line_count);
+
+    int64_t max_line_digits = Log10(max_line) + 1;
+    int64_t line_width      = GetWidth(inner_bounds);
+
     int64_t actual_line_height = 0;
+    int64_t row = 0;
 
     if (view->scroll_at < 0)
     {
-        at_p.y -= view->scroll_at;
+        row += -view->scroll_at;
         PushRect(Layer_Text,
                  MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, bounds.min.y + 1),
-                                  MakeV2i(bounds.max.x - 1, at_p.y)),
+                                  MakeV2i(bounds.max.x - 1, top_left.y + row)),
                  text_background_unreachable);
         actual_line_height += -view->scroll_at;
     }
 
-    Range selection = SanitizeRange(cursor->selection);
-
-    int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
-    LineData *line_data = GetLineData(buffer, scan_line);
-
-    Token *token = line_data->tokens;
-    Token *token_end = token + buffer->tokens.count;
-
-    int64_t pos = line_data->range.start;
-
-    int64_t line_count = buffer->line_data.count;
-    int64_t bounds_height = GetHeight(bounds) - 2;
-    int64_t scrollbar_size = Max(1, bounds_height*bounds_height / line_count);
-    int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*bounds_height / line_count);
-
-    for (int i = 0; i < scrollbar_size; i += 1)
+    for (int64_t line = min_line; line < max_line; line += 1)
     {
-        PushTile(Layer_Text,
-                 MakeV2i(bounds.max.x - 1, bounds.min.y + i + 1 + scrollbar_offset),
-                 MakeWall(Wall_Top|Wall_Bottom, text_foreground, MakeColor(127, 127, 127)));
-    }
+        LineData *data = &buffer->line_data[line];
 
-    Token null_token = {};
-    null_token.kind = Token_Identifier;
-    null_token.pos  = INT64_MAX;
-
-    while (pos < buffer->count)
-    {
-        if (pos >= token->pos + token->length)
-        {
-            token++;
-            if (token >= token_end)
-            {
-                token = &null_token;
-            }
-        }
-
-        Color color = text_foreground;
-        if (HasFlag(token->flags, TokenFlag_IsComment))
-        {
-            color = text_comment;
-        }
-        else if (token->kind == Token_Identifier)
-        {
-            if (HasFlag(token->flags, TokenFlag_IsPreprocessor))
-            {
-                color = text_preprocessor;
-            }
-            else
-            {
-                String string = MakeString(token->length, &buffer->text[token->pos]);
-                TokenKind kind = (TokenKind)PointerToInt(StringMapFind(buffer->language->idents, string));
-                if (kind)
-                {
-                    color = GetThemeColor(TokenThemeName(kind));
-                    token->kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
-                                        // but maybe it should be moved outside of the actual drawing function
-                }
-            }
-        }
-        else
-        {
-            color = GetThemeColor(TokenThemeName(token->kind));
-        }
-
-        if (draw_cursor && (pos == cursor_pos))
-        {
-            PushTile(Layer_Text, at_p, MakeSprite('\0', text_background, text_foreground));
-        }
-
-        if (buffer->text[pos] == '\0')
+        if ((line + 1 == max_line) &&
+            RangeSize(data->range) == 0)
         {
             break;
         }
 
-        uint8_t b = buffer->text[pos];
+        actual_line_height += 1;
 
-        Color foreground = color;
-        Color background = text_background;
+        Token *token     = data->tokens;
+        Token *token_end = data->tokens + data->token_count;
 
-        bool renderable = (b == ' ' || b == '\t' || IsPrintableAscii(b));
+        int64_t start = data->range.start;
+        int64_t end   = data->range.end;
+        int64_t col   = 0;
 
-        bool force_right_align = false;
-        int64_t advance = 1;
-        String string = MakeString(1, &buffer->text[pos]);
-        if ((b == '\r' || b == '\n') && core_config->visualize_newlines)
+        int64_t line_number = line + 1;
+
+        if (show_line_numbers)
         {
-            if (b == '\r' && ReadBufferByte(buffer, pos + 1) == '\n')
-            {
-                string = PushTempStringF("\\r\\n");
-                advance = 2;
-            }
-            else if (b == '\r')
-            {
-                string = PushTempStringF("\\r");
-            }
-            else if (b == '\n')
-            {
-                string = PushTempStringF("\\n");
-            }
-            else
-            {
-                INVALID_CODE_PATH;
-            }
-            foreground = text_foreground_dimmest;
-            background = text_background;
-            force_right_align = core_config->right_align_visualized_newlines;
-        }
-        else if (b == '\n' && core_config->visualize_newlines)
-        {
-            string = PushTempStringF("\\n");
-            foreground = text_foreground_dimmest;
-            background = text_background;
-        }
-        else if (b == ' ' && core_config->visualize_whitespace)
-        {
-            if (ReadBufferByte(buffer, pos - 1) == ' ' ||
-                ReadBufferByte(buffer, pos + 1) == ' ')
-            {
-                string = PushTempStringF(".");
-                foreground = text_foreground_dimmer;
-                background = text_background;
-            }
-        }
-        else if (b == '\t' && core_config->visualize_whitespace)
-        {
-            string = PushStringSpace(platform->GetTempArena(), core_config->indent_width);
-            if (string.size >= 2)
-            {
-                string.data[0] = '\\';
-                string.data[1] = 't';
-                for (size_t i = 2; i < string.size; i += 1) string.data[i] = ' ';
-            }
-            else if (string.size == 1)
-            {
-                string.data[1] = 't';
-                for (size_t i = 1; i < string.size; i += 1) string.data[i] = ' ';
-            }
-            foreground = text_foreground_dimmer;
-            background = text_background;
-        }
-        else if (!renderable)
-        {
-            ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
-            string = PushTempStringF("\\u%x", unicode.codepoint);
-            advance = unicode.advance;
-            foreground = unrenderable_text_foreground;
-            background = unrenderable_text_background;
+            DrawLine(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, text_background);
+            col += max_line_digits + 1;
         }
 
-        if (draw_cursor &&
-            (editor_state->edit_mode == EditMode_Command) &&
-            (pos >= selection.start && pos <= selection.end))
+        for (int64_t pos = start; pos < end;)
         {
-            background = selection_background;
-            foreground.r = 255 - selection_background.r;
-            foreground.g = 255 - selection_background.g;
-            foreground.b = 255 - selection_background.b;
-        }
+            uint8_t b = ReadBufferByte(buffer, pos);
 
-        if (draw_cursor && (pos == cursor_pos))
-        {
-            Swap(foreground, background);
-        }
+            Color foreground = text_foreground;
+            Color background = text_background;
 
-        int64_t at_x = at_p.x;
-        int64_t at_y = at_p.y;
+            //
+            // Colorize Tokens
+            //
 
-        if (force_right_align)
-        {
-            at_x = bounds.max.x - 2 - string.size;
-        }
-
-        for (size_t i = 0; i < string.size; ++i)
-        {
-            PushTile(Layer_Text, MakeV2i(at_x, at_y), MakeSprite(string.data[i], foreground, background));
-            at_x += 1;
-            if (at_x > (bounds.max.x - 2))
+            while (token &&
+                   (pos >= (token->pos + token->length)))
             {
-                PushTile(Layer_Text, at_p, MakeSprite('\\', MakeColor(127, 127, 127), text_background));
-
-                at_x = left - 1;
-                at_y += 1;
-
-                if (at_y >= bounds.max.y - 1)
+                token++;
+                if (token >= token_end)
                 {
-                    return actual_line_height;
+                    token = nullptr;
+                    break;
                 }
             }
-        }
 
-        at_p.x = at_x;
-        at_p.y = at_y;
-
-        int64_t newline_length = PeekNewline(buffer, pos);
-        if (newline_length > 0)
-        {
-            advance = newline_length;
-
-            scan_line += 1;
-
-            at_p.x = left;
-            at_p.y += 1;
-
-            if (at_p.y < bounds.max.y - 1)
+            if (token)
             {
-                actual_line_height += 1;
+                if (HasFlag(token->flags, TokenFlag_IsComment))
+                {
+                    foreground = text_comment;
+                }
+                else if (token->kind == Token_Identifier)
+                {
+                    if (HasFlag(token->flags, TokenFlag_IsPreprocessor))
+                    {
+                        foreground = text_preprocessor;
+                    }
+                    else
+                    {
+                        String string = MakeString(token->length, &buffer->text[token->pos]);
+                        TokenKind kind = (TokenKind)PointerToInt(StringMapFind(buffer->language->idents, string));
+                        if (kind)
+                        {
+                            foreground = GetThemeColor(TokenThemeName(kind));
+                            token->kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
+                                                // but maybe it should be moved outside of the actual drawing function
+                        }
+                    }
+                }
+                else
+                {
+                    foreground = GetThemeColor(TokenThemeName(token->kind));
+                }
+
+                if (pos >= token->pos &&
+                    editor_state->pos_at_mouse >= token->pos &&
+                    editor_state->pos_at_mouse <  token->pos + token->length)
+                {
+                    editor_state->token_at_mouse = token;
+                    background = text_background_highlighted;
+                }
+            }
+
+            String string = {};
+
+            int64_t advance     = 1;
+            bool    right_align = false;
+
+            if (b == '\t')
+            {
+                col += 4;
+            }
+            else if ((b == '\r' || b == '\n') &&visualize_newlines)
+            {
+                if (b == '\r' && ReadBufferByte(buffer, pos + 1) == '\n')
+                {
+                    string = PushTempStringF("\\r\\n");
+                    advance = 2;
+                }
+                else if (b == '\r')
+                {
+                    string = PushTempStringF("\\r");
+                }
+                else if (b == '\n')
+                {
+                    string = PushTempStringF("\\n");
+                }
+                else
+                {
+                    INVALID_CODE_PATH;
+                }
+                foreground = text_foreground_dimmest;
+                background = text_background;
+                right_align = right_align_visualized_newlines;
+            }
+            else if (IsUtf8Byte(b))
+            {
+                ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
+                string = PushTempStringF("\\u%x", unicode.codepoint);
+                advance = unicode.advance;
+                foreground = unrenderable_text_foreground;
+                background = unrenderable_text_background;
             }
             else
+            {
+                string = MakeString(1, &buffer->text[pos]);
+            }
+
+            if (draw_cursor)
+            {
+                for (Cursor *cursor = IterateCursors(view->id, buffer->id);
+                     cursor;
+                     cursor = cursor->next)
+                {
+                    Range selection = SanitizeRange(cursor->selection);
+
+                    if (pos >= selection.start &&
+                        pos <= selection.end)
+                    {
+                        background = selection_background;
+                        foreground.r = 255 - selection_background.r;
+                        foreground.g = 255 - selection_background.g;
+                        foreground.b = 255 - selection_background.b;
+                    }
+
+                    if (pos == cursor->pos)
+                    {
+                        Swap(foreground, background);
+                        break;
+                    }
+                }
+            }
+
+            if (right_align)
+            {
+                col = line_width - string.size;
+            }
+
+            for (size_t i = 0; i < string.size; ++i)
+            {
+                PushTile(Layer_Text, top_left + MakeV2i(col, row), MakeSprite(string.data[i], foreground, background));
+
+                if (AreEqual(editor_state->text_mouse_p, top_left + MakeV2i(col, row)))
+                {
+                    editor_state->pos_at_mouse = pos;
+                }
+
+                col += 1;
+                if (pos + advance < end &&
+                    col >= line_width)
+                {
+                    PushTile(Layer_Text, top_left + MakeV2i(col, row), MakeSprite('\\', MakeColor(127, 127, 127), text_background));
+
+                    col = -1;
+                    row += 1;
+
+                    if (top_left.y + row >= inner_bounds.max.y)
+                    {
+                        return actual_line_height;
+                    }
+                }
+            }
+
+            if (top_left.y + row >= inner_bounds.max.y)
             {
                 return actual_line_height;
             }
+
+            pos += advance;
         }
 
-        pos += advance;
+        row += 1;
     }
 
-    if (at_p.y < bounds.max.y)
+    if (top_left.y + row < inner_bounds.max.y)
     {
         PushRect(Layer_Text,
-                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, at_p.y),
+                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, top_left.y + row),
                                   MakeV2i(bounds.max.x - 1, bounds.max.y)),
                  text_background_unreachable);
-        actual_line_height += bounds.max.y - at_p.y;
     }
 
     return actual_line_height;
@@ -333,17 +331,38 @@ DrawView(View *view, bool is_active_window)
     Cursor *cursor = GetCursor(view);
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
 
+    PushRect(Layer_Text, MakeRect2iMinMax(bounds.min + MakeV2i(1, 1), bounds.max - MakeV2i(1, 1)), text_background);
+
+    int64_t actual_line_height = DrawTextArea(view, bounds, is_active_window);
+
     PushRectOutline(Layer_Text, bounds, text_foreground, text_background);
     DrawLine(MakeV2i(bounds.min.x + 2, bounds.min.y),
-             PushTempStringF("%hd:%.*s - pos: %lld, scroll: %d, line: %lld, col: %lld, repeat: %lld",
+             PushTempStringF("%hd:%.*s - pos: %lld, scroll: %d, line: %lld, col: %lld, repeat: %lld, mouse: { %lld, %lld }, %lld",
                              buffer->id.index, StringExpand(buffer->name),
                              cursor->pos,
                              view->scroll_at,
                              loc.line, loc.col,
-                             view->repeat_value),
+                             view->repeat_value,
+                             editor_state->text_mouse_p.x,
+                             editor_state->text_mouse_p.y,
+                             editor_state->pos_at_mouse),
              filebar_text_foreground, filebar_text_background, GetWidth(bounds) - 4);
 
-    return DrawTextArea(view, bounds, is_active_window);
+    int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
+
+    int64_t line_count = buffer->line_data.count;
+    int64_t bounds_height = GetHeight(bounds) - 2;
+    int64_t scrollbar_size = Max(1, bounds_height*bounds_height / line_count);
+    int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*bounds_height / line_count);
+
+    for (int i = 0; i < scrollbar_size; i += 1)
+    {
+        PushTile(Layer_Text,
+                 MakeV2i(bounds.max.x - 1, bounds.min.y + i + 1 + scrollbar_offset),
+                 MakeWall(Wall_Top|Wall_Bottom, text_foreground, MakeColor(127, 127, 127)));
+    }
+
+    return actual_line_height;
 }
 
 function void

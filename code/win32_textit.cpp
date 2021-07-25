@@ -843,6 +843,7 @@ Win32_WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
     {
         case WM_CLOSE:
         case WM_DESTROY:
+        case WM_QUIT:
         {
             g_running = false;
         } break;
@@ -881,6 +882,7 @@ Win32_CreateWindow(HINSTANCE instance, int x, int y, int w, int h, const wchar_t
         win32_state.window_class.hInstance = instance;
         win32_state.window_class.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
         win32_state.window_class.lpszClassName = L"Win32WindowClass";
+        win32_state.window_class.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 
         win32_state.window_class_registered = RegisterClassW(&win32_state.window_class);
         if (!win32_state.window_class_registered)
@@ -1013,6 +1015,9 @@ D3D_Initialize(HWND window)
         CheckHr(hr);
     }
 
+    hr = d3d.dxgi_factory->MakeWindowAssociation(window, 0);
+    CheckHr(hr);
+
     result = true;
 
 bail:
@@ -1094,7 +1099,7 @@ D3D_Present(void)
     {
         // window is not visible, so no vsync is possible,
         // sleep a bit instead.
-        Sleep(5);
+        Sleep(16);
     }
     else
     {
@@ -1116,7 +1121,10 @@ Win32_HandleSpecialKeys(HWND window, int vk_code, bool pressed, bool alt_is_down
             {
                 case VK_RETURN:
                 {
-                    Win32_ToggleFullscreen(window);
+                    if (!g_use_d3d)
+                    {
+                        Win32_ToggleFullscreen(window);
+                    }
                 } break;
 
                 case VK_F4:
@@ -1661,7 +1669,6 @@ Win32_AppThread(LPVOID userdata)
     Win32_InitializeTLSForThread(&tls_context);
 
     HCURSOR arrow_cursor = LoadCursorW(nullptr, IDC_ARROW);
-    ShowWindow(window, SW_SHOW);
 
     BOOL composition_enabled;
     if (DwmIsCompositionEnabled(&composition_enabled) != S_OK)
@@ -1676,8 +1683,6 @@ Win32_AppThread(LPVOID userdata)
 
     while (g_running)
     {
-        win32_state.working_write_index = win32_state.event_write_index;
-
         {
             ThreadLocalContext *context = &tls_context;
             Swap(context->temp_arena, context->prev_temp_arena);
@@ -1690,6 +1695,14 @@ Win32_AppThread(LPVOID userdata)
         int32_t client_w = client_rect.right;
         int32_t client_h = client_rect.bottom;
 
+        if (client_w != platform->render_w ||
+            client_h != platform->render_h)
+        {
+            PlatformEvent event = {};
+            event.type = PlatformEvent_Redraw;
+            PushEvent(event);
+        }
+
         platform->render_w = client_w;
         platform->render_h = client_h;
 
@@ -1698,8 +1711,8 @@ Win32_AppThread(LPVOID userdata)
         ScreenToClient(window, &cursor_pos);
 
         platform->mouse_x = cursor_pos.x;
-        platform->mouse_y = client_h - cursor_pos.y - 1;
-        platform->mouse_y_flipped = cursor_pos.y;
+        platform->mouse_y = cursor_pos.y;
+        platform->mouse_y_flipped = client_h - cursor_pos.y - 1;
         platform->mouse_in_window = (platform->mouse_x >= 0 && platform->mouse_x < client_w &&
                                      platform->mouse_y >= 0 && platform->mouse_y < client_h);
 
@@ -1716,6 +1729,8 @@ Win32_AppThread(LPVOID userdata)
         {
             Win32_ResizeOffscreenBuffer(&platform->backbuffer, platform->render_w, platform->render_h);
         }
+
+        win32_state.working_write_index = win32_state.event_write_index;
 
         if (app_code->valid)
         {
@@ -1774,6 +1789,11 @@ Win32_AppThread(LPVOID userdata)
 
                 Sleep(100);
             }
+        }
+
+        if (platform->exit_requested)
+        {
+            DestroyWindow(window);
         }
     }
 
@@ -1879,12 +1899,18 @@ main(int, char **)
 
     g_running = true;
 
+    SetFocus(window);
+    ShowWindow(window, SW_SHOW);
+
     WRITE_BARRIER;
 
     HANDLE app_thread_handle = CreateThread(0, 0, Win32_AppThread, nullptr, 0, nullptr);
     CloseHandle(app_thread_handle);
 
-    while (g_running)
+    wchar_t last_char = 0;
+
+    MSG message;
+    while (g_running && GetMessageW(&message, 0, 0, 0))
     {
         // TODO: seems a bit redundant in some ways
         {
@@ -1895,139 +1921,144 @@ main(int, char **)
 
         bool exit_requested = false;
 
-        wchar_t last_char = 0;
-
-        MSG message;
-        while (GetMessageW(&message, 0, 0, 0))
+        switch (message.message)
         {
-            switch (message.message)
+            case WM_CLOSE:
+            case WM_QUIT:
             {
-                case WM_CLOSE:
-                case WM_QUIT:
-                {
-                    exit_requested = true;
-                } break;
+                exit_requested = true;
+            } break;
 
-                case WM_KEYUP:
-                case WM_KEYDOWN:
-                case WM_SYSKEYUP:
-                case WM_SYSKEYDOWN:
-                {
-					int vk_code = (int)message.wParam;
-                    bool pressed = (message.message == WM_KEYDOWN ||
-                                    message.message == WM_SYSKEYDOWN);
-                    bool alt_down = (message.lParam & (1 << 29)) != 0;
-                    bool ctrl_down = !!(GetKeyState(VK_CONTROL) & 0xFF00);
-                    bool shift_down = !!(GetKeyState(VK_SHIFT) & 0xFF00);
+            case WM_KEYUP:
+            case WM_KEYDOWN:
+            case WM_SYSKEYUP:
+            case WM_SYSKEYDOWN:
+            {
+                int vk_code = (int)message.wParam;
+                bool pressed = (message.message == WM_KEYDOWN ||
+                                message.message == WM_SYSKEYDOWN);
+                bool alt_down = (message.lParam & (1 << 29)) != 0;
+                bool ctrl_down = !!(GetKeyState(VK_CONTROL) & 0xFF00);
+                bool shift_down = !!(GetKeyState(VK_SHIFT) & 0xFF00);
 
-                    if (!Win32_HandleSpecialKeys(window, vk_code, pressed, alt_down))
-                    {
-                        PlatformEvent event = {};
-                        event.type = (pressed ? PlatformEvent_KeyDown : PlatformEvent_KeyUp);
-                        event.pressed = pressed;
-                        // TODO: event.repeat
-                        event.alt_down = alt_down;
-                        event.ctrl_down = ctrl_down;
-                        event.shift_down = shift_down;
-                        event.input_code = (PlatformInputCode)vk_code; // I gave myself a 1:1 mapping of VK codes to platform input codes, so that's nice.
-                        PushEvent(event);
-
-                        TranslateMessage(&message);
-                    }
-                } break;
-
-                case WM_LBUTTONDOWN:
-                case WM_LBUTTONUP:
-                case WM_MBUTTONDOWN:
-                case WM_MBUTTONUP:
-                case WM_RBUTTONDOWN:
-                case WM_RBUTTONUP:
-                case WM_XBUTTONDOWN:
-                case WM_XBUTTONUP:
+                if (!Win32_HandleSpecialKeys(window, vk_code, pressed, alt_down))
                 {
                     PlatformEvent event = {};
-
-                    event.pressed = (message.message == WM_LBUTTONDOWN ||
-                                     message.message == WM_MBUTTONDOWN ||
-                                     message.message == WM_RBUTTONDOWN ||
-                                     message.message == WM_XBUTTONDOWN);
-                    event.type = (event.pressed ? PlatformEvent_MouseDown : PlatformEvent_MouseUp);
-                    switch (message.message)
-                    {
-                        case WM_LBUTTONDOWN: case WM_LBUTTONUP:
-                        {
-                            event.input_code = PlatformInputCode_LButton;
-                        } break;
-                        case WM_MBUTTONDOWN: case WM_MBUTTONUP:
-                        {
-                            event.input_code = PlatformInputCode_MButton;
-                        } break;
-                        case WM_RBUTTONDOWN: case WM_RBUTTONUP:
-                        {
-                            event.input_code = PlatformInputCode_RButton;
-                        } break;
-                        case WM_XBUTTONDOWN: case WM_XBUTTONUP:
-                        {
-                            if (GET_XBUTTON_WPARAM(message.wParam) == XBUTTON1)
-                            {
-                                event.input_code = PlatformInputCode_XButton1;
-                            }
-                            else
-                            {
-                                Assert(GET_XBUTTON_WPARAM(message.wParam) == XBUTTON2);
-                                event.input_code = PlatformInputCode_XButton2;
-                            }
-                        } break;
-                    }
-
+                    event.type = (pressed ? PlatformEvent_KeyDown : PlatformEvent_KeyUp);
+                    event.pressed = pressed;
+                    // TODO: event.repeat
+                    event.alt_down = alt_down;
+                    event.ctrl_down = ctrl_down;
+                    event.shift_down = shift_down;
+                    event.input_code = (PlatformInputCode)vk_code; // I gave myself a 1:1 mapping of VK codes to platform input codes, so that's nice.
                     PushEvent(event);
-                } break;
 
-                case WM_CHAR:
-                {
-                    PlatformEvent event = {};
-
-                    wchar_t chars[3] = {};
-
-                    wchar_t curr_char = (wchar_t)message.wParam;
-                    if (IS_HIGH_SURROGATE(curr_char))
-                    {
-                        last_char = curr_char;
-                    }
-                    else if (IS_LOW_SURROGATE(curr_char))
-                    {
-                        if (IS_SURROGATE_PAIR(last_char, curr_char))
-                        {
-                            chars[0] = last_char;
-                            chars[1] = curr_char;
-                        }
-                        last_char = 0;
-                    }
-                    else
-                    {
-                        chars[0] = curr_char;
-                        if (chars[0] == L'\r')
-                        {
-                            chars[0] = L'\n';
-                        }
-                    }
-                    event.type = PlatformEvent_Text;
-                    event.text = Win32_Utf16ToUtf8(platform->GetTempArena(), chars, &event.text_length);
-
-                    PushEvent(event);
-                } break;
-
-                case WM_IME_CHAR:
-                {
-                    platform->DebugPrint("Got WM_IME_CHAR:\n");
-                } break;
-
-                default:
-                {
                     TranslateMessage(&message);
-                    DispatchMessageW(&message);
-                } break;
-            }
+                }
+            } break;
+
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONUP:
+            case WM_MBUTTONDOWN:
+            case WM_MBUTTONUP:
+            case WM_RBUTTONDOWN:
+            case WM_RBUTTONUP:
+            case WM_XBUTTONDOWN:
+            case WM_XBUTTONUP:
+            {
+                PlatformEvent event = {};
+
+                event.pressed = (message.message == WM_LBUTTONDOWN ||
+                                 message.message == WM_MBUTTONDOWN ||
+                                 message.message == WM_RBUTTONDOWN ||
+                                 message.message == WM_XBUTTONDOWN);
+                event.type = (event.pressed ? PlatformEvent_MouseDown : PlatformEvent_MouseUp);
+                switch (message.message)
+                {
+                    case WM_LBUTTONDOWN: case WM_LBUTTONUP:
+                    {
+                        event.input_code = PlatformInputCode_LButton;
+                    } break;
+                    case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+                    {
+                        event.input_code = PlatformInputCode_MButton;
+                    } break;
+                    case WM_RBUTTONDOWN: case WM_RBUTTONUP:
+                    {
+                        event.input_code = PlatformInputCode_RButton;
+                    } break;
+                    case WM_XBUTTONDOWN: case WM_XBUTTONUP:
+                    {
+                        if (GET_XBUTTON_WPARAM(message.wParam) == XBUTTON1)
+                        {
+                            event.input_code = PlatformInputCode_XButton1;
+                        }
+                        else
+                        {
+                            Assert(GET_XBUTTON_WPARAM(message.wParam) == XBUTTON2);
+                            event.input_code = PlatformInputCode_XButton2;
+                        }
+                    } break;
+                }
+
+                PushEvent(event);
+            } break;
+
+            case WM_MOUSEMOVE:
+            {
+                PlatformEvent event = {};
+                event.type = PlatformEvent_MouseMove;
+                event.ctrl_down  = !!(message.wParam & MK_CONTROL);
+                event.shift_down = !!(message.wParam & MK_SHIFT);
+                event.pos_x = LOWORD(message.lParam);
+                event.pos_y = HIWORD(message.lParam);
+                PushEvent(event);
+            } break;
+
+            case WM_CHAR:
+            {
+                PlatformEvent event = {};
+
+                wchar_t chars[3] = {};
+
+                wchar_t curr_char = (wchar_t)message.wParam;
+                if (IS_HIGH_SURROGATE(curr_char))
+                {
+                    last_char = curr_char;
+                }
+                else if (IS_LOW_SURROGATE(curr_char))
+                {
+                    if (IS_SURROGATE_PAIR(last_char, curr_char))
+                    {
+                        chars[0] = last_char;
+                        chars[1] = curr_char;
+                    }
+                    last_char = 0;
+                }
+                else
+                {
+                    chars[0] = curr_char;
+                    if (chars[0] == L'\r')
+                    {
+                        chars[0] = L'\n';
+                    }
+                }
+                event.type = PlatformEvent_Text;
+                event.text = Win32_Utf16ToUtf8(platform->GetTempArena(), chars, &event.text_length);
+
+                PushEvent(event);
+            } break;
+
+            case WM_IME_CHAR:
+            {
+                platform->DebugPrint("Got WM_IME_CHAR:\n");
+            } break;
+
+            default:
+            {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            } break;
         }
 
         exit_requested |= platform->exit_requested;

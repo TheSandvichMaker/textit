@@ -126,6 +126,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->undo.at = &result->undo.root;
     result->undo.run_pos = -1;
     result->undo.insert_pos = -1;
+    result->undo.current_ordinal = 1;
     result->indent_rules = &editor_state->default_indent_rules;
 
     AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
@@ -718,6 +719,9 @@ ExecuteCommand(View *view, Command *command)
 
             Move move = command->movement(editor_state);
             ApplyMove(cursor, move);
+
+            editor_state->last_movement   = command; 
+            editor_state->last_move_flags = move.flags;
         } break;
 
         case Command_Change:
@@ -730,9 +734,15 @@ ExecuteCommand(View *view, Command *command)
             if (editor_state->last_movement)
             {
                 Assert(editor_state->last_movement->kind == Command_Movement);
-
-                Move next_move = editor_state->last_movement->movement(editor_state);
-                ApplyMove(cursor, next_move);
+                if (editor_state->last_move_flags & MoveFlag_NoAutoRepeat)
+                {
+                    cursor->selection = MakeRange(cursor->pos);
+                }
+                else
+                {
+                    Move next_move = editor_state->last_movement->movement(editor_state);
+                    ApplyMove(cursor, next_move);
+                }
             }
         } break;
     }
@@ -762,8 +772,7 @@ HandleViewEvents(ViewID view_id)
             String text = MakeString(event.text_length, event.text);
             bindings->text_command->text(editor_state, text);
         }
-        else if (MatchFilter(event.type, PlatformEventFilter_Input) &&
-                 event.pressed)
+        else if (MatchFilter(event.type, PlatformEventFilter_KeyDown))
         {
             bool ctrl_down  = event.ctrl_down;
             bool shift_down = event.shift_down;
@@ -775,7 +784,8 @@ HandleViewEvents(ViewID view_id)
             if (alt_down)   modifiers |= Modifier_Alt;
 
             bool consumed_digit = false;
-            if (editor_state->edit_mode == EditMode_Command &&
+            if (!modifiers &&
+                editor_state->edit_mode == EditMode_Command &&
                 event.input_code >= PlatformInputCode_0 &&
                 event.input_code <= PlatformInputCode_9)
             {
@@ -799,10 +809,23 @@ HandleViewEvents(ViewID view_id)
             {
                 editor_state->clutch = shift_down;
 
-                Command *command = bindings->by_code[event.input_code].by_modifiers[modifiers];
+                Binding *binding = &bindings->by_code[event.input_code];
+                Command *command = binding->by_modifiers[modifiers];
+                if (!command)
+                {
+                    modifiers &= ~Modifier_Shift;
+                    command = binding->by_modifiers[modifiers];
+                }
+
                 if (command)
                 {
-                    uint64_t undo_ordinal = CurrentUndoOrdinal(buffer);
+                    if (modifiers & Modifier_Shift)
+                    {
+                        // if this command was really bound with shift, don't enable the clutch
+                        editor_state->clutch = false;
+                    }
+
+                    int64_t undo_ordinal = CurrentUndoOrdinal(buffer);
 
                     int64_t repeat = Max(1, view->repeat_value);
                     view->repeat_value = 0;
@@ -825,8 +848,7 @@ HandleViewEvents(ViewID view_id)
                         switch (command->kind)
                         {
                             INCOMPLETE_SWITCH;
-
-                            case Command_Movement: { editor_state->last_movement = command; } break;
+                            
                             case Command_Change:
                             {
                                 editor_state->last_movement_for_change = editor_state->last_movement;
@@ -838,6 +860,22 @@ HandleViewEvents(ViewID view_id)
                     }
 
                     MergeUndoHistory(buffer, undo_ordinal, CurrentUndoOrdinal(buffer));
+                }
+            }
+        }
+        else if (MatchFilter(event.type, PlatformEventFilter_Mouse))
+        {
+            if (event.input_code == PlatformInputCode_LButton)
+            {
+                if (event.pressed)
+                {
+                    editor_state->mouse_down = true;
+                    OnMouseDown();
+                }
+                else
+                {
+                    editor_state->mouse_down = false;
+                    OnMouseUp();
                 }
             }
         }
@@ -931,6 +969,11 @@ AppUpdateAndRender(Platform *platform_)
 
     bool handled_any_events = false;
 
+    if (editor_state->mouse_down)
+    {
+        OnMouseHeld();
+    }
+
     switch (editor_state->input_mode)
     {
         case InputMode_Editor:
@@ -1006,7 +1049,9 @@ AppUpdateAndRender(Platform *platform_)
                         {
                             String command_string = MakeString(editor_state->command_line_count, editor_state->command_line);
                             Command *command = FindCommand(command_string, StringMatch_CaseInsensitive);
-                            if (command && command->kind == Command_Basic)
+                            if (command &&
+								(command->kind == Command_Basic) &&
+								(command->flags & Command_Visible))
                             {
                                 command->command(editor_state);
                             }

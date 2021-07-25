@@ -78,6 +78,8 @@ LoadDefaultBindings()
     BindCommand(command, '0',                      0,              "MoveLineStart"_str);
     BindCommand(command, '4',                      Modifier_Shift, "MoveLineEnd"_str);
     BindCommand(command, 'S',                      0,              "EncloseNextScope"_str);
+    BindCommand(command, PlatformInputCode_Oem4,   Modifier_Shift, "EncloseSurroundingScope"_str);
+    BindCommand(command, '9',                      Modifier_Shift, "EncloseSurroundingParen"_str);
     BindCommand(command, PlatformInputCode_Period, 0,              "RepeatLastCommand"_str);
     BindCommand(command, PlatformInputCode_F1,     0,              "ToggleVisualizeNewlines"_str);
 

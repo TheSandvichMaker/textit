@@ -313,8 +313,20 @@ GetLineRange(Buffer *buffer, int64_t line)
     return range;
 }
 
+function Range
+GetInnerLineRange(Buffer *buffer, int64_t line)
+{
+    Range range = {};
+    if (LineIsInBuffer(buffer, line))
+    {
+        range = MakeRange(buffer->line_data[line].range.start,
+                          buffer->line_data[line].newline_pos);
+    }
+    return range;
+}
+
 function BufferLocation
-CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos, LineData **out_line_data = nullptr)
+CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
 {
     pos = ClampToBufferRange(buffer, pos);
 
@@ -328,17 +340,21 @@ CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos, LineData **out_line_
             (pos <  data->range.end))
         {
             result.line = line;
-            result.pos  = Min(pos, data->whitespace_pos);
+            result.pos  = Min(pos, data->newline_pos);
             result.col  = result.pos - data->range.start;
             result.line_range = data->range;
-
-            if (out_line_data) *out_line_data = data;
 
             break;
         }
     }
 
     return result;
+}
+
+function int64_t
+GetLineNumber(Buffer *buffer, int64_t pos)
+{
+    return CalculateBufferLocationFromPos(buffer, pos).line;
 }
 
 function BufferLocation
@@ -349,10 +365,10 @@ CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
         (line < buffer->line_data.count))
     {
         LineData *data = &buffer->line_data[line];
-        Range whitespace_range = MakeRange(data->range.start, data->whitespace_pos);
+        Range inner_range = MakeRange(data->range.start, data->newline_pos);
         result.line       = line;
-        result.col        = Min(col, RangeSize(whitespace_range));
-        result.pos        = ClampToRange(data->range.start + col, whitespace_range);
+        result.col        = Min(col, RangeSize(inner_range));
+        result.pos        = ClampToRange(data->range.start + col, inner_range);
         result.line_range = data->range;
 
 #if 0
@@ -404,7 +420,7 @@ PushUndoInternal(Buffer *buffer, int64_t pos, String forward, String backward)
     undo->current_ordinal += 1;
     node->ordinal = undo->current_ordinal;
 
-    platform->DebugPrint("Pushing undo node, ordinal: %llu\n", node->ordinal);
+    platform->DebugPrint("Pushing undo node, ordinal: %lld\n", node->ordinal);
 
     node->pos = pos;
     node->forward = forward;
@@ -497,14 +513,14 @@ NextChild(UndoNode *node)
     return result;
 }
 
-function uint64_t
+function int64_t
 CurrentUndoOrdinal(Buffer *buffer)
 {
     return buffer->undo.current_ordinal;
 }
 
 function void
-MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
+MergeUndoHistory(Buffer *buffer, int64_t first_ordinal, int64_t last_ordinal)
 {
     if (last_ordinal >= first_ordinal)
     {
@@ -527,6 +543,25 @@ MergeUndoHistory(Buffer *buffer, uint64_t first_ordinal, uint64_t last_ordinal)
     }
 }
 
+function void
+BeginUndoBatch(Buffer *buffer)
+{
+    if (!buffer->undo_batch_ordinal)
+    {
+        buffer->undo_batch_ordinal = buffer->undo.current_ordinal;
+    }
+}
+
+function void
+EndUndoBatch(Buffer *buffer)
+{
+    if (buffer->undo_batch_ordinal)
+    {
+        MergeUndoHistory(buffer, buffer->undo_batch_ordinal, buffer->undo.current_ordinal);
+        buffer->undo_batch_ordinal = 0;
+    }
+}
+
 function String
 BufferSubstring(Buffer *buffer, Range range)
 {
@@ -545,11 +580,22 @@ BufferPushRange(Arena *arena, Buffer *buffer, Range range)
 }
 
 function int64_t
-ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
+ApplyPositionDelta(Buffer *buffer, int64_t pos, int64_t delta_pos, int64_t delta)
 {
     if (pos >= delta_pos)
     {
-        pos += delta;
+        if (delta < 0)
+        {
+            pos += Max(delta_pos - pos, delta);
+        }
+        else
+        {
+            pos += delta;
+        }
+    }
+    while (IsInBufferRange(buffer, pos) && IsVerticalWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    {
+        pos -= 1;
     }
     return pos;
 }
@@ -564,9 +610,9 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
              cursor;
              cursor = cursor->next)
         {
-            cursor->pos             = ApplyPositionDelta(cursor->pos, pos, delta);
-            cursor->selection.start = ApplyPositionDelta(cursor->selection.start, pos, delta);
-            cursor->selection.end   = ApplyPositionDelta(cursor->selection.end, pos, delta);
+            cursor->pos             = ApplyPositionDelta(buffer, cursor->pos, pos, delta);
+            cursor->selection.start = ApplyPositionDelta(buffer, cursor->selection.start, pos, delta);
+            cursor->selection.end   = ApplyPositionDelta(buffer, cursor->selection.end, pos, delta);
         }
     }
 

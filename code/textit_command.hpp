@@ -13,10 +13,16 @@ enum CommandKind
     Command_Change,
 };
 
+enum_flags(int, MoveFlags)
+{
+    MoveFlag_NoAutoRepeat = 0x1,
+};
+
 struct Move
 {
     Range selection;
     int64_t pos;
+    MoveFlags flags;
 };
 
 function Move

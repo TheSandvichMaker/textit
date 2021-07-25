@@ -109,7 +109,7 @@ TokenizeBuffer(Buffer *buffer)
                     // finish old line data
                     //
 
-                    line_data->whitespace_pos = tok->at - tok->start - 1;
+                    line_data->newline_pos = tok->at - tok->start - 1;
 
                     if ((tok->at[-1] == '\r') && (tok->at[0] == '\n'))
                     {

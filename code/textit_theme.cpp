@@ -51,6 +51,7 @@ LoadDefaultTheme()
     SetThemeColor("text_foreground_dimmest"_str, MakeColor(4*12, 4*20, 4*32));
     SetThemeColor("text_background"_str, MakeColor(12, 20, 32));
     SetThemeColor("text_background_unreachable"_str, MakeColor(24, 40, 64));
+    SetThemeColor("text_background_highlighted"_str, MakeColor(48, 80, 128));
     SetThemeColor("filebar_text_foreground"_str, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_background"_str, MakeColor(192, 255, 128));
     SetThemeColor("filebar_text_inactive"_str, MakeColor(128, 128, 128));

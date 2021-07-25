@@ -1,3 +1,10 @@
+COMMAND_PROC(ForceTick,
+             "Force the editor to tick"_str)
+{
+    UNUSED_VARIABLE(editor);
+    platform->PushTickEvent();
+}
+
 COMMAND_PROC(LoadDefaultIndentRules,
              "Load the default indent rules for the current buffer"_str)
 {
@@ -27,17 +34,23 @@ COMMAND_PROC(qa, "Exit the editor"_str)
     platform->exit_requested = true;
 }
 
-COMMAND_PROC(ToggleVisualizeNewlines)
+COMMAND_PROC(ToggleVisualizeNewlines, "Toggle the visualization of newlines"_str)
 {
     UNUSED_VARIABLE(editor);
     core_config->visualize_newlines = !core_config->visualize_newlines;
+}
+
+COMMAND_PROC(ToggleVisualizeWhitespace, "Toggle the visualization of whitespaces"_str)
+{
+    UNUSED_VARIABLE(editor);
+    core_config->visualize_whitespace = !core_config->visualize_whitespace;
 }
 
 COMMAND_PROC(EnterTextMode,
              "Enter Text Input Mode"_str)
 {
     editor->next_edit_mode = EditMode_Text;
-    editor->enter_text_mode_undo_ordinal = CurrentUndoOrdinal(CurrentBuffer(editor));
+    BeginUndoBatch(CurrentBuffer(editor));
 }
 
 COMMAND_PROC(Append)
@@ -63,7 +76,7 @@ COMMAND_PROC(EnterCommandMode,
     editor->next_edit_mode = EditMode_Command;
 
     Buffer *buffer = CurrentBuffer(editor);
-    MergeUndoHistory(buffer, editor->enter_text_mode_undo_ordinal, buffer->undo.current_ordinal);
+    EndUndoBatch(buffer);
 
     View *view = CurrentView(editor);
     Cursor *cursor = GetCursor(view);
@@ -259,6 +272,103 @@ MOVEMENT_PROC(EncloseNextScope)
     }
 
     return MakeMove(result);
+}
+
+function Move
+SelectSurroundingNest(View *view,
+                      TokenKind open_nest, TokenKind close_nest,
+                      bool line_selection,
+                      bool inner_selection)
+{
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    Move result = {};
+    result.flags     = MoveFlag_NoAutoRepeat;
+    result.pos       = cursor->pos;
+    result.selection = cursor->selection;
+    
+    int64_t pos = cursor->pos;
+
+    int64_t start_pos = -1;
+
+    TokenIterator it = SeekTokenIterator(buffer, pos);
+    if (inner_selection)
+    {
+        Prev(&it);
+    }
+
+    int depth = 0;
+    while (IsValid(&it))
+    {
+        Token *t = Prev(&it);
+        if (t->kind == close_nest)
+        {
+            depth += 1;
+        }
+        if (t->kind == open_nest)
+        {
+            depth -= 1;
+            if (depth < 0)
+            {
+                start_pos = (inner_selection ? t->pos + t->length : t->pos);
+                break;
+            }
+        }
+    }
+
+    while (IsValid(&it))
+    {
+        Token *t = Next(&it);
+        if (t->kind == open_nest)
+        {
+            depth += 1;
+        }
+        else if (t->kind == close_nest)
+        {
+            depth -= 1;
+            if (depth < 0)
+            {
+                result.pos             = start_pos;
+                result.selection.start = start_pos;
+                result.selection.end   = (inner_selection ? t->pos : t->pos + t->length);
+                break;
+            }
+        }
+    }
+
+    if (line_selection)
+    {
+        int64_t start_line = GetLineNumber(buffer, result.selection.start);
+        int64_t end_line   = GetLineNumber(buffer, result.selection.end);
+        if (inner_selection)
+        {
+            start_line += 1;
+            end_line    = Max(start_line, end_line - 1);
+        }
+        if (start_line != end_line)
+        {
+            result.selection.start = GetInnerLineRange(buffer, start_line).start;
+            result.selection.end   = GetInnerLineRange(buffer, end_line).end;
+        }
+        result.pos = result.selection.start;
+    }
+
+    result.selection.end -= 1; // PLEASE FOR HTE LOVE OF GOD STOP THIS INCLUSIVE RANGE GIBBERISH OH MY GOD WHY WHY WHY etc (dramatic whining)
+
+    return result;
+}
+
+MOVEMENT_PROC(EncloseSurroundingScope)
+{
+    View *view = CurrentView(editor);
+    return SelectSurroundingNest(view, Token_LeftScope, Token_RightScope, true, true);
+}
+
+MOVEMENT_PROC(EncloseSurroundingParen)
+{
+    View *view = CurrentView(editor);
+    return SelectSurroundingNest(view, Token_LeftParen, Token_RightParen, false, true);
 }
 
 MOVEMENT_PROC(MoveDown)
@@ -543,7 +653,13 @@ CHANGE_PROC(DeleteSelection)
 
 CHANGE_PROC(ChangeSelection)
 {
+    View *view = CurrentView(editor);
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    BeginUndoBatch(CurrentBuffer(editor));
     CHG_DeleteSelection(editor, range);
+    AutoIndentLineAt(buffer, cursor->pos);
     CMD_EnterTextMode(editor);
 }
 
@@ -701,4 +817,48 @@ TEXT_COMMAND_PROC(WriteText)
             AutoIndentLineAt(buffer, new_pos);
         }
     }
+}
+
+function void
+OnMouseDown(void)
+{
+    View *view = CurrentView(editor_state);
+    Cursor *cursor = GetCursor(view);
+
+    if (editor_state->token_at_mouse)
+    {
+        Token *t = editor_state->token_at_mouse;
+        if (cursor->selection.start == t->pos &&
+            cursor->selection.end   == t->pos + t->length - 1)
+        {
+            if (cursor->pos == cursor->selection.start)
+            {
+                cursor->pos = cursor->selection.end;
+            }
+            else if (cursor->pos == cursor->selection.end)
+            {
+                cursor->pos = cursor->selection.start;
+            }
+        }
+        else
+        {
+            cursor->pos = t->pos;
+            cursor->selection = MakeRangeStartLength(t->pos, t->length - 1);
+        }
+    }
+    else
+    {
+        cursor->pos = editor_state->pos_at_mouse;
+        cursor->selection = MakeRange(cursor->pos);
+    }
+}
+
+function void
+OnMouseHeld(void)
+{
+}
+
+function void
+OnMouseUp(void)
+{
 }

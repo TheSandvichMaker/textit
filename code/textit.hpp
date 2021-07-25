@@ -86,6 +86,7 @@ struct CoreConfig
     bool visualize_newlines              = true;
     bool right_align_visualized_newlines = true;
     bool visualize_whitespace            = true;
+    bool show_line_numbers               = true;
 
     bool indent_with_tabs                = true;
     int  indent_width                    = 4;
@@ -185,16 +186,19 @@ struct EditorState
     Window *active_window;
     Window *first_free_window;
 
+    bool mouse_down;
+    int64_t pos_at_mouse;
+    Token *token_at_mouse;
+
     V2i screen_mouse_p;
     V2i text_mouse_p;
 
     int64_t last_repeat;
+    MoveFlags last_move_flags;
     Command *last_movement;
     Command *last_movement_for_change;
     Command *last_change;
     bool clutch;
-
-    uint64_t enter_text_mode_undo_ordinal;
 
     int debug_delay;
     int debug_delay_frame_count;

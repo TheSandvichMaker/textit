@@ -186,25 +186,29 @@ enum PlatformEventType
     PlatformEvent_Any = PlatformEvent_None,
     PlatformEvent_MouseUp,
     PlatformEvent_MouseDown,
+    PlatformEvent_MouseMove,
     PlatformEvent_KeyUp,
     PlatformEvent_KeyDown,
     PlatformEvent_Text,
     PlatformEvent_Tick,
+    PlatformEvent_Redraw,
     PlatformEvent_COUNT,
 };
 
 typedef uint32_t PlatformEventFilter;
 enum PlatformEventFilter_ENUM : PlatformEventFilter
 {
+    // NOTE: Must match order above!!
     PlatformEventFilter_MouseUp   = 1 << 0,
     PlatformEventFilter_MouseDown = 1 << 1,
-    PlatformEventFilter_Mouse     = PlatformEventFilter_MouseUp|PlatformEventFilter_MouseDown,
-    PlatformEventFilter_KeyUp     = 1 << 2,
-    PlatformEventFilter_KeyDown   = 1 << 3,
+    PlatformEventFilter_MouseMove = 1 << 2,
+    PlatformEventFilter_Mouse     = PlatformEventFilter_MouseUp|PlatformEventFilter_MouseDown|PlatformEventFilter_MouseMove,
+    PlatformEventFilter_KeyUp     = 1 << 3,
+    PlatformEventFilter_KeyDown   = 1 << 4,
     PlatformEventFilter_Keyboard  = PlatformEventFilter_KeyUp|PlatformEventFilter_KeyDown,
     PlatformEventFilter_Input     = PlatformEventFilter_Mouse|PlatformEventFilter_Keyboard,
-    PlatformEventFilter_Text      = 1 << 4,
-    PlatformEventFilter_Tick      = 1 << 5,
+    PlatformEventFilter_Text      = 1 << 5,
+    PlatformEventFilter_Tick      = 1 << 6,
     PlatformEventFilter_ANY       = 0xFFFFFFFF,
 };
 
@@ -370,6 +374,11 @@ enum PlatformInputCode_ENUM : PlatformInputCode
     PlatformInputCode_Oem3           = 0xC0, // misc characters, us standard: '~'
     /* 0xC1 - 0xDA: reserved / unassigned */
     /* 0xDB - 0xF5: more miscellanious OEM codes I'm ommitting for now */
+    PlatformInputCode_Oem4           = 0xDB, // us standard: [{
+    PlatformInputCode_Oem5           = 0xDC, // us standard: \|
+    PlatformInputCode_Oem6           = 0xDD, // us standard: ]}
+    PlatformInputCode_Oem7           = 0xDE, // us standard: '"
+    PlatformInputCode_Oem8           = 0xDF, // misc
     /* 0xF6 - 0xF9: keys I've never heard of */
     PlatformInputCode_Play           = 0xFA,
     PlatformInputCode_Zoom           = 0xFB,
@@ -391,8 +400,11 @@ struct PlatformEvent
     bool shift_down;
 
     bool pressed;
+    bool released;
     bool repeat;
     PlatformInputCode input_code;
+
+    int pos_x, pos_y;
 
     int text_length;
     uint8_t *text;

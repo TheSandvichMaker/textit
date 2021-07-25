@@ -28,7 +28,7 @@ struct UndoNode
     UndoNode *first_child;
     UndoNode *next_child;
 
-    uint64_t ordinal;
+    int64_t ordinal;
 
     int64_t pos;
     String forward;
@@ -67,7 +67,7 @@ enum LineFlags_ENUM : LineFlags
 struct LineData
 {
     Range range;
-    int64_t whitespace_pos;
+    int64_t newline_pos;
     LineFlags flags;
     int token_count;
     Token *tokens;
@@ -81,6 +81,7 @@ struct Buffer : TextStorage
     BufferFlags flags;
 
     bool bulk_edit;
+    uint64_t undo_batch_ordinal;
 
     Arena arena;
     String name;
@@ -89,7 +90,7 @@ struct Buffer : TextStorage
 
     struct
     {
-        uint64_t current_ordinal;
+        int64_t current_ordinal;
         uint64_t depth;
         UndoNode root;
         UndoNode *at;
