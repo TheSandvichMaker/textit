@@ -290,18 +290,17 @@ SelectSurroundingNest(View *view,
     
     int64_t pos = cursor->pos;
 
-    int64_t start_pos = -1;
+    int64_t start_pos       = -1;
+    int64_t inner_start_pos = -1;
 
     TokenIterator it = SeekTokenIterator(buffer, pos);
-    if (inner_selection)
-    {
-        Prev(&it);
-    }
 
     int depth = 0;
     while (IsValid(&it))
     {
         Token *t = Prev(&it);
+        if (!t) break;
+
         if (t->kind == close_nest)
         {
             depth += 1;
@@ -311,50 +310,66 @@ SelectSurroundingNest(View *view,
             depth -= 1;
             if (depth < 0)
             {
-                start_pos = (inner_selection ? t->pos + t->length : t->pos);
+                start_pos = t->pos;
+                inner_start_pos = t->pos + t->length;
                 break;
             }
         }
     }
 
-    while (IsValid(&it))
+    if (start_pos >= 0)
     {
-        Token *t = Next(&it);
-        if (t->kind == open_nest)
+        while (IsValid(&it))
         {
-            depth += 1;
-        }
-        else if (t->kind == close_nest)
-        {
-            depth -= 1;
-            if (depth < 0)
+            Token *t = Next(&it);
+            if (!t) break;
+
+            if (t->kind == open_nest)
             {
-                result.pos             = start_pos;
-                result.selection.start = start_pos;
-                result.selection.end   = (inner_selection ? t->pos : t->pos + t->length);
-                break;
+                depth += 1;
+            }
+            else if (t->kind == close_nest)
+            {
+                depth -= 1;
+                if (depth < 0)
+                {
+                    int64_t end_pos       = t->pos + t->length;
+                    int64_t inner_end_pos = t->pos;
+
+                    if (cursor->selection.start == inner_start_pos &&
+                        cursor->selection.end   == inner_end_pos - 1)
+                    {
+                        inner_selection = false;
+                    }
+
+                    result.selection.start = (inner_selection ? inner_start_pos : start_pos);
+                    result.selection.end   = (inner_selection ? inner_end_pos   : end_pos);
+                    result.pos             = result.selection.start;
+
+                    if (line_selection)
+                    {
+                        int64_t start_line = GetLineNumber(buffer, result.selection.start);
+                        int64_t end_line   = GetLineNumber(buffer, result.selection.end);
+                        if (inner_selection)
+                        {
+                            // start_line += 1;
+                            end_line    = Max(start_line, end_line - 1);
+                        }
+                        if (start_line != end_line)
+                        {
+                            result.selection.start = GetInnerLineRange(buffer, start_line).start;
+                            result.selection.end   = GetInnerLineRange(buffer, end_line).end;
+                        }
+                        result.pos = result.selection.start;
+                    }
+
+                    result.selection.end -= 1; // fix this inclusive line nonsense
+
+                    break;
+                }
             }
         }
     }
-
-    if (line_selection)
-    {
-        int64_t start_line = GetLineNumber(buffer, result.selection.start);
-        int64_t end_line   = GetLineNumber(buffer, result.selection.end);
-        if (inner_selection)
-        {
-            start_line += 1;
-            end_line    = Max(start_line, end_line - 1);
-        }
-        if (start_line != end_line)
-        {
-            result.selection.start = GetInnerLineRange(buffer, start_line).start;
-            result.selection.end   = GetInnerLineRange(buffer, end_line).end;
-        }
-        result.pos = result.selection.start;
-    }
-
-    result.selection.end -= 1; // PLEASE FOR HTE LOVE OF GOD STOP THIS INCLUSIVE RANGE GIBBERISH OH MY GOD WHY WHY WHY etc (dramatic whining)
 
     return result;
 }

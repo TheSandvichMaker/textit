@@ -39,7 +39,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 {
     Buffer *buffer = GetBuffer(view);
 
-    bool draw_cursor = is_active_window;
+    bool draw_cursor    = is_active_window;
+    bool draw_selection = (editor_state->edit_mode != EditMode_Text);
 
     bool visualize_newlines              = core_config->visualize_newlines;
     bool right_align_visualized_newlines = core_config->right_align_visualized_newlines; (void)right_align_visualized_newlines;
@@ -229,7 +230,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 {
                     Range selection = SanitizeRange(cursor->selection);
 
-                    if (pos >= selection.start &&
+                    if (draw_selection &&
+                        pos >= selection.start &&
                         pos <= selection.end)
                     {
                         background = selection_background;

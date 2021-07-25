@@ -580,7 +580,7 @@ BufferPushRange(Arena *arena, Buffer *buffer, Range range)
 }
 
 function int64_t
-ApplyPositionDelta(Buffer *buffer, int64_t pos, int64_t delta_pos, int64_t delta)
+ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
 {
     if (pos >= delta_pos)
     {
@@ -592,10 +592,6 @@ ApplyPositionDelta(Buffer *buffer, int64_t pos, int64_t delta_pos, int64_t delta
         {
             pos += delta;
         }
-    }
-    while (IsInBufferRange(buffer, pos) && IsVerticalWhitespaceAscii(ReadBufferByte(buffer, pos)))
-    {
-        pos -= 1;
     }
     return pos;
 }
@@ -610,9 +606,9 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
              cursor;
              cursor = cursor->next)
         {
-            cursor->pos             = ApplyPositionDelta(buffer, cursor->pos, pos, delta);
-            cursor->selection.start = ApplyPositionDelta(buffer, cursor->selection.start, pos, delta);
-            cursor->selection.end   = ApplyPositionDelta(buffer, cursor->selection.end, pos, delta);
+            cursor->pos             = ApplyPositionDelta(cursor->pos, pos, delta);
+            cursor->selection.start = ApplyPositionDelta(cursor->selection.start, pos, delta);
+            cursor->selection.end   = ApplyPositionDelta(cursor->selection.end, pos, delta);
         }
     }
 

@@ -738,7 +738,7 @@ ExecuteCommand(View *view, Command *command)
                 {
                     cursor->selection = MakeRange(cursor->pos);
                 }
-                else
+                else if (editor_state->next_edit_mode == EditMode_Command)
                 {
                     Move next_move = editor_state->last_movement->movement(editor_state);
                     ApplyMove(cursor, next_move);
@@ -882,6 +882,16 @@ HandleViewEvents(ViewID view_id)
 
         Assert(!buffer->bulk_edit);
     }
+
+    View *view = GetView(view_id);
+    Buffer *buffer = GetBuffer(view);
+
+    if ((editor_state->next_edit_mode == EditMode_Text) &&
+        (buffer->flags & Buffer_ReadOnly))
+    {
+        editor_state->next_edit_mode = EditMode_Command;
+    }
+    editor_state->edit_mode = editor_state->next_edit_mode;
 
     return result;
 }
@@ -1168,14 +1178,6 @@ AppUpdateAndRender(Platform *platform_)
                                              free_window_count,
                                              editor_state->debug.allocated_window_count);
     
-    Buffer *buffer = CurrentBuffer(editor_state);
-    if ((editor_state->next_edit_mode == EditMode_Text) &&
-        (buffer->flags & Buffer_ReadOnly))
-    {
-        editor_state->next_edit_mode = EditMode_Command;
-    }
-    editor_state->edit_mode = editor_state->next_edit_mode;
-
     if (editor_state->debug_delay_frame_count > 0)
     {
         platform->SleepThread(editor_state->debug_delay);

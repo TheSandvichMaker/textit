@@ -73,8 +73,9 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
 
     while (t)
     {
-        if (t->pos >= line_end) continue;
-        if (t->pos >= line_start) continue;
+        if (t->pos >= line_end) goto next;
+        if (t->pos >= line_start) goto next;
+        if (t->flags & TokenFlag_IsComment) goto next;
 
         IndentRule rule = rules->table[t->kind];
         if (rule & IndentRule_PopIndent)
@@ -101,6 +102,7 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
             }
         }
 
+next:
         t = Prev(&it);
     }
 
@@ -120,6 +122,7 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
         IndentRule rule = rules->table[t->kind];
         if (!override_anchor &&
             (t->flags & TokenFlag_LastInLine) &&
+            !(t->flags & TokenFlag_IsComment) &&
             !(rule & IndentRule_StatementEnd) &&
             !(rule & IndentRule_AffectsIndent))
         {

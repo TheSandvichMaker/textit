@@ -84,7 +84,7 @@ function void DestroyWindow(Window *window);
 struct CoreConfig
 {
     bool visualize_newlines              = true;
-    bool right_align_visualized_newlines = true;
+    bool right_align_visualized_newlines = false;
     bool visualize_whitespace            = true;
     bool show_line_numbers               = true;
 
