@@ -5,22 +5,10 @@ GetBuffer(View *view)
 }
 
 function void
-SetCursor(View *view, int64_t pos, int64_t mark = -1)
+SetCursor(View *view, int64_t pos, Range inner = {}, Range outer = {})
 {
-    // TODO: What to do with this function
-
-    Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
-
-    cursor->pos = ClampToBufferRange(buffer, pos);
-    if (mark >= 0)
-    {
-        cursor->selection = MakeRange(ClampToBufferRange(buffer, mark), pos);
-    }
-    else
-    {
-        cursor->selection = MakeRange(pos);
-    }
+    SetCursor(cursor, pos, inner, outer);
 }
 
 function void

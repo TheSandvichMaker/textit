@@ -96,14 +96,6 @@ DestroyCursor(ViewID view, BufferID buffer)
     }
 }
 
-function Range
-GetEditRange(Cursor *cursor)
-{
-    Range result = SanitizeRange(cursor->selection);
-    result.end += 1;
-    return result;
-}
-
 function Buffer *
 OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
 {
@@ -282,9 +274,10 @@ DuplicateView(ViewID id)
         Cursor *cursor = GetCursor(view);
         Cursor *new_cursor = GetCursor(new_view);
 
-        new_cursor->sticky_col = cursor->sticky_col;
-        new_cursor->selection  = cursor->selection;
-        new_cursor->pos        = cursor->pos;
+        new_cursor->sticky_col      = cursor->sticky_col;
+        new_cursor->inner_selection = cursor->inner_selection;
+        new_cursor->outer_selection = cursor->outer_selection;
+        new_cursor->pos             = cursor->pos;
 
         new_view->scroll_at = view->scroll_at;
         result = new_view->id;
@@ -688,12 +681,14 @@ ApplyMove(Cursor *cursor, Move move)
 {
     if (editor_state->clutch)
     {
-        cursor->selection = Union(cursor->selection, move.selection);
+        cursor->inner_selection = Union(cursor->inner_selection, move.inner_selection);
+        cursor->outer_selection = Union(cursor->outer_selection, move.outer_selection);
         cursor->pos = move.pos;
     }
     else
     {
-        cursor->selection = move.selection;
+        cursor->inner_selection = move.inner_selection;
+        cursor->outer_selection = move.outer_selection;
         cursor->pos = move.pos;
     }
 }
@@ -728,15 +723,17 @@ ExecuteCommand(View *view, Command *command)
         {
             Cursor *cursor = GetCursor(view);
 
-            Range edit_range = GetEditRange(cursor);
-            command->change(editor_state, edit_range);
+            command->change(editor_state,
+                            SanitizeRange(cursor->inner_selection),
+                            SanitizeRange(cursor->outer_selection));
 
             if (editor_state->last_movement)
             {
                 Assert(editor_state->last_movement->kind == Command_Movement);
                 if (editor_state->last_move_flags & MoveFlag_NoAutoRepeat)
                 {
-                    cursor->selection = MakeRange(cursor->pos);
+                    cursor->inner_selection = MakeRange(cursor->pos);
+                    cursor->outer_selection = cursor->inner_selection;
                 }
                 else if (editor_state->next_edit_mode == EditMode_Command)
                 {

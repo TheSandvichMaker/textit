@@ -20,7 +20,8 @@ enum_flags(int, MoveFlags)
 
 struct Move
 {
-    Range selection;
+    Range inner_selection;
+    Range outer_selection;
     int64_t pos;
     MoveFlags flags;
 };
@@ -29,8 +30,9 @@ function Move
 MakeMove(Range selection, int64_t pos = -1)
 {
     Move result = {};
-    result.selection = selection;
-    result.pos       = pos;
+    result.inner_selection = selection;
+    result.outer_selection = selection;
+    result.pos             = pos;
     if (pos < 0)
     {
         result.pos = selection.end;
@@ -62,11 +64,11 @@ typedef Move (*MovementProc)(EditorState *editor);
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), (void *)&Paste(MOV_, name));             \
     static Move Paste(MOV_, name)(EditorState *editor)
 
-typedef void (*ChangeProc)(EditorState *editor, Range range);
+typedef void (*ChangeProc)(EditorState *editor, Range inner_range, Range outer_range);
 #define CHANGE_PROC(name)                                                                                                          \
-    static void Paste(CHG_, name)(EditorState *editor, Range range);                                                               \
+    static void Paste(CHG_, name)(EditorState *editor, Range inner_range, Range outer_range);                                      \
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), (void *)&Paste(CHG_, name));               \
-    static void Paste(CHG_, name)(EditorState *editor, Range range)
+    static void Paste(CHG_, name)(EditorState *editor, Range inner_range, Range outer_range)
 
 enum_flags(int, CommandFlags)
 {

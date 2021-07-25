@@ -66,7 +66,7 @@ COMMAND_PROC(AppendAtEnd)
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
-    cursor->pos = FindLineEnd(buffer, cursor->pos) + 1;
+    cursor->pos = FindLineEnd(buffer, cursor->pos).inner + 1;
     CMD_EnterTextMode(editor);
 }
 
@@ -83,7 +83,8 @@ COMMAND_PROC(EnterCommandMode,
 
     BufferLocation loc = CalculateRelativeMove(buffer, cursor, MakeV2i(-1, 0));
     cursor->pos = loc.pos;
-    cursor->selection = MakeRange(cursor->pos);
+    cursor->inner_selection = MakeRange(cursor->pos);
+    cursor->outer_selection = cursor->inner_selection;
     cursor->sticky_col = loc.col;
 }
 
@@ -196,12 +197,14 @@ MOVEMENT_PROC(MoveLineEnd)
     cursor->sticky_col = 9999;
 
     int64_t pos = cursor->pos;
-    int64_t end = FindLineEnd(buffer, pos);
+    auto [inner, outer] = FindLineEnd(buffer, pos);
 
     Move move = {};
-    move.selection.start = pos;
-    move.selection.end   = end;
-    move.pos             = end;
+    move.inner_selection.start = pos;
+    move.outer_selection.start = pos;
+    move.inner_selection.end   = inner;
+    move.outer_selection.end   = outer;
+    move.pos                   = inner;
 
     return move;
 }
@@ -277,8 +280,7 @@ MOVEMENT_PROC(EncloseNextScope)
 function Move
 SelectSurroundingNest(View *view,
                       TokenKind open_nest, TokenKind close_nest,
-                      bool line_selection,
-                      bool inner_selection)
+                      bool line_selection)
 {
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
@@ -286,7 +288,8 @@ SelectSurroundingNest(View *view,
     Move result = {};
     result.flags     = MoveFlag_NoAutoRepeat;
     result.pos       = cursor->pos;
-    result.selection = cursor->selection;
+    result.inner_selection = cursor->inner_selection;
+    result.outer_selection = cursor->outer_selection;
     
     int64_t pos = cursor->pos;
 
@@ -336,34 +339,34 @@ SelectSurroundingNest(View *view,
                     int64_t end_pos       = t->pos + t->length;
                     int64_t inner_end_pos = t->pos;
 
-                    if (cursor->selection.start == inner_start_pos &&
-                        cursor->selection.end   == inner_end_pos - 1)
-                    {
-                        inner_selection = false;
-                    }
-
-                    result.selection.start = (inner_selection ? inner_start_pos : start_pos);
-                    result.selection.end   = (inner_selection ? inner_end_pos   : end_pos);
-                    result.pos             = result.selection.start;
+                    result.inner_selection.start = inner_start_pos;
+                    result.inner_selection.end   = inner_end_pos;
+                    result.outer_selection.start = start_pos;
+                    result.outer_selection.end   = end_pos;
 
                     if (line_selection)
                     {
-                        int64_t start_line = GetLineNumber(buffer, result.selection.start);
-                        int64_t end_line   = GetLineNumber(buffer, result.selection.end);
-                        if (inner_selection)
-                        {
-                            // start_line += 1;
-                            end_line    = Max(start_line, end_line - 1);
-                        }
+                        int64_t start_line = GetLineNumber(buffer, result.outer_selection.start);
+                        int64_t end_line   = GetLineNumber(buffer, result.outer_selection.end);
+
+                        int64_t inner_start_line = start_line + 1;
+                        int64_t inner_end_line   = Max(start_line, end_line - 1);
+
                         if (start_line != end_line)
                         {
-                            result.selection.start = GetInnerLineRange(buffer, start_line).start;
-                            result.selection.end   = GetInnerLineRange(buffer, end_line).end;
+                            result.outer_selection.start = GetLineRange(buffer, start_line).start;
+                            result.outer_selection.end   = GetLineRange(buffer, end_line).end;
                         }
-                        result.pos = result.selection.start;
+
+                        if (inner_start_line != inner_end_line)
+                        {
+                            result.inner_selection.start = GetInnerLineRange(buffer, inner_start_line).start;
+                            result.inner_selection.end   = GetInnerLineRange(buffer, inner_end_line).end;
+                        }
+
                     }
 
-                    result.selection.end -= 1; // fix this inclusive line nonsense
+                    result.pos = result.outer_selection.start;
 
                     break;
                 }
@@ -377,13 +380,13 @@ SelectSurroundingNest(View *view,
 MOVEMENT_PROC(EncloseSurroundingScope)
 {
     View *view = CurrentView(editor);
-    return SelectSurroundingNest(view, Token_LeftScope, Token_RightScope, true, true);
+    return SelectSurroundingNest(view, Token_LeftScope, Token_RightScope, true);
 }
 
 MOVEMENT_PROC(EncloseSurroundingParen)
 {
     View *view = CurrentView(editor);
-    return SelectSurroundingNest(view, Token_LeftParen, Token_RightParen, false, true);
+    return SelectSurroundingNest(view, Token_LeftParen, Token_RightParen, false);
 }
 
 MOVEMENT_PROC(MoveDown)
@@ -392,9 +395,11 @@ MOVEMENT_PROC(MoveDown)
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
+    int64_t line = GetLineNumber(buffer, cursor->pos);
+
     Move move = {};
-    move.selection = TrimEnd(EncloseLine(buffer, cursor->pos, true), 1);
     move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, 1)).pos;
+    GetLineRanges(buffer, line, &move.inner_selection, &move.outer_selection);
     return move;
 }
 
@@ -404,9 +409,11 @@ MOVEMENT_PROC(MoveUp)
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
+    int64_t line = GetLineNumber(buffer, cursor->pos);
+
     Move move = {};
-    move.selection = TrimEnd(EncloseLine(buffer, cursor->pos, true), 1);
     move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, -1)).pos;
+    GetLineRanges(buffer, line, &move.inner_selection, &move.outer_selection);
     return move;
 }
 
@@ -513,7 +520,7 @@ COMMAND_PROC(UndoOnce)
     Range result = UndoOnce(view);
     if (result.start >= 0)
     {
-        SetCursor(view, result.start, result.end);
+        SetCursor(view, result.start, result);
     }
 }
 
@@ -524,7 +531,7 @@ COMMAND_PROC(RedoOnce)
     Range result = RedoOnce(view);
     if (result.start >= 0)
     {
-        SetCursor(view, result.start, result.end);
+        SetCursor(view, result.start, result);
     }
 }
 
@@ -661,9 +668,11 @@ COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str)
 
 CHANGE_PROC(DeleteSelection)
 {
+    UNUSED_VARIABLE(inner_range);
+
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
-    BufferReplaceRange(buffer, range, ""_str);
+    BufferReplaceRange(buffer, outer_range, ""_str);
 }
 
 CHANGE_PROC(ChangeSelection)
@@ -672,21 +681,30 @@ CHANGE_PROC(ChangeSelection)
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
+    cursor->pos = inner_range.start;
+
+    Range line_range = GetLineRange(buffer, inner_range);
+
     BeginUndoBatch(CurrentBuffer(editor));
-    CHG_DeleteSelection(editor, range);
-    AutoIndentLineAt(buffer, cursor->pos);
+    CHG_DeleteSelection(editor, outer_range, inner_range);
+    if (line_range.start != line_range.end)
+    {
+        AutoIndentLineAt(buffer, cursor->pos);
+    }
     CMD_EnterTextMode(editor);
 }
 
 CHANGE_PROC(ToUppercase)
 {
+    UNUSED_VARIABLE(outer_range);
+
     Buffer *buffer = CurrentBuffer(editor);
-    String string = BufferPushRange(platform->GetTempArena(), buffer, range);
+    String string = BufferPushRange(platform->GetTempArena(), buffer, inner_range);
     for (size_t i = 0; i < string.size; i += 1)
     {
         string.data[i] = ToUpperAscii(string.data[i]);
     }
-    BufferReplaceRange(buffer, range, string);
+    BufferReplaceRange(buffer, inner_range, string);
 }
 
 COMMAND_PROC(RepeatLastCommand)
@@ -701,7 +719,7 @@ COMMAND_PROC(Copy)
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    Range range = GetEditRange(cursor);
+    Range range = SanitizeRange(cursor->outer_selection);
     String string = BufferSubstring(buffer, range);
 
     platform->WriteClipboard(string);
@@ -735,16 +753,18 @@ COMMAND_PROC(PasteAfter)
 
 CHANGE_PROC(PasteReplaceSelection)
 {
+    UNUSED_VARIABLE(inner_range);
+
     View *view = CurrentView(editor);
     Buffer *buffer = GetBuffer(view);
 
     Arena *arena = platform->GetTempArena();
     ScopedMemory temp_memory(arena);
 
-    String replaced_string = BufferPushRange(arena, buffer, range);
+    String replaced_string = BufferPushRange(arena, buffer, outer_range);
     String string = platform->ReadClipboard(arena);
 
-    int64_t pos = BufferReplaceRange(buffer, range, string);
+    int64_t pos = BufferReplaceRange(buffer, outer_range, string);
     SetCursor(view, pos);
 
     platform->WriteClipboard(replaced_string);
@@ -760,7 +780,7 @@ COMMAND_PROC(OpenNewLineBelow)
 
     String line_end = LineEndString(buffer->line_end);
 
-    int64_t insert_pos = FindLineEnd(buffer, cursor->pos, true);
+    int64_t insert_pos = FindLineEnd(buffer, cursor->pos).outer;
     BufferReplaceRange(buffer, MakeRange(insert_pos), line_end);
     int64_t new_pos = AutoIndentLineAt(buffer, insert_pos);
     SetCursor(view, new_pos);
@@ -843,28 +863,30 @@ OnMouseDown(void)
     if (editor_state->token_at_mouse)
     {
         Token *t = editor_state->token_at_mouse;
-        if (cursor->selection.start == t->pos &&
-            cursor->selection.end   == t->pos + t->length - 1)
+        if (cursor->inner_selection.start == t->pos &&
+            cursor->inner_selection.end   == t->pos + t->length)
         {
-            if (cursor->pos == cursor->selection.start)
+            if (cursor->pos == cursor->inner_selection.start)
             {
-                cursor->pos = cursor->selection.end;
+                cursor->pos = cursor->inner_selection.end;
             }
-            else if (cursor->pos == cursor->selection.end)
+            else if (cursor->pos == cursor->inner_selection.end)
             {
-                cursor->pos = cursor->selection.start;
+                cursor->pos = cursor->inner_selection.start;
             }
         }
         else
         {
             cursor->pos = t->pos;
-            cursor->selection = MakeRangeStartLength(t->pos, t->length - 1);
+            cursor->inner_selection = MakeRangeStartLength(t->pos, t->length);
+            cursor->outer_selection = cursor->inner_selection;
         }
     }
     else
     {
         cursor->pos = editor_state->pos_at_mouse;
-        cursor->selection = MakeRange(cursor->pos);
+        cursor->inner_selection = MakeRange(cursor->pos);
+        cursor->outer_selection = cursor->inner_selection;
     }
 }
 

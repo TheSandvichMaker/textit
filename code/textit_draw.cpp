@@ -44,8 +44,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     bool visualize_newlines              = core_config->visualize_newlines;
     bool right_align_visualized_newlines = core_config->right_align_visualized_newlines; (void)right_align_visualized_newlines;
-    bool visualize_whitespace            = core_config->visualize_whitespace; (void)visualize_whitespace;
+    bool visualize_whitespace            = core_config->visualize_whitespace;
     bool show_line_numbers               = core_config->show_line_numbers;
+    int  indent_width                    = core_config->indent_width;
 
     Color text_comment                 = GetThemeColor("text_comment"_str);
     Color text_preprocessor            = GetThemeColor("text_preprocessor"_str);
@@ -90,14 +91,30 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         actual_line_height += -view->scroll_at;
     }
 
-    for (int64_t line = min_line; line < max_line; line += 1)
-    {
-        LineData *data = &buffer->line_data[line];
+    int64_t line = min_line;
+    LineData *data = &buffer->line_data[min_line];
 
+    int64_t pos = data->range.start;
+
+    for (;;)
+    {
         if ((line + 1 == max_line) &&
             RangeSize(data->range) == 0)
         {
             break;
+        }
+
+        if (pos >= data->range.end)
+        {
+            line += 1;
+            if (line < max_line)
+            {
+                data = &buffer->line_data[line];
+            }
+            else
+            {
+                break;
+            }
         }
 
         actual_line_height += 1;
@@ -105,7 +122,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         Token *token     = data->tokens;
         Token *token_end = data->tokens + data->token_count;
 
-        int64_t start = data->range.start;
         int64_t end   = data->range.end;
         int64_t col   = 0;
 
@@ -117,7 +133,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             col += max_line_digits + 1;
         }
 
-        for (int64_t pos = start; pos < end;)
+        int64_t left_col = col;
+
+        for (;;)
         {
             uint8_t b = ReadBufferByte(buffer, pos);
 
@@ -179,14 +197,23 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             String string = {};
 
-            int64_t advance     = 1;
-            bool    right_align = false;
+            int64_t advance          = 1;
+            bool right_align         = false;
+            bool encountered_newline = false;
+            int64_t real_col         = col - left_col;
+
+            if (PeekNewline(buffer, pos))
+            {
+                encountered_newline = true;
+            }
 
             if (b == '\t')
             {
-                col += 4;
+                string = PushTempStringF(">");
+                foreground = text_foreground_dimmer;
+                background = text_background;
             }
-            else if ((b == '\r' || b == '\n') &&visualize_newlines)
+            else if ((b == '\r' || b == '\n') && visualize_newlines)
             {
                 if (b == '\r' && ReadBufferByte(buffer, pos + 1) == '\n')
                 {
@@ -209,6 +236,20 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 background = text_background;
                 right_align = right_align_visualized_newlines;
             }
+            else if (b == ' ' && visualize_whitespace)
+            {
+                if (ReadBufferByte(buffer, pos - 1) == ' ' ||
+                    ReadBufferByte(buffer, pos + 1) == ' ')
+                {
+                    string = PushTempStringF(".");
+                    foreground = text_foreground_dimmer;
+                    background = text_background;
+                }
+                else
+                {
+                    string = MakeString(1, &buffer->text[pos]);
+                }
+            }
             else if (IsUtf8Byte(b))
             {
                 ParseUtf8Result unicode = ParseUtf8Codepoint(&buffer->text[pos]);
@@ -228,16 +269,27 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                      cursor;
                      cursor = cursor->next)
                 {
-                    Range selection = SanitizeRange(cursor->selection);
-
-                    if (draw_selection &&
-                        pos >= selection.start &&
-                        pos <= selection.end)
+                    if (draw_selection)
                     {
-                        background = selection_background;
-                        foreground.r = 255 - selection_background.r;
-                        foreground.g = 255 - selection_background.g;
-                        foreground.b = 255 - selection_background.b;
+                        Range inner = SanitizeRange(cursor->inner_selection);
+                        Range outer = SanitizeRange(cursor->outer_selection);
+
+                        if (pos >= inner.start &&
+                            pos <  inner.end)
+                        {
+                            background = selection_background;
+                            foreground.r = 255 - selection_background.r;
+                            foreground.g = 255 - selection_background.g;
+                            foreground.b = 255 - selection_background.b;
+                        }
+                        else if (pos >= outer.start &&
+                                 pos <  outer.end)
+                        {
+                            background = MakeColor(255, 128, 96);
+                            foreground.r = 255 - selection_background.r;
+                            foreground.g = 255 - selection_background.g;
+                            foreground.b = 255 - selection_background.b;
+                        }
                     }
 
                     if (pos == cursor->pos)
@@ -278,12 +330,22 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 }
             }
 
+            if (b == '\t')
+            {
+                col = left_col + indent_width*((real_col + indent_width) / indent_width);
+            }
+
             if (top_left.y + row >= inner_bounds.max.y)
             {
                 return actual_line_height;
             }
 
             pos += advance;
+
+            if (encountered_newline)
+            {
+                break;
+            }
         }
 
         row += 1;

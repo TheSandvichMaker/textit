@@ -43,6 +43,12 @@ struct UndoState
     UndoNode *at;
 };
 
+struct ObjectSelection
+{
+    Range inner;
+    Range outer;
+};
+
 struct BufferLocation
 {
     int64_t pos;
@@ -51,15 +57,13 @@ struct BufferLocation
     Range line_range;
 };
 
-typedef uint32_t BufferFlags;
-enum BufferFlags_ENUM : BufferFlags
+enum_flags(int, BufferFlags)
 {
     Buffer_Indestructible = 0x1,
     Buffer_ReadOnly = 0x2,
 };
 
-typedef uint32_t LineFlags;
-enum LineFlags_ENUM : LineFlags
+enum_flags(int, LineFlags)
 {
     Line_Empty = 0x1,
 };

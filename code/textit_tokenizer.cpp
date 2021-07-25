@@ -204,7 +204,27 @@ parse_operator:
             case '"':
             {
                 t.kind = Token_String;
-                while (CharsLeft(tok) && *tok->at++ != '"');
+                while (CharsLeft(tok))
+                {
+                    // FIXME: SHOULD EMIT LINE DATA PROPERLY!!
+                    if ((Peek(tok, 0) == '\r' && Peek(tok, 1) == '\n') ||
+                        Peek(tok, 0) == '\n')
+                    {
+                        if (Peek(tok, -1) != '\\')
+                        {
+                            break;
+                        }
+
+                        if (Peek(tok) == '\r') tok->at += 1;
+                    }
+
+                    if (Match(tok, '"'))
+                    {
+                        break;
+                    }
+
+                    tok->at += 1;
+                }
             } break;
 
             case '/':
@@ -229,6 +249,8 @@ parse_operator:
                     t.kind = Token_String;
                     while (CharsLeft(tok))
                     {
+                        // FIXME: SHOULD EMIT LINE DATA PROPERLY!!
+                        // also deduplicate this code
                         if ((Peek(tok, 0) == '\r' && Peek(tok, 1) == '\n') ||
                             Peek(tok, 0) == '\n')
                         {

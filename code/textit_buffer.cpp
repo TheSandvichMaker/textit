@@ -229,29 +229,27 @@ FindLineStart(Buffer *buffer, int64_t pos)
     return result;
 }
 
-function int64_t
-FindLineEnd(Buffer *buffer, int64_t pos, bool include_newline = false)
+function struct { int64_t inner; int64_t outer; }
+FindLineEnd(Buffer *buffer, int64_t pos)
 {
-    int64_t result = pos;
+    int64_t inner = pos;
+    int64_t outer = pos;
 
-    while (IsInBufferRange(buffer, result + 1))
+    while (IsInBufferRange(buffer, inner + 1))
     {
-        int64_t newline_length = PeekNewline(buffer, result + 1);
+        int64_t newline_length = PeekNewline(buffer, inner + 1);
         if (newline_length)
         {
-            if (include_newline)
-            {
-                result += newline_length + 1;
-            }
+            outer = inner + newline_length + 1;
             break;
         }
         else
         {
-            result += 1;
+            inner += 1;
         }
     }
 
-    return result;
+    return { inner, outer };
 }
 
 function int64_t
@@ -325,6 +323,17 @@ GetInnerLineRange(Buffer *buffer, int64_t line)
     return range;
 }
 
+function void
+GetLineRanges(Buffer *buffer, int64_t line, Range *inner, Range *outer)
+{
+    if (LineIsInBuffer(buffer, line))
+    {
+        *inner = MakeRange(buffer->line_data[line].range.start,
+                           buffer->line_data[line].newline_pos);
+        *outer = buffer->line_data[line].range;
+    }
+}
+
 function BufferLocation
 CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
 {
@@ -355,6 +364,39 @@ function int64_t
 GetLineNumber(Buffer *buffer, int64_t pos)
 {
     return CalculateBufferLocationFromPos(buffer, pos).line;
+}
+
+function Range
+GetLineRange(Buffer *buffer, Range range)
+{
+    range = ClampRange(range, BufferRange(buffer));
+
+    Range result = {};
+
+    bool got_one = false;
+    // TODO: Binary search
+    for (int64_t line = 0; line < buffer->line_data.count; line += 1)
+    {
+        LineData *data = &buffer->line_data[line];
+        if ((range.start >= data->range.start) &&
+            (range.start <  data->range.end))
+        {
+            result.start = line;
+
+            if (got_one) break;
+            got_one = true;
+        }
+        if ((range.end >= data->range.start) &&
+            (range.end <  data->range.end))
+        {
+            result.end = line;
+
+            if (got_one) break;
+            got_one = true;
+        }
+    }
+
+    return result;
 }
 
 function BufferLocation
@@ -606,9 +648,11 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
              cursor;
              cursor = cursor->next)
         {
-            cursor->pos             = ApplyPositionDelta(cursor->pos, pos, delta);
-            cursor->selection.start = ApplyPositionDelta(cursor->selection.start, pos, delta);
-            cursor->selection.end   = ApplyPositionDelta(cursor->selection.end, pos, delta);
+            cursor->pos                   = ApplyPositionDelta(cursor->pos,                   pos, delta);
+            cursor->inner_selection.start = ApplyPositionDelta(cursor->inner_selection.start, pos, delta);
+            cursor->inner_selection.end   = ApplyPositionDelta(cursor->inner_selection.end,   pos, delta);
+            cursor->outer_selection.start = ApplyPositionDelta(cursor->outer_selection.start, pos, delta);
+            cursor->outer_selection.end   = ApplyPositionDelta(cursor->outer_selection.end,   pos, delta);
         }
     }
 

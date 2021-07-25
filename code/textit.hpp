@@ -99,10 +99,39 @@ struct Cursor
     int64_t sticky_col;
 
     int64_t pos;
-    Range selection;
+    Range inner_selection;
+    Range outer_selection;
 };
 
-function Range GetEditRange(Cursor *cursor);
+function void
+SetCursor(Cursor *cursor, int64_t pos, Range inner = {}, Range outer = {})
+{
+    if (inner.start == 0 &&
+        inner.end   == 0)
+    {
+        inner = MakeRange(pos);
+    }
+    if (outer.start == 0 &&
+        outer.end   == 0)
+    {
+        outer = inner;
+    }
+    cursor->pos             = pos;
+    cursor->inner_selection = inner;
+    cursor->outer_selection = outer;
+}
+
+function void
+SetSelection(Cursor *cursor, Range inner, Range outer = {})
+{
+    if (outer.start == 0 &&
+        outer.end   == 0)
+    {
+        outer = inner;
+    }
+    cursor->inner_selection = inner;
+    cursor->outer_selection = outer;
+}
 
 struct CursorHashKey
 {
