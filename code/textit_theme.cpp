@@ -1,7 +1,7 @@
 static inline void
 SetThemeColor(String name, Color color)
 {
-    Theme *theme = &editor_state->theme;
+    Theme *theme = &editor->theme;
     if (theme->color_count < MAX_THEME_COLORS)
     {
         ThemeColor *theme_color = &theme->colors[theme->color_count++];
@@ -19,7 +19,7 @@ GetThemeColor(String name)
 {
     Color result = MakeColor(255, 0, 255);
 
-    Theme *theme = &editor_state->theme;
+    Theme *theme = &editor->theme;
     for (size_t i = 0; i < theme->color_count; ++i)
     {
         ThemeColor *theme_color = &theme->colors[i];
@@ -59,5 +59,7 @@ LoadDefaultTheme()
     SetThemeColor("filebar_text_background_clutch"_str, MakeColor(64, 128, 255));
     SetThemeColor("unrenderable_text_foreground"_str, MakeColor(255, 255, 255));
     SetThemeColor("unrenderable_text_background"_str, MakeColor(192, 0, 0));
-    SetThemeColor("selection_background"_str, MakeColor(32, 96, 128));
+    SetThemeColor("inner_selection_background"_str, MakeColor(32, 96, 128));
+    SetThemeColor("outer_selection_background"_str, MakeColor(128, 96, 32));
+    SetThemeColor("line_highlight"_str, MakeColor(18, 30, 48));
 }

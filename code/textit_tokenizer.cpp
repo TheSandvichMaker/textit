@@ -1,7 +1,7 @@
 function LineData *
 AllocateLineData(void)
 {
-    LineData *result = PushStruct(&editor_state->transient_arena, LineData);
+    LineData *result = PushStruct(&editor->transient_arena, LineData);
     return result;
 }
 
@@ -384,17 +384,6 @@ parse_operator:
                          (double)buffer->count / (1'000'000.0*total_time));
 #endif
 }
-
-#if 0
-static
-PLATFORM_JOB(TokenizeBufferJob)
-{
-    Buffer *buffer = (Buffer *)userdata;
-    buffer->tokenizing = true;
-    TokenizeBuffer(buffer);
-    buffer->tokenizing = false;
-}
-#endif
 
 function LanguageSpec *
 PushCppLanguageSpec(Arena *arena)

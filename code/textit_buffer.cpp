@@ -125,17 +125,67 @@ ScanWordEndForward(Buffer *buffer, int64_t pos)
     return pos;
 }
 
-// taxonomy of a word motion
+function Selection
+ScanWordForward2(Buffer *buffer, int64_t pos)
+{
+    Selection result = {};
 
-// #include 
-// ^ cursor start
-//  ^ selection start
-//         ^ cursor/selection end
+    while (IsInBufferRange(buffer, pos) &&
+           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    {
+        pos += 1;
+    }
 
-// ##include
-// ^ cursor start
-// ^ selection start
-//  ^ cursor/selection end
+    result.inner = MakeRange(pos);
+    result.outer = MakeRange(pos);
+
+    CharacterClassFlags match_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
+    while (IsInBufferRange(buffer, pos) &&
+           CharacterizeByteLoosely(ReadBufferByte(buffer, pos)) == match_class)
+    {
+        pos += 1;
+    }
+    result.inner.end = pos;
+
+    while (IsInBufferRange(buffer, pos) &&
+           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    {
+        pos += 1;
+    }
+    result.outer.end = pos;
+
+    return result;
+}
+function Selection
+ScanWordBackward2(Buffer *buffer, int64_t pos)
+{
+    Selection result = {};
+    result.inner = MakeRange(pos);
+    result.outer = MakeRange(pos);
+
+    if (IsInBufferRange(buffer, pos - 1))
+    {
+        pos -= 1;
+    }
+
+    while (IsInBufferRange(buffer, pos) &&
+           IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
+    {
+        pos -= 1;
+    }
+    result.inner.start = pos + 1;
+
+    CharacterClassFlags match_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
+    while (IsInBufferRange(buffer, pos - 1) &&
+           CharacterizeByteLoosely(ReadBufferByte(buffer, pos - 1)) == match_class)
+    {
+        pos -= 1;
+    }
+    result.inner.end = pos;
+    result.outer.end = pos;
+
+    return result;
+}
 
 function Range
 ScanWordForward(Buffer *buffer, int64_t pos)
@@ -328,7 +378,7 @@ GetLineRanges(Buffer *buffer, int64_t line, Range *inner, Range *outer)
 {
     if (LineIsInBuffer(buffer, line))
     {
-        *inner = MakeRange(buffer->line_data[line].range.start,
+        *inner = MakeRange(buffer->line_data[line].tokens->pos, // FIXME: WHACK!
                            buffer->line_data[line].newline_pos);
         *outer = buffer->line_data[line].range;
     }
@@ -495,30 +545,8 @@ FlushBufferedUndo(Buffer *buffer)
 function void
 PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
 {
-#if 0
-    auto undo = &buffer->undo;
-
-    if ((undo->run_pos == -1 || (undo->insert_pos == pos)) &&
-        undo->fwd_buffer.CanFitAppend(forward) &&
-        (backward.size == 0)) // TODO: Make backward buffering work
-    {
-        undo->fwd_buffer.Append(forward);
-        undo->bck_buffer.Append(backward);
-        platform->DebugPrint("Appending to undo buffer.\nfwd: '%.*s'\nbck: '%.*s'\n",
-                             StringExpand(undo->fwd_buffer),
-                             StringExpand(undo->bck_buffer));
-        if (undo->run_pos == -1)
-        {
-            undo->run_pos = pos;
-        }
-        undo->insert_pos = pos + forward.size;
-    }
-    else
-#endif
-    {
-        FlushBufferedUndo(buffer);
-        PushUndoInternal(buffer, pos, forward, backward);
-    }
+    FlushBufferedUndo(buffer);
+    PushUndoInternal(buffer, pos, forward, backward);
 }
 
 function UndoNode *
@@ -641,18 +669,18 @@ ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
 function void
 OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
 {
-    for (size_t i = 0; i < editor_state->view_count; i += 1)
+    for (size_t i = 0; i < editor->view_count; i += 1)
     {
-        ViewID view_id = editor_state->used_view_ids[i];
+        ViewID view_id = editor->used_view_ids[i];
         for (Cursor *cursor = IterateCursors(view_id, buffer->id);
              cursor;
              cursor = cursor->next)
         {
             cursor->pos                   = ApplyPositionDelta(cursor->pos,                   pos, delta);
-            cursor->inner_selection.start = ApplyPositionDelta(cursor->inner_selection.start, pos, delta);
-            cursor->inner_selection.end   = ApplyPositionDelta(cursor->inner_selection.end,   pos, delta);
-            cursor->outer_selection.start = ApplyPositionDelta(cursor->outer_selection.start, pos, delta);
-            cursor->outer_selection.end   = ApplyPositionDelta(cursor->outer_selection.end,   pos, delta);
+            cursor->selection.inner.start = ApplyPositionDelta(cursor->selection.inner.start, pos, delta);
+            cursor->selection.inner.end   = ApplyPositionDelta(cursor->selection.inner.end,   pos, delta);
+            cursor->selection.outer.start = ApplyPositionDelta(cursor->selection.outer.start, pos, delta);
+            cursor->selection.outer.end   = ApplyPositionDelta(cursor->selection.outer.end,   pos, delta);
         }
     }
 
@@ -715,7 +743,7 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
 
     PushUndo(buffer, range.start, forward, backward);
 
-    if (editor_state->edit_mode == EditMode_Command)
+    if (editor->edit_mode == EditMode_Command)
     {
         FlushBufferedUndo(buffer);
     }

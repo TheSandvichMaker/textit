@@ -99,8 +99,7 @@ struct Cursor
     int64_t sticky_col;
 
     int64_t pos;
-    Range inner_selection;
-    Range outer_selection;
+    Selection selection;
 };
 
 function void
@@ -117,8 +116,8 @@ SetCursor(Cursor *cursor, int64_t pos, Range inner = {}, Range outer = {})
         outer = inner;
     }
     cursor->pos             = pos;
-    cursor->inner_selection = inner;
-    cursor->outer_selection = outer;
+    cursor->selection.inner = inner;
+    cursor->selection.outer = outer;
 }
 
 function void
@@ -129,8 +128,8 @@ SetSelection(Cursor *cursor, Range inner, Range outer = {})
     {
         outer = inner;
     }
-    cursor->inner_selection = inner;
-    cursor->outer_selection = outer;
+    cursor->selection.inner = inner;
+    cursor->selection.outer = outer;
 }
 
 struct CursorHashKey
@@ -238,7 +237,7 @@ struct EditorState
     } debug;
 
 };
-static EditorState *editor_state;
+static EditorState *editor;
 
 function void ExecuteCommand(View *view, Command *command);
 
@@ -256,23 +255,23 @@ function BufferIterator
 IterateBuffers(void)
 {
     BufferIterator result = {};
-    result.buffer = GetBuffer(editor_state->used_buffer_ids[0]);
+    result.buffer = GetBuffer(editor->used_buffer_ids[0]);
     return result;
 }
 
 function bool
 IsValid(BufferIterator *iter)
 {
-    return (iter->index < editor_state->buffer_count);
+    return (iter->index < editor->buffer_count);
 }
 
 function void
 Next(BufferIterator *iter)
 {
     iter->index += 1;
-    if (iter->index < editor_state->buffer_count)
+    if (iter->index < editor->buffer_count)
     {
-        iter->buffer = GetBuffer(editor_state->used_buffer_ids[iter->index]);
+        iter->buffer = GetBuffer(editor->used_buffer_ids[iter->index]);
     }
 }
 
@@ -286,38 +285,36 @@ function ViewIterator
 IterateViews(void)
 {
     ViewIterator result = {};
-    result.view = GetView(editor_state->used_view_ids[0]);
+    result.view = GetView(editor->used_view_ids[0]);
     return result;
 }
 
 function bool
 IsValid(ViewIterator *iter)
 {
-    return (iter->index < editor_state->view_count);
+    return (iter->index < editor->view_count);
 }
 
 function void
 Next(ViewIterator *iter)
 {
     iter->index += 1;
-    if (iter->index < editor_state->view_count)
+    if (iter->index < editor->view_count)
     {
-        iter->view = GetView(editor_state->used_view_ids[iter->index]);
+        iter->view = GetView(editor->used_view_ids[iter->index]);
     }
 }
 
 function View *
-CurrentView(EditorState *editor)
+GetActiveView(void)
 {
     return GetView(editor->active_window->view);
 }
 
 function Buffer *
-CurrentBuffer(EditorState *editor)
+GetActiveBuffer(void)
 {
-    View *view = GetView(editor->active_window->view);
-    Buffer *result = GetBuffer(view->buffer);
-    return result;
+    return GetBuffer(GetView(editor->active_window->view)->buffer);
 }
 
 function void SplitWindow(Window *window, WindowSplitKind split);

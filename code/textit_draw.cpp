@@ -40,7 +40,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     Buffer *buffer = GetBuffer(view);
 
     bool draw_cursor    = is_active_window;
-    bool draw_selection = (editor_state->edit_mode != EditMode_Text);
+    bool draw_selection = (editor->edit_mode != EditMode_Text);
 
     bool visualize_newlines              = core_config->visualize_newlines;
     bool right_align_visualized_newlines = core_config->right_align_visualized_newlines; (void)right_align_visualized_newlines;
@@ -59,7 +59,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     Color text_background_highlighted  = GetThemeColor("text_background_highlighted"_str);
     Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
     Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
-    Color selection_background         = GetThemeColor("selection_background"_str);
+    Color inner_selection_background   = GetThemeColor("inner_selection_background"_str);
+    Color outer_selection_background   = GetThemeColor("outer_selection_background"_str);
+    Color line_highlight               = GetThemeColor("line_highlight"_str);
 
     Rect2i inner_bounds = bounds;
     inner_bounds.min += MakeV2i(2, 1);
@@ -119,6 +121,25 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         actual_line_height += 1;
 
+        Color base_background = text_background;
+
+        if (draw_cursor)
+        {
+            for (Cursor *cursor = IterateCursors(view->id, buffer->id);
+                 cursor;
+                 cursor = cursor->next)
+            {
+                if (cursor->pos >= data->range.start && cursor->pos < data->range.end)
+                {
+                    base_background = line_highlight;
+                    PushRect(Layer_Text,
+                             MakeRect2iMinMax(MakeV2i(inner_bounds.min.x, top_left.y + row),
+                                              MakeV2i(inner_bounds.max.x, top_left.y + row + 1)),
+                             base_background);
+                }
+            }
+        }
+
         Token *token     = data->tokens;
         Token *token_end = data->tokens + data->token_count;
 
@@ -129,7 +150,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         if (show_line_numbers)
         {
-            DrawLine(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, text_background);
+            DrawLine(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, base_background);
             col += max_line_digits + 1;
         }
 
@@ -140,7 +161,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             uint8_t b = ReadBufferByte(buffer, pos);
 
             Color foreground = text_foreground;
-            Color background = text_background;
+            Color background = base_background;
 
             //
             // Colorize Tokens
@@ -187,10 +208,10 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 }
 
                 if (pos >= token->pos &&
-                    editor_state->pos_at_mouse >= token->pos &&
-                    editor_state->pos_at_mouse <  token->pos + token->length)
+                    editor->pos_at_mouse >= token->pos &&
+                    editor->pos_at_mouse <  token->pos + token->length)
                 {
-                    editor_state->token_at_mouse = token;
+                    editor->token_at_mouse = token;
                     background = text_background_highlighted;
                 }
             }
@@ -202,39 +223,45 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             bool encountered_newline = false;
             int64_t real_col         = col - left_col;
 
-            if (PeekNewline(buffer, pos))
+            int64_t newline_length = PeekNewline(buffer, pos);
+            if (newline_length)
             {
+                advance = newline_length;
                 encountered_newline = true;
             }
 
             if (b == '\t')
             {
-                string = PushTempStringF(">");
-                foreground = text_foreground_dimmer;
-                background = text_background;
+                if (visualize_whitespace)
+                {
+                    string = ">"_str;
+                    foreground = text_foreground_dimmer;
+                }
             }
-            else if ((b == '\r' || b == '\n') && visualize_newlines)
+            else if (b == '\r' || b == '\n')
             {
-                if (b == '\r' && ReadBufferByte(buffer, pos + 1) == '\n')
+                if (visualize_newlines)
                 {
-                    string = PushTempStringF("\\r\\n");
-                    advance = 2;
+                    if (b == '\r' && ReadBufferByte(buffer, pos + 1) == '\n')
+                    {
+                        string = "\\r\\n"_str;
+                        advance = 2;
+                    }
+                    else if (b == '\r')
+                    {
+                        string = "\\r"_str;
+                    }
+                    else if (b == '\n')
+                    {
+                        string = "\\n"_str;
+                    }
+                    else
+                    {
+                        INVALID_CODE_PATH;
+                    }
+                    foreground = text_foreground_dimmest;
+                    right_align = right_align_visualized_newlines;
                 }
-                else if (b == '\r')
-                {
-                    string = PushTempStringF("\\r");
-                }
-                else if (b == '\n')
-                {
-                    string = PushTempStringF("\\n");
-                }
-                else
-                {
-                    INVALID_CODE_PATH;
-                }
-                foreground = text_foreground_dimmest;
-                background = text_background;
-                right_align = right_align_visualized_newlines;
             }
             else if (b == ' ' && visualize_whitespace)
             {
@@ -243,7 +270,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 {
                     string = PushTempStringF(".");
                     foreground = text_foreground_dimmer;
-                    background = text_background;
                 }
                 else
                 {
@@ -271,30 +297,34 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 {
                     if (draw_selection)
                     {
-                        Range inner = SanitizeRange(cursor->inner_selection);
-                        Range outer = SanitizeRange(cursor->outer_selection);
+                        Range inner = SanitizeRange(cursor->selection.inner);
+                        Range outer = SanitizeRange(cursor->selection.outer);
 
                         if (pos >= inner.start &&
                             pos <  inner.end)
                         {
-                            background = selection_background;
-                            foreground.r = 255 - selection_background.r;
-                            foreground.g = 255 - selection_background.g;
-                            foreground.b = 255 - selection_background.b;
+                            background = inner_selection_background;
+                            foreground.r = 255 - inner_selection_background.r;
+                            foreground.g = 255 - inner_selection_background.g;
+                            foreground.b = 255 - inner_selection_background.b;
                         }
                         else if (pos >= outer.start &&
                                  pos <  outer.end)
                         {
-                            background = MakeColor(255, 128, 96);
-                            foreground.r = 255 - selection_background.r;
-                            foreground.g = 255 - selection_background.g;
-                            foreground.b = 255 - selection_background.b;
+                            background = outer_selection_background;
+                            foreground.r = 255 - outer_selection_background.r;
+                            foreground.g = 255 - outer_selection_background.g;
+                            foreground.b = 255 - outer_selection_background.b;
                         }
                     }
 
                     if (pos == cursor->pos)
                     {
                         Swap(foreground, background);
+                        if (string.size == 0)
+                        {
+                            string = " "_str;
+                        }
                         break;
                     }
                 }
@@ -309,9 +339,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             {
                 PushTile(Layer_Text, top_left + MakeV2i(col, row), MakeSprite(string.data[i], foreground, background));
 
-                if (AreEqual(editor_state->text_mouse_p, top_left + MakeV2i(col, row)))
+                if (AreEqual(editor->text_mouse_p, top_left + MakeV2i(col, row)))
                 {
-                    editor_state->pos_at_mouse = pos;
+                    editor->pos_at_mouse = pos;
                 }
 
                 col += 1;
@@ -332,7 +362,14 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             if (b == '\t')
             {
+                // TODO: tab logic needs to be done properly everywhere!!
+                int64_t prev_col = col;
                 col = left_col + indent_width*((real_col + indent_width) / indent_width);
+                // TODO: This looks a bit janktastic when the cursor is on a tab
+                for (int64_t i = prev_col; i < col; i += 1)
+                {
+                    PushTile(Layer_Text, top_left + MakeV2i(i, row), MakeSprite(' ', foreground, background));
+                }
             }
 
             if (top_left.y + row >= inner_bounds.max.y)
@@ -376,7 +413,7 @@ DrawView(View *view, bool is_active_window)
     if (is_active_window)
     {
         filebar_text_background_str = "filebar_text_background"_str;
-        switch (editor_state->edit_mode)
+        switch (editor->edit_mode)
         {
             case EditMode_Text:
             {
@@ -407,9 +444,9 @@ DrawView(View *view, bool is_active_window)
                              view->scroll_at,
                              loc.line, loc.col,
                              view->repeat_value,
-                             editor_state->text_mouse_p.x,
-                             editor_state->text_mouse_p.y,
-                             editor_state->pos_at_mouse),
+                             editor->text_mouse_p.x,
+                             editor->text_mouse_p.y,
+                             editor->pos_at_mouse),
              filebar_text_foreground, filebar_text_background, GetWidth(bounds) - 4);
 
     int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
@@ -436,15 +473,15 @@ DrawCommandLineInput()
     Color text_background = GetThemeColor("text_background"_str);
 
     V2i p = MakeV2i(2, render_state->viewport.max.y - 1);
-    if (editor_state->command_line_prediction_count > 0)
+    if (editor->command_line_prediction_count > 0)
     {
         int prediction_offset = 1;
-        for (int i = 0; i < editor_state->command_line_prediction_count; i += 1)
+        for (int i = 0; i < editor->command_line_prediction_count; i += 1)
         {
-            Command *other_prediction = editor_state->command_line_predictions[i];
+            Command *other_prediction = editor->command_line_predictions[i];
 
             Color color = MakeColor(127, 127, 127);
-            if (i == editor_state->command_line_prediction_selected_index)
+            if (i == editor->command_line_prediction_selected_index)
             {
                 color = MakeColor(192, 127, 127);
             }
@@ -454,18 +491,18 @@ DrawCommandLineInput()
         }
     }
 
-    for (int i = 0; i < editor_state->command_line_count + 1; i += 1)
+    for (int i = 0; i < editor->command_line_count + 1; i += 1)
     {
         Sprite sprite;
-        if (i < editor_state->command_line_count)
+        if (i < editor->command_line_count)
         {
-            sprite = MakeSprite(editor_state->command_line[i], text_foreground, text_background);
+            sprite = MakeSprite(editor->command_line[i], text_foreground, text_background);
         }
         else
         {
             sprite = MakeSprite(0, text_foreground, text_background);
         }
-        if (i == editor_state->command_line_cursor)
+        if (i == editor->command_line_cursor)
         {
             Swap(sprite.foreground, sprite.background);
         }

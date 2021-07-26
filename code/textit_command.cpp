@@ -33,7 +33,7 @@ BindCommand(BindingMap *map, PlatformInputCode code, Modifiers modifiers, String
 function void
 LoadDefaultBindings()
 {
-    BindingMap *command = &editor_state->bindings[EditMode_Command];
+    BindingMap *command = &editor->bindings[EditMode_Command];
     command->text_command = nullptr;
     BindCommand(command, PlatformInputCode_Left,   0,              "MoveLeft"_str);
     BindCommand(command, PlatformInputCode_Right,  0,              "MoveRight"_str);
@@ -67,7 +67,9 @@ LoadDefaultBindings()
     BindCommand(command, 'Q',                      Modifier_Ctrl,  "DestroyWindow"_str);
 
     BindCommand(command, 'D',                      0,              "DeleteSelection"_str);
+    BindCommand(command, 'D',                      Modifier_Shift, "DeleteInnerSelection"_str);
     BindCommand(command, 'C',                      0,              "ChangeSelection"_str);
+    BindCommand(command, 'C',                      Modifier_Shift, "ChangeOuterSelection"_str);
     BindCommand(command, 'Q',                      0,              "ToUppercase"_str);
     BindCommand(command, 'X',                      0,              "EncloseLine"_str);
     BindCommand(command, 'F',                      Modifier_Ctrl,  "PageDown"_str);
@@ -82,6 +84,7 @@ LoadDefaultBindings()
     BindCommand(command, '9',                      Modifier_Shift, "EncloseSurroundingParen"_str);
     BindCommand(command, PlatformInputCode_Period, 0,              "RepeatLastCommand"_str);
     BindCommand(command, PlatformInputCode_F1,     0,              "ToggleVisualizeNewlines"_str);
+    BindCommand(command, PlatformInputCode_Comma,  0,              "EncloseParameter"_str);
 
     BindCommand(command, 'Y',                      0,              "Copy"_str);
     BindCommand(command, 'P',                      Modifier_Shift, "PasteAfter"_str);
@@ -90,7 +93,7 @@ LoadDefaultBindings()
 
     BindCommand(command, PlatformInputCode_Oem1,   Modifier_Shift, "EnterCommandLineMode"_str);
 
-    BindingMap *text = &editor_state->bindings[EditMode_Text];
+    BindingMap *text = &editor->bindings[EditMode_Text];
     text->text_command = FindCommand("WriteText"_str);
     BindCommand(text, PlatformInputCode_Left,   0,             "MoveLeft"_str);
     BindCommand(text, PlatformInputCode_Right,  0,             "MoveRight"_str);

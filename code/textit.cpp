@@ -28,9 +28,9 @@ GetCursorInternal(ViewID view, BufferID buffer, bool make_if_missing)
     key.view   = view;
     key.buffer = buffer;
     uint64_t hash = HashIntegers(key.value);
-    uint64_t slot = hash % ArrayCount(editor_state->cursor_hash);
+    uint64_t slot = hash % ArrayCount(editor->cursor_hash);
 
-    CursorHashEntry *entry = editor_state->cursor_hash[slot];
+    CursorHashEntry *entry = editor->cursor_hash[slot];
 
     while (entry &&
            (entry->key.value != key.value))
@@ -40,16 +40,16 @@ GetCursorInternal(ViewID view, BufferID buffer, bool make_if_missing)
 
     if (!entry && make_if_missing)
     {
-        if (!editor_state->first_free_cursor_hash_entry)
+        if (!editor->first_free_cursor_hash_entry)
         {
-            editor_state->first_free_cursor_hash_entry = PushStructNoClear(&editor_state->transient_arena, CursorHashEntry);
-            editor_state->first_free_cursor_hash_entry->next_in_hash = nullptr;
+            editor->first_free_cursor_hash_entry = PushStructNoClear(&editor->transient_arena, CursorHashEntry);
+            editor->first_free_cursor_hash_entry->next_in_hash = nullptr;
         }
-        entry = editor_state->first_free_cursor_hash_entry;
-        editor_state->first_free_cursor_hash_entry = entry->next_in_hash;
+        entry = editor->first_free_cursor_hash_entry;
+        editor->first_free_cursor_hash_entry = entry->next_in_hash;
 
-        entry->next_in_hash = editor_state->cursor_hash[slot];
-        editor_state->cursor_hash[slot] = entry;
+        entry->next_in_hash = editor->cursor_hash[slot];
+        editor->cursor_hash[slot] = entry;
 
         entry->key = key;
 
@@ -84,31 +84,29 @@ DestroyCursor(ViewID view, BufferID buffer)
     key.view   = view;
     key.buffer = buffer;
     uint64_t hash = HashIntegers(key.value);
-    uint64_t slot = hash % ArrayCount(editor_state->cursor_hash);
+    uint64_t slot = hash % ArrayCount(editor->cursor_hash);
 
-    CursorHashEntry *entry = editor_state->cursor_hash[slot];
+    CursorHashEntry *entry = editor->cursor_hash[slot];
     if (entry)
     {
-        editor_state->cursor_hash[slot] = entry->next_in_hash;
+        editor->cursor_hash[slot] = entry->next_in_hash;
 
-        entry->next_free = editor_state->first_free_cursor_hash_entry;
-        editor_state->first_free_cursor_hash_entry = entry;
+        entry->next_free = editor->first_free_cursor_hash_entry;
+        editor->first_free_cursor_hash_entry = entry;
     }
 }
 
 function Buffer *
 OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
 {
-    EditorState *editor = editor_state;
-
     BufferID id = {};
     if (editor->buffer_count < MAX_BUFFER_COUNT)
     {
-        id = editor_state->free_buffer_ids[MAX_BUFFER_COUNT - editor_state->buffer_count - 1];
+        id = editor->free_buffer_ids[MAX_BUFFER_COUNT - editor->buffer_count - 1];
         id.generation += 1;
 
-        editor_state->used_buffer_ids[editor_state->buffer_count] = id;
-        editor_state->buffer_count += 1;
+        editor->used_buffer_ids[editor->buffer_count] = id;
+        editor->buffer_count += 1;
     }
 
     Buffer *result = BootstrapPushStruct(Buffer, arena);
@@ -119,7 +117,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->undo.run_pos = -1;
     result->undo.insert_pos = -1;
     result->undo.current_ordinal = 1;
-    result->indent_rules = &editor_state->default_indent_rules;
+    result->indent_rules = &editor->default_indent_rules;
 
     AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
 
@@ -140,7 +138,7 @@ OpenBufferFromFile(String filename)
     }
     result->count = (int64_t)file_size;
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
-    result->language = editor_state->cpp_spec;
+    result->language = editor->cpp_spec;
 
     TokenizeBuffer(result);
 
@@ -150,10 +148,10 @@ OpenBufferFromFile(String filename)
 function Buffer *
 GetBuffer(BufferID id)
 {
-    Buffer *result = editor_state->buffers[0];
+    Buffer *result = editor->buffers[0];
     if (id.index > 0 && id.index < MAX_BUFFER_COUNT)
     {
-        Buffer *buffer = editor_state->buffers[id.index];
+        Buffer *buffer = editor->buffers[id.index];
         if (buffer && buffer->id == id)
         {
             result = buffer;
@@ -172,41 +170,39 @@ DestroyBuffer(BufferID id)
     }
 
     size_t used_id_index = 0;
-    for (size_t i = 0; i < editor_state->buffer_count; i += 1)
+    for (size_t i = 0; i < editor->buffer_count; i += 1)
     {
-        BufferID test_id = editor_state->used_buffer_ids[i];
+        BufferID test_id = editor->used_buffer_ids[i];
         if (test_id == id)
         {
             used_id_index = i;
             break;
         }
     }
-    editor_state->free_buffer_ids[MAX_BUFFER_COUNT - editor_state->buffer_count] = id;
-    editor_state->used_buffer_ids[used_id_index] = editor_state->used_buffer_ids[--editor_state->buffer_count];
+    editor->free_buffer_ids[MAX_BUFFER_COUNT - editor->buffer_count] = id;
+    editor->used_buffer_ids[used_id_index] = editor->used_buffer_ids[--editor->buffer_count];
 
-    for (size_t i = 0; i < editor_state->view_count; i += 1)
+    for (size_t i = 0; i < editor->view_count; i += 1)
     {
-        ViewID view_id = editor_state->used_view_ids[i];
+        ViewID view_id = editor->used_view_ids[i];
         DestroyCursor(view_id, id);
     }
 
     Release(&buffer->arena);
-    editor_state->buffers[id.index] = nullptr;
+    editor->buffers[id.index] = nullptr;
 }
 
 function View *
 OpenNewView(BufferID buffer)
 {
-    EditorState *editor = editor_state;
-
     ViewID id = {};
     if (editor->view_count < MAX_VIEW_COUNT)
     {
-        id = editor_state->free_view_ids[MAX_VIEW_COUNT - editor_state->view_count - 1];
+        id = editor->free_view_ids[MAX_VIEW_COUNT - editor->view_count - 1];
         id.generation += 1;
 
-        editor_state->used_view_ids[editor_state->view_count] = id;
-        editor_state->view_count += 1;
+        editor->used_view_ids[editor->view_count] = id;
+        editor->view_count += 1;
     }
 
     View *result = BootstrapPushStruct(View, arena);
@@ -221,10 +217,10 @@ OpenNewView(BufferID buffer)
 function View *
 GetView(ViewID id)
 {
-    View *result = editor_state->views[0];
+    View *result = editor->views[0];
     if (id.index > 0 && id.index < MAX_VIEW_COUNT)
     {
-        View *view = editor_state->views[id.index];
+        View *view = editor->views[id.index];
         if (view && view->id == id)
         {
             result = view;
@@ -239,26 +235,26 @@ DestroyView(ViewID id)
     View *view = GetView(id);
 
     size_t used_id_index = 0;
-    for (size_t i = 0; i < editor_state->view_count; i += 1)
+    for (size_t i = 0; i < editor->view_count; i += 1)
     {
-        ViewID test_id = editor_state->used_view_ids[i];
+        ViewID test_id = editor->used_view_ids[i];
         if (test_id == id)
         {
             used_id_index = i;
             break;
         }
     }
-    editor_state->free_view_ids[MAX_VIEW_COUNT - editor_state->view_count] = id;
-    editor_state->used_view_ids[used_id_index] = editor_state->used_view_ids[--editor_state->view_count];
+    editor->free_view_ids[MAX_VIEW_COUNT - editor->view_count] = id;
+    editor->used_view_ids[used_id_index] = editor->used_view_ids[--editor->view_count];
 
-    for (size_t i = 0; i < editor_state->buffer_count; i += 1)
+    for (size_t i = 0; i < editor->buffer_count; i += 1)
     {
-        BufferID buffer_id = editor_state->used_buffer_ids[i];
+        BufferID buffer_id = editor->used_buffer_ids[i];
         DestroyCursor(id, buffer_id);
     }
 
     Release(&view->arena);
-    editor_state->views[id.index] = nullptr;
+    editor->views[id.index] = nullptr;
 }
 
 function ViewID
@@ -267,17 +263,16 @@ DuplicateView(ViewID id)
     ViewID result = ViewID::Null();
 
     View *view = GetView(id);
-    if (view != editor_state->null_view)
+    if (view != editor->null_view)
     {
         View *new_view = OpenNewView(view->buffer);
 
         Cursor *cursor = GetCursor(view);
         Cursor *new_cursor = GetCursor(new_view);
 
-        new_cursor->sticky_col      = cursor->sticky_col;
-        new_cursor->inner_selection = cursor->inner_selection;
-        new_cursor->outer_selection = cursor->outer_selection;
-        new_cursor->pos             = cursor->pos;
+        new_cursor->sticky_col = cursor->sticky_col;
+        new_cursor->selection  = cursor->selection;
+        new_cursor->pos        = cursor->pos;
 
         new_view->scroll_at = view->scroll_at;
         result = new_view->id;
@@ -289,15 +284,15 @@ DuplicateView(ViewID id)
 function Window *
 AllocateWindow(void)
 {
-    if (!editor_state->first_free_window)
+    if (!editor->first_free_window)
     {
-        editor_state->first_free_window = PushStructNoClear(&editor_state->transient_arena, Window);
-        editor_state->first_free_window->next = nullptr;
+        editor->first_free_window = PushStructNoClear(&editor->transient_arena, Window);
+        editor->first_free_window->next = nullptr;
 
-        editor_state->debug.allocated_window_count += 1;
+        editor->debug.allocated_window_count += 1;
     }
-    Window *result = editor_state->first_free_window;
-    editor_state->first_free_window = result->next;
+    Window *result = editor->first_free_window;
+    editor->first_free_window = result->next;
 
     ZeroStruct(result);
     return result;
@@ -328,7 +323,7 @@ SplitWindow(Window *window, WindowSplitKind split)
         }
         window->next = new_window;
 
-        editor_state->active_window = window;
+        editor->active_window = window;
     }
     else
     {
@@ -347,7 +342,7 @@ SplitWindow(Window *window, WindowSplitKind split)
         window->first_child = left;
         window->last_child  = right;
 
-        editor_state->active_window = left;
+        editor->active_window = left;
     }
 }
 
@@ -364,15 +359,15 @@ DestroyWindowInternal(Window *window)
 
         if (window->prev)
         {
-            editor_state->active_window = window->prev;
+            editor->active_window = window->prev;
         }
         else if (window->next)
         {
-            editor_state->active_window = window->next;
+            editor->active_window = window->next;
         }
         else
         {
-            editor_state->active_window = parent->first_child;
+            editor->active_window = parent->first_child;
         }
 
         if (!parent->first_child)
@@ -397,8 +392,8 @@ DestroyWindowInternal(Window *window)
             parent->first_child = parent->first_child->first_child;
             parent->last_child  = parent->last_child->last_child;
 
-            first_child->next = editor_state->first_free_window;
-            editor_state->first_free_window = first_child;
+            first_child->next = editor->first_free_window;
+            editor->first_free_window = first_child;
 
             for (Window *child = parent->first_child;
                  child;
@@ -407,15 +402,15 @@ DestroyWindowInternal(Window *window)
                 child->parent = parent;
             }
 
-            editor_state->active_window = parent;
+            editor->active_window = parent;
         }
         else if (window->split == WindowSplit_Leaf)
         {
             DestroyView(window->view);
         }
 
-        window->next = editor_state->first_free_window;
-        editor_state->first_free_window = window;
+        window->next = editor->first_free_window;
+        editor->first_free_window = window;
     }
 }
 
@@ -423,9 +418,9 @@ function void
 DestroyWindow(Window *window)
 {
     DestroyWindowInternal(window);
-    if (editor_state->active_window->split != WindowSplit_Leaf)
+    if (editor->active_window->split != WindowSplit_Leaf)
     {
-        editor_state->active_window = editor_state->active_window->first_child;
+        editor->active_window = editor->active_window->first_child;
     }
 }
 
@@ -511,7 +506,7 @@ DrawWindows(Window *window)
             }
         }
 
-        bool is_active_window = (window == editor_state->active_window);
+        bool is_active_window = (window == editor->active_window);
 
         view->actual_viewport_line_height = DrawView(view, is_active_window);
 
@@ -615,8 +610,8 @@ StringMapInsert(StringMap *map, String string, void *data)
 function void
 SetDebugDelay(int milliseconds, int frame_count)
 {
-    editor_state->debug_delay = milliseconds;
-    editor_state->debug_delay_frame_count = frame_count;
+    editor->debug_delay = milliseconds;
+    editor->debug_delay_frame_count = frame_count;
 }
 
 static Font
@@ -679,16 +674,15 @@ GetGlyphBitmap(Font *font, Glyph glyph)
 function void
 ApplyMove(Cursor *cursor, Move move)
 {
-    if (editor_state->clutch)
+    if (editor->clutch)
     {
-        cursor->inner_selection = Union(cursor->inner_selection, move.inner_selection);
-        cursor->outer_selection = Union(cursor->outer_selection, move.outer_selection);
+        cursor->selection.inner = Union(cursor->selection.inner, move.selection.inner);
+        cursor->selection.outer = Union(cursor->selection.outer, move.selection.outer);
         cursor->pos = move.pos;
     }
     else
     {
-        cursor->inner_selection = move.inner_selection;
-        cursor->outer_selection = move.outer_selection;
+        cursor->selection = move.selection;
         cursor->pos = move.pos;
     }
 }
@@ -700,7 +694,7 @@ ExecuteCommand(View *view, Command *command)
     {
         case Command_Basic:
         {
-            command->command(editor_state);
+            command->command();
         } break;
 
         case Command_Text:
@@ -712,32 +706,32 @@ ExecuteCommand(View *view, Command *command)
         {
             Cursor *cursor = GetCursor(view);
 
-            Move move = command->movement(editor_state);
+            Move move = command->movement();
             ApplyMove(cursor, move);
 
-            editor_state->last_movement   = command; 
-            editor_state->last_move_flags = move.flags;
+            editor->last_movement   = command; 
+            editor->last_move_flags = move.flags;
         } break;
 
         case Command_Change:
         {
             Cursor *cursor = GetCursor(view);
 
-            command->change(editor_state,
-                            SanitizeRange(cursor->inner_selection),
-                            SanitizeRange(cursor->outer_selection));
+            Selection selection;
+            selection.inner = SanitizeRange(cursor->selection.inner);
+            selection.outer = SanitizeRange(cursor->selection.outer);
+            command->change(selection);
 
-            if (editor_state->last_movement)
+            if (editor->last_movement)
             {
-                Assert(editor_state->last_movement->kind == Command_Movement);
-                if (editor_state->last_move_flags & MoveFlag_NoAutoRepeat)
+                Assert(editor->last_movement->kind == Command_Movement);
+                if (editor->last_move_flags & MoveFlag_NoAutoRepeat)
                 {
-                    cursor->inner_selection = MakeRange(cursor->pos);
-                    cursor->outer_selection = cursor->inner_selection;
+                    cursor->selection = MakeSelection(cursor->pos);
                 }
-                else if (editor_state->next_edit_mode == EditMode_Command)
+                else if (editor->next_edit_mode == EditMode_Command)
                 {
-                    Move next_move = editor_state->last_movement->movement(editor_state);
+                    Move next_move = editor->last_movement->movement();
                     ApplyMove(cursor, next_move);
                 }
             }
@@ -760,14 +754,14 @@ HandleViewEvents(ViewID view_id)
         View *view = GetView(view_id);
         Buffer *buffer = GetBuffer(view);
 
-        BindingMap *bindings = &editor_state->bindings[editor_state->edit_mode];
+        BindingMap *bindings = &editor->bindings[editor->edit_mode];
 
         Cursor *cursor = GetCursor(view);
         BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
         if ((event.type == PlatformEvent_Text) && bindings->text_command)
         {
             String text = MakeString(event.text_length, event.text);
-            bindings->text_command->text(editor_state, text);
+            bindings->text_command->text(text);
         }
         else if (MatchFilter(event.type, PlatformEventFilter_KeyDown))
         {
@@ -782,7 +776,7 @@ HandleViewEvents(ViewID view_id)
 
             bool consumed_digit = false;
             if (!modifiers &&
-                editor_state->edit_mode == EditMode_Command &&
+                editor->edit_mode == EditMode_Command &&
                 event.input_code >= PlatformInputCode_0 &&
                 event.input_code <= PlatformInputCode_9)
             {
@@ -804,7 +798,7 @@ HandleViewEvents(ViewID view_id)
 
             if (!consumed_digit)
             {
-                editor_state->clutch = shift_down;
+                editor->clutch = shift_down;
 
                 Binding *binding = &bindings->by_code[event.input_code];
                 Command *command = binding->by_modifiers[modifiers];
@@ -819,7 +813,7 @@ HandleViewEvents(ViewID view_id)
                     if (modifiers & Modifier_Shift)
                     {
                         // if this command was really bound with shift, don't enable the clutch
-                        editor_state->clutch = false;
+                        editor->clutch = false;
                     }
 
                     int64_t undo_ordinal = CurrentUndoOrdinal(buffer);
@@ -829,12 +823,12 @@ HandleViewEvents(ViewID view_id)
 
                     if (AreEqual(command->name, "RepeatLastCommand"_str))
                     {
-                        for (int64_t i = 0; i < repeat*editor_state->last_repeat; i += 1)
+                        for (int64_t i = 0; i < repeat*editor->last_repeat; i += 1)
                         {
-                            ExecuteCommand(view, editor_state->last_movement_for_change);
-                            ExecuteCommand(view, editor_state->last_change);
+                            ExecuteCommand(view, editor->last_movement_for_change);
+                            ExecuteCommand(view, editor->last_change);
                         }
-                        editor_state->last_movement = editor_state->last_movement_for_change;
+                        editor->last_movement = editor->last_movement_for_change;
                     }
                     else
                     {
@@ -848,12 +842,12 @@ HandleViewEvents(ViewID view_id)
                             
                             case Command_Change:
                             {
-                                editor_state->last_movement_for_change = editor_state->last_movement;
-                                editor_state->last_change = command;
+                                editor->last_movement_for_change = editor->last_movement;
+                                editor->last_change = command;
                             } break;
                         }
 
-                        editor_state->last_repeat = repeat;
+                        editor->last_repeat = repeat;
                     }
 
                     MergeUndoHistory(buffer, undo_ordinal, CurrentUndoOrdinal(buffer));
@@ -866,12 +860,12 @@ HandleViewEvents(ViewID view_id)
             {
                 if (event.pressed)
                 {
-                    editor_state->mouse_down = true;
+                    editor->mouse_down = true;
                     OnMouseDown();
                 }
                 else
                 {
-                    editor_state->mouse_down = false;
+                    editor->mouse_down = false;
                     OnMouseUp();
                 }
             }
@@ -883,12 +877,12 @@ HandleViewEvents(ViewID view_id)
     View *view = GetView(view_id);
     Buffer *buffer = GetBuffer(view);
 
-    if ((editor_state->next_edit_mode == EditMode_Text) &&
+    if ((editor->next_edit_mode == EditMode_Text) &&
         (buffer->flags & Buffer_ReadOnly))
     {
-        editor_state->next_edit_mode = EditMode_Command;
+        editor->next_edit_mode = EditMode_Command;
     }
-    editor_state->edit_mode = editor_state->next_edit_mode;
+    editor->edit_mode = editor->next_edit_mode;
 
     return result;
 }
@@ -898,77 +892,77 @@ AppUpdateAndRender(Platform *platform_)
 {
     platform = platform_;
 
-    editor_state = (EditorState *)platform->persistent_app_data;
+    editor = (EditorState *)platform->persistent_app_data;
     if (!platform->app_initialized)
     {
-        editor_state = BootstrapPushStruct(EditorState, permanent_arena);
-        platform->persistent_app_data = editor_state;
+        editor = BootstrapPushStruct(EditorState, permanent_arena);
+        platform->persistent_app_data = editor;
     }
 
     if (platform->exe_reloaded)
     {
-        RestoreGlobalState(&editor_state->global_state, &editor_state->transient_arena);
+        RestoreGlobalState(&editor->global_state, &editor->transient_arena);
     }
 
     if (!platform->app_initialized)
     {
         platform->RegisterFontFile("Bm437_OlivettiThin_8x14.FON"_str);
         if (!platform->MakeAsciiFont("Bm437 OlivettiThin 8x14"_str,
-                                     &editor_state->font,
+                                     &editor->font,
                                      14,
                                      PlatformFontRasterFlag_RasterFont|
                                      PlatformFontRasterFlag_DoNotMapUnicode))
         {
             platform->ReportError(PlatformError_Nonfatal, "Failed to load ttf font. Trying fallback bmp font.");
-            editor_state->font = LoadFontFromDisk(&editor_state->transient_arena, "font8x16_slim.bmp"_str, 8, 16);
+            editor->font = LoadFontFromDisk(&editor->transient_arena, "font8x16_slim.bmp"_str, 8, 16);
         }
 
-        platform->window_resize_snap_w = editor_state->font.glyph_w;
-        platform->window_resize_snap_h = editor_state->font.glyph_h;
+        platform->window_resize_snap_w = editor->font.glyph_w;
+        platform->window_resize_snap_h = editor->font.glyph_h;
 
-        InitializeRenderState(&editor_state->transient_arena, &platform->backbuffer, &editor_state->font);
+        InitializeRenderState(&editor->transient_arena, &platform->backbuffer, &editor->font);
 
         LoadDefaultTheme();
         LoadDefaultBindings();
-        LoadDefaultIndentRules(&editor_state->default_indent_rules);
+        LoadDefaultIndentRules(&editor->default_indent_rules);
 
         for (int16_t i = 0; i < MAX_BUFFER_COUNT; i += 1)
         {
-            editor_state->free_buffer_ids[i].index = MAX_BUFFER_COUNT - i - 1;
+            editor->free_buffer_ids[i].index = MAX_BUFFER_COUNT - i - 1;
         }
 
         for (int16_t i = 0; i < MAX_VIEW_COUNT; i += 1)
         {
-            editor_state->free_view_ids[i].index = MAX_VIEW_COUNT - i - 1;
+            editor->free_view_ids[i].index = MAX_VIEW_COUNT - i - 1;
         }
 
-        editor_state->cpp_spec = PushCppLanguageSpec(&editor_state->transient_arena);
+        editor->cpp_spec = PushCppLanguageSpec(&editor->transient_arena);
 
-        editor_state->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
-        editor_state->message_buffer = OpenNewBuffer("messages"_str, Buffer_Indestructible|Buffer_ReadOnly);
+        editor->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
+        editor->message_buffer = OpenNewBuffer("messages"_str, Buffer_Indestructible|Buffer_ReadOnly);
 
-        editor_state->null_view = OpenNewView(BufferID::Null());
+        editor->null_view = OpenNewView(BufferID::Null());
 
         Buffer *scratch_buffer = OpenBufferFromFile("test_file.txt"_str);
         View *scratch_view = OpenNewView(scratch_buffer->id);
 
-        editor_state->root_window.view = scratch_view->id;
-        RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
-        editor_state->active_window = &editor_state->root_window;
+        editor->root_window.view = scratch_view->id;
+        RecalculateViewBounds(&editor->root_window, render_state->viewport);
+        editor->active_window = &editor->root_window;
 
         platform->PushTickEvent();
         platform->app_initialized = true;
     }
 
-    editor_state->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);
-    editor_state->text_mouse_p = editor_state->screen_mouse_p / GlyphDim(&editor_state->font);
+    editor->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);
+    editor->text_mouse_p = editor->screen_mouse_p / GlyphDim(&editor->font);
 
-    if (editor_state->active_window->split != WindowSplit_Leaf)
+    if (editor->active_window->split != WindowSplit_Leaf)
     {
         platform->ReportError(PlatformError_Nonfatal, "Hey, the active window was not a leaf window, that's busted.");
-        while (editor_state->active_window->split != WindowSplit_Leaf)
+        while (editor->active_window->split != WindowSplit_Leaf)
         {
-            editor_state->active_window = editor_state->active_window->first_child;
+            editor->active_window = editor->active_window->first_child;
         }
     }
 
@@ -976,21 +970,21 @@ AppUpdateAndRender(Platform *platform_)
 
     bool handled_any_events = false;
 
-    if (editor_state->mouse_down)
+    if (editor->mouse_down)
     {
         OnMouseHeld();
     }
 
-    switch (editor_state->input_mode)
+    switch (editor->input_mode)
     {
         case InputMode_Editor:
         {
-            handled_any_events = HandleViewEvents(editor_state->active_window->view);
+            handled_any_events = HandleViewEvents(editor->active_window->view);
         } break;
 
         case InputMode_CommandLine:
         {
-            editor_state->clutch = false;
+            editor->clutch = false;
 
             PlatformEvent event;
             for (PlatformEventIterator it = platform->IterateEvents(PlatformEventFilter_Text|PlatformEventFilter_Keyboard);
@@ -1007,23 +1001,23 @@ AppUpdateAndRender(Platform *platform_)
                     {
                         if (IsPrintableAscii(text.data[i]))
                         {
-                            editor_state->cycling_predictions = false;
+                            editor->cycling_predictions = false;
 
-                            size_t left = ArrayCount(editor_state->command_line) - editor_state->command_line_count;
+                            size_t left = ArrayCount(editor->command_line) - editor->command_line_count;
                             if (left > 0)
                             {
-                                memmove(editor_state->command_line + editor_state->command_line_cursor + 1,
-                                        editor_state->command_line + editor_state->command_line_cursor,
+                                memmove(editor->command_line + editor->command_line_cursor + 1,
+                                        editor->command_line + editor->command_line_cursor,
                                         left);
-                                editor_state->command_line[editor_state->command_line_cursor++] = text.data[i];
-                                editor_state->command_line_count += 1;
+                                editor->command_line[editor->command_line_cursor++] = text.data[i];
+                                editor->command_line_count += 1;
                             }
                         }
                     }
                 }
                 else if (event.type == PlatformEvent_KeyDown)
                 {
-                    editor_state->cycling_predictions = false;
+                    editor->cycling_predictions = false;
 
                     switch (event.input_code)
                     {
@@ -1031,99 +1025,99 @@ AppUpdateAndRender(Platform *platform_)
 
                         case PlatformInputCode_Left:
                         {
-                            if (editor_state->command_line_cursor > 0)
+                            if (editor->command_line_cursor > 0)
                             {
-                                editor_state->command_line_cursor -= 1;
+                                editor->command_line_cursor -= 1;
                             }
                         } break;
 
                         case PlatformInputCode_Right:
                         {
-                            if (editor_state->command_line_cursor < editor_state->command_line_count)
+                            if (editor->command_line_cursor < editor->command_line_count)
                             {
-                                editor_state->command_line_cursor += 1;
+                                editor->command_line_cursor += 1;
                             }
                         } break;
 
                         case PlatformInputCode_Escape:
                         {
-                            editor_state->command_line_cursor = 0;
-                            editor_state->command_line_count = 0;
-                            editor_state->input_mode = InputMode_Editor;
+                            editor->command_line_cursor = 0;
+                            editor->command_line_count = 0;
+                            editor->input_mode = InputMode_Editor;
                         } break;
 
                         case PlatformInputCode_Return:
                         {
-                            String command_string = MakeString(editor_state->command_line_count, editor_state->command_line);
+                            String command_string = MakeString(editor->command_line_count, editor->command_line);
                             Command *command = FindCommand(command_string, StringMatch_CaseInsensitive);
                             if (command &&
 								(command->kind == Command_Basic) &&
 								(command->flags & Command_Visible))
                             {
-                                command->command(editor_state);
+                                command->command();
                             }
-                            editor_state->command_line_cursor = 0;
-                            editor_state->command_line_count = 0;
-                            editor_state->input_mode = InputMode_Editor;
+                            editor->command_line_cursor = 0;
+                            editor->command_line_count = 0;
+                            editor->input_mode = InputMode_Editor;
                         } break;
 
                         case PlatformInputCode_Tab:
                         {
-                            editor_state->cycling_predictions = true;
-                            if (editor_state->command_line_prediction_count > 0)
+                            editor->cycling_predictions = true;
+                            if (editor->command_line_prediction_count > 0)
                             {
-                                int index = editor_state->command_line_prediction_index++;
-                                editor_state->command_line_prediction_selected_index = index;
+                                int index = editor->command_line_prediction_index++;
+                                editor->command_line_prediction_selected_index = index;
 
-                                Command *prediction = editor_state->command_line_predictions[index];
-                                editor_state->command_line_prediction_index %= editor_state->command_line_prediction_count;
+                                Command *prediction = editor->command_line_predictions[index];
+                                editor->command_line_prediction_index %= editor->command_line_prediction_count;
 
-                                editor_state->command_line_count = (int)prediction->name.size;
-                                CopyArray(editor_state->command_line_count, prediction->name.data, editor_state->command_line);
-                                editor_state->command_line_cursor = editor_state->command_line_count;
+                                editor->command_line_count = (int)prediction->name.size;
+                                CopyArray(editor->command_line_count, prediction->name.data, editor->command_line);
+                                editor->command_line_cursor = editor->command_line_count;
                             }
                         } break;
                         
                         case PlatformInputCode_Back:
                         {
-                            size_t left = ArrayCount(editor_state->command_line) - editor_state->command_line_cursor;
-                            if (editor_state->command_line_cursor > 0)
+                            size_t left = ArrayCount(editor->command_line) - editor->command_line_cursor;
+                            if (editor->command_line_cursor > 0)
                             {
-                                memmove(editor_state->command_line + editor_state->command_line_cursor - 1,
-                                        editor_state->command_line + editor_state->command_line_cursor,
+                                memmove(editor->command_line + editor->command_line_cursor - 1,
+                                        editor->command_line + editor->command_line_cursor,
                                         left);
-                                editor_state->command_line_cursor -= 1;
-                                editor_state->command_line_count  -= 1;
+                                editor->command_line_cursor -= 1;
+                                editor->command_line_count  -= 1;
                             }
                         } break;
 
                         case PlatformInputCode_Delete:
                         {
-                            size_t left = ArrayCount(editor_state->command_line) - editor_state->command_line_cursor;
-                            if (editor_state->command_line_count > editor_state->command_line_cursor)
+                            size_t left = ArrayCount(editor->command_line) - editor->command_line_cursor;
+                            if (editor->command_line_count > editor->command_line_cursor)
                             {
-                                memmove(editor_state->command_line + editor_state->command_line_cursor,
-                                        editor_state->command_line + editor_state->command_line_cursor + 1,
+                                memmove(editor->command_line + editor->command_line_cursor,
+                                        editor->command_line + editor->command_line_cursor + 1,
                                         left);
-                                editor_state->command_line_count -= 1;
-                                if (editor_state->command_line_cursor > editor_state->command_line_count)
+                                editor->command_line_count -= 1;
+                                if (editor->command_line_cursor > editor->command_line_count)
                                 {
-                                    editor_state->command_line_cursor = editor_state->command_line_count;
+                                    editor->command_line_cursor = editor->command_line_count;
                                 }
                             }
                         } break;
                     }
                 }
 
-                if (!editor_state->cycling_predictions)
+                if (!editor->cycling_predictions)
                 {
-                    editor_state->command_line_prediction_count = 0;
-                    editor_state->command_line_prediction_index = 0;
-                    editor_state->command_line_prediction_selected_index = -1;
+                    editor->command_line_prediction_count = 0;
+                    editor->command_line_prediction_index = 0;
+                    editor->command_line_prediction_selected_index = -1;
 
-                    if (editor_state->command_line_count > 0)
+                    if (editor->command_line_count > 0)
                     {
-                        String command_string = MakeString(editor_state->command_line_count, editor_state->command_line);
+                        String command_string = MakeString(editor->command_line_count, editor->command_line);
                         for (size_t i = 0; i < command_list->command_count; i += 1)
                         {
                             Command *command = &command_list->commands[i];
@@ -1131,19 +1125,19 @@ AppUpdateAndRender(Platform *platform_)
                                 (command->flags & Command_Visible) &&
                                 MatchPrefix(command->name, command_string, StringMatch_CaseInsensitive))
                             {
-                                editor_state->command_line_predictions[editor_state->command_line_prediction_count++] = command;
+                                editor->command_line_predictions[editor->command_line_prediction_count++] = command;
                             }
 
-                            if (editor_state->command_line_prediction_count >=
-                                (int64_t)ArrayCount(editor_state->command_line_predictions))
+                            if (editor->command_line_prediction_count >=
+                                (int64_t)ArrayCount(editor->command_line_predictions))
                             {
                                 break;
                             }
                         }
 
-                        if (editor_state->command_line_prediction_index > editor_state->command_line_prediction_count)
+                        if (editor->command_line_prediction_index > editor->command_line_prediction_count)
                         {
-                            editor_state->command_line_prediction_index = editor_state->command_line_prediction_count;
+                            editor->command_line_prediction_index = editor->command_line_prediction_count;
                         }
                     }
                 }
@@ -1153,31 +1147,22 @@ AppUpdateAndRender(Platform *platform_)
 
     if (handled_any_events)
     {
-        RecalculateViewBounds(&editor_state->root_window, render_state->viewport);
-        DrawWindows(&editor_state->root_window);
+        RecalculateViewBounds(&editor->root_window, render_state->viewport);
+        DrawWindows(&editor->root_window);
 
-        if (editor_state->input_mode)
+        if (editor->input_mode)
         {
             DrawCommandLineInput();
         }
     }
     EndRender();
 
-    int free_window_count = 0;
-    for (Window *window = editor_state->first_free_window;
-         window;
-         window = window->next)
+    Buffer *active_buffer = GetBuffer(GetView(editor->active_window->view));
+    platform->window_title = PushTempStringF("%.*s - TextIt", StringExpand(active_buffer->name));
+                                             
+    if (editor->debug_delay_frame_count > 0)
     {
-        free_window_count += 1;
-    }
-
-    platform->window_title = PushTempStringF("TextIt - Free Windows: %d, Allocated Windows: %d",
-                                             free_window_count,
-                                             editor_state->debug.allocated_window_count);
-    
-    if (editor_state->debug_delay_frame_count > 0)
-    {
-        platform->SleepThread(editor_state->debug_delay);
-        editor_state->debug_delay_frame_count -= 1;
+        platform->SleepThread(editor->debug_delay);
+        editor->debug_delay_frame_count -= 1;
     }
 }

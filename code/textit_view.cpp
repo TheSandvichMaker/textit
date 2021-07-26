@@ -37,7 +37,7 @@ UndoOnce(View *view)
         Range remove_range = MakeRangeStartLength(node->pos, node->forward.size);
         BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->backward);
 
-        result = MakeRange(node->pos, Max(node->pos, node->pos + node->backward.size - 1));
+        result = MakeRange(node->pos, Max(node->pos, node->pos + node->backward.size));
 
         if (node->parent->ordinal == node->ordinal)
         {
@@ -73,7 +73,7 @@ RedoOnce(View *view)
         Range remove_range = MakeRangeStartLength(node->pos, node->backward.size);
         BufferReplaceRangeNoUndoHistory(buffer, remove_range, node->forward);
 
-        result = MakeRange(node->pos, Max(node->pos, node->pos + node->forward.size - 1));
+        result = MakeRange(node->pos, Max(node->pos, node->pos + node->forward.size));
 
         UndoNode *next_node = NextChild(node);
         if (next_node &&

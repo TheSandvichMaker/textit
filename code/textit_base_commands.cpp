@@ -1,7 +1,6 @@
 COMMAND_PROC(ForceTick,
              "Force the editor to tick"_str)
 {
-    UNUSED_VARIABLE(editor);
     platform->PushTickEvent();
 }
 
@@ -24,25 +23,21 @@ COMMAND_PROC(EnterCommandLineMode)
 
 COMMAND_PROC(Exit, "Exit the editor"_str)
 {
-    UNUSED_VARIABLE(editor);
     platform->exit_requested = true;
 }
 
 COMMAND_PROC(qa, "Exit the editor"_str)
 {
-    UNUSED_VARIABLE(editor);
     platform->exit_requested = true;
 }
 
 COMMAND_PROC(ToggleVisualizeNewlines, "Toggle the visualization of newlines"_str)
 {
-    UNUSED_VARIABLE(editor);
     core_config->visualize_newlines = !core_config->visualize_newlines;
 }
 
 COMMAND_PROC(ToggleVisualizeWhitespace, "Toggle the visualization of whitespaces"_str)
 {
-    UNUSED_VARIABLE(editor);
     core_config->visualize_whitespace = !core_config->visualize_whitespace;
 }
 
@@ -50,24 +45,24 @@ COMMAND_PROC(EnterTextMode,
              "Enter Text Input Mode"_str)
 {
     editor->next_edit_mode = EditMode_Text;
-    BeginUndoBatch(CurrentBuffer(editor));
+    BeginUndoBatch(GetActiveBuffer());
 }
 
 COMMAND_PROC(Append)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Cursor *cursor = GetCursor(view);
     cursor->pos += 1;
-    CMD_EnterTextMode(editor);
+    CMD_EnterTextMode();
 }
 
 COMMAND_PROC(AppendAtEnd)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
     cursor->pos = FindLineEnd(buffer, cursor->pos).inner + 1;
-    CMD_EnterTextMode(editor);
+    CMD_EnterTextMode();
 }
 
 COMMAND_PROC(EnterCommandMode,
@@ -75,23 +70,22 @@ COMMAND_PROC(EnterCommandMode,
 {
     editor->next_edit_mode = EditMode_Command;
 
-    Buffer *buffer = CurrentBuffer(editor);
+    Buffer *buffer = GetActiveBuffer();
     EndUndoBatch(buffer);
 
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Cursor *cursor = GetCursor(view);
 
     BufferLocation loc = CalculateRelativeMove(buffer, cursor, MakeV2i(-1, 0));
     cursor->pos = loc.pos;
-    cursor->inner_selection = MakeRange(cursor->pos);
-    cursor->outer_selection = cursor->inner_selection;
+    cursor->selection = MakeSelection(cursor->pos);
     cursor->sticky_col = loc.col;
 }
 
 COMMAND_PROC(CenterView,
              "Center the view around the cursor"_str)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
@@ -102,20 +96,20 @@ COMMAND_PROC(CenterView,
 
 COMMAND_PROC(JumpToBufferStart, "Jump to the start of the buffer"_str)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     SetCursor(view, 0);
 }
 
 COMMAND_PROC(JumpToBufferEnd, "Jump to the end of the buffer"_str)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     SetCursor(view, buffer->count - 1);
 }
 
 MOVEMENT_PROC(MoveLeft)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -131,7 +125,7 @@ MOVEMENT_PROC(MoveLeft)
 
 MOVEMENT_PROC(MoveRight)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -147,37 +141,45 @@ MOVEMENT_PROC(MoveRight)
 
 MOVEMENT_PROC(MoveLeftIdentifier)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
     int64_t pos = cursor->pos;
-    Range result = ScanWordBackward(buffer, pos);
+    Selection selection = ScanWordBackward2(buffer, pos);
 
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.end);
+    Move result = {};
+    result.pos = selection.outer.end;
+    result.selection = selection;
+
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.pos);
     cursor->sticky_col = loc.col;
 
-    return MakeMove(result);
+    return result;
 }
 
 MOVEMENT_PROC(MoveRightIdentifier)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
     int64_t pos = cursor->pos;
-    Range result = ScanWordForward(buffer, pos);
+    Selection selection = ScanWordForward2(buffer, pos);
 
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.end);
+    Move result = {};
+    result.pos = selection.outer.end;
+    result.selection = selection;
+
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.pos);
     cursor->sticky_col = loc.col;
 
-    return MakeMove(result);
+    return result;
 }
 
 MOVEMENT_PROC(MoveLineStart)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -190,7 +192,7 @@ MOVEMENT_PROC(MoveLineStart)
 
 MOVEMENT_PROC(MoveLineEnd)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -200,10 +202,10 @@ MOVEMENT_PROC(MoveLineEnd)
     auto [inner, outer] = FindLineEnd(buffer, pos);
 
     Move move = {};
-    move.inner_selection.start = pos;
-    move.outer_selection.start = pos;
-    move.inner_selection.end   = inner;
-    move.outer_selection.end   = outer;
+    move.selection.inner.start = pos;
+    move.selection.outer.start = pos;
+    move.selection.inner.end   = inner;
+    move.selection.outer.end   = outer;
     move.pos                   = inner;
 
     return move;
@@ -211,7 +213,7 @@ MOVEMENT_PROC(MoveLineEnd)
 
 MOVEMENT_PROC(EncloseLine)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -222,7 +224,7 @@ MOVEMENT_PROC(EncloseLine)
 
 MOVEMENT_PROC(EncloseNextScope)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -267,7 +269,7 @@ MOVEMENT_PROC(EncloseNextScope)
                 depth -= 1;
                 if (depth <= 0)
                 {
-                    result.end = (seek_forward ? (t->pos + t->length - 1) : t->pos);
+                    result.end = (seek_forward ? t->pos + t->length : t->pos);
                     break;
                 }
             }
@@ -288,8 +290,7 @@ SelectSurroundingNest(View *view,
     Move result = {};
     result.flags     = MoveFlag_NoAutoRepeat;
     result.pos       = cursor->pos;
-    result.inner_selection = cursor->inner_selection;
-    result.outer_selection = cursor->outer_selection;
+    result.selection = cursor->selection;
     
     int64_t pos = cursor->pos;
 
@@ -339,34 +340,34 @@ SelectSurroundingNest(View *view,
                     int64_t end_pos       = t->pos + t->length;
                     int64_t inner_end_pos = t->pos;
 
-                    result.inner_selection.start = inner_start_pos;
-                    result.inner_selection.end   = inner_end_pos;
-                    result.outer_selection.start = start_pos;
-                    result.outer_selection.end   = end_pos;
+                    result.selection.inner.start = inner_start_pos;
+                    result.selection.inner.end   = inner_end_pos;
+                    result.selection.outer.start = start_pos;
+                    result.selection.outer.end   = end_pos;
 
                     if (line_selection)
                     {
-                        int64_t start_line = GetLineNumber(buffer, result.outer_selection.start);
-                        int64_t end_line   = GetLineNumber(buffer, result.outer_selection.end);
+                        int64_t start_line = GetLineNumber(buffer, result.selection.outer.start);
+                        int64_t end_line   = GetLineNumber(buffer, result.selection.outer.end);
 
                         int64_t inner_start_line = start_line + 1;
                         int64_t inner_end_line   = Max(start_line, end_line - 1);
 
                         if (start_line != end_line)
                         {
-                            result.outer_selection.start = GetLineRange(buffer, start_line).start;
-                            result.outer_selection.end   = GetLineRange(buffer, end_line).end;
+                            result.selection.outer.start = GetLineRange(buffer, start_line).start;
+                            result.selection.outer.end   = GetLineRange(buffer, end_line).end;
                         }
 
                         if (inner_start_line != inner_end_line)
                         {
-                            result.inner_selection.start = GetInnerLineRange(buffer, inner_start_line).start;
-                            result.inner_selection.end   = GetInnerLineRange(buffer, inner_end_line).end;
+                            result.selection.inner.start = GetInnerLineRange(buffer, inner_start_line).start;
+                            result.selection.inner.end   = GetInnerLineRange(buffer, inner_end_line).end;
                         }
 
                     }
 
-                    result.pos = result.outer_selection.start;
+                    result.pos = result.selection.outer.start;
 
                     break;
                 }
@@ -379,19 +380,109 @@ SelectSurroundingNest(View *view,
 
 MOVEMENT_PROC(EncloseSurroundingScope)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     return SelectSurroundingNest(view, Token_LeftScope, Token_RightScope, true);
 }
 
 MOVEMENT_PROC(EncloseSurroundingParen)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     return SelectSurroundingNest(view, Token_LeftParen, Token_RightParen, false);
+}
+
+MOVEMENT_PROC(EncloseParameter)
+{
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    Move result = {};
+    result.flags           = MoveFlag_NoAutoRepeat;
+    result.pos             = cursor->pos;
+    result.selection.inner = cursor->selection.inner;
+    result.selection.outer = cursor->selection.outer;
+    
+    int64_t pos = cursor->pos;
+
+    int64_t start_pos       = -1;
+    int64_t inner_start_pos = -1;
+
+    NestHelper nests = {};
+    TokenIterator it = SeekTokenIterator(buffer, pos);
+
+    Token *prev_t = it.token;
+    while (IsValid(&it))
+    {
+        Token *t = Prev(&it);
+        if (!t) break;
+
+        if (IsInNest(&nests, t->kind, Direction_Backward))
+        {
+            continue;
+        }
+
+        if (t->kind == Token_LeftParen ||
+            t->kind == ',')
+        {
+            inner_start_pos = (prev_t ? prev_t->pos : t->pos + t->length);
+            if (t->kind == ',')
+            {
+                start_pos = t->pos;
+            }
+            else
+            {
+                start_pos = inner_start_pos;
+            }
+            Next(&it);
+            break;
+        }
+
+        prev_t = t;
+    }
+
+    if (start_pos >= 0)
+    {
+        while (IsValid(&it))
+        {
+            Token *t = Next(&it);
+            if (!t) break;
+
+            if (IsInNest(&nests, t->kind, Direction_Forward))
+            {
+                continue;
+            }
+
+            if (t->kind == Token_RightParen ||
+                t->kind == ',')
+            {
+                int64_t inner_end_pos = t->pos;
+                int64_t end_pos = inner_end_pos;
+
+                if (t->kind == ',')
+                {
+                    start_pos = inner_start_pos;
+                    t = Next(&it);
+                    end_pos = t->pos;
+                }
+
+                result.selection.inner.start = inner_start_pos;
+                result.selection.inner.end   = inner_end_pos;
+                result.selection.outer.start = start_pos;
+                result.selection.outer.end   = end_pos;
+
+                result.pos = result.selection.outer.end;
+
+                break;
+            }
+        }
+    }
+
+    return result;
 }
 
 MOVEMENT_PROC(MoveDown)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -399,13 +490,13 @@ MOVEMENT_PROC(MoveDown)
 
     Move move = {};
     move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, 1)).pos;
-    GetLineRanges(buffer, line, &move.inner_selection, &move.outer_selection);
+    GetLineRanges(buffer, line, &move.selection.inner, &move.selection.outer);
     return move;
 }
 
 MOVEMENT_PROC(MoveUp)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -413,27 +504,27 @@ MOVEMENT_PROC(MoveUp)
 
     Move move = {};
     move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, -1)).pos;
-    GetLineRanges(buffer, line, &move.inner_selection, &move.outer_selection);
+    GetLineRanges(buffer, line, &move.selection.inner, &move.selection.outer);
     return move;
 }
 
 COMMAND_PROC(PageUp)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
     MoveCursorRelative(view, MakeV2i(0, -Max(0, viewport_height - 4)));
 }
 
 COMMAND_PROC(PageDown)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
     MoveCursorRelative(view, MakeV2i(0, Max(0, viewport_height - 4)));
 }
 
 COMMAND_PROC(BackspaceChar)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -471,7 +562,7 @@ COMMAND_PROC(BackspaceChar)
 
 COMMAND_PROC(BackspaceWord)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -484,7 +575,7 @@ COMMAND_PROC(BackspaceWord)
 
 COMMAND_PROC(DeleteChar)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -501,7 +592,7 @@ COMMAND_PROC(DeleteChar)
 
 COMMAND_PROC(DeleteWord)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -515,7 +606,7 @@ COMMAND_PROC(DeleteWord)
 
 COMMAND_PROC(UndoOnce)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
 
     Range result = UndoOnce(view);
     if (result.start >= 0)
@@ -526,7 +617,7 @@ COMMAND_PROC(UndoOnce)
 
 COMMAND_PROC(RedoOnce)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
 
     Range result = RedoOnce(view);
     if (result.start >= 0)
@@ -537,7 +628,7 @@ COMMAND_PROC(RedoOnce)
 
 COMMAND_PROC(SelectNextUndoBranch)
 {
-    SelectNextUndoBranch(CurrentBuffer(editor));
+    SelectNextUndoBranch(GetActiveBuffer());
 }
 
 COMMAND_PROC(SplitWindowVertical, "Split the window along the vertical axis"_str)
@@ -668,58 +759,79 @@ COMMAND_PROC(FocusWindowUp, "Focus the next window above"_str)
 
 CHANGE_PROC(DeleteSelection)
 {
-    UNUSED_VARIABLE(inner_range);
-
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    BufferReplaceRange(buffer, outer_range, ""_str);
+    BufferReplaceRange(buffer, selection.outer, ""_str);
+}
+
+CHANGE_PROC(DeleteInnerSelection)
+{
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    BufferReplaceRange(buffer, selection.inner, ""_str);
 }
 
 CHANGE_PROC(ChangeSelection)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    cursor->pos = inner_range.start;
+    cursor->pos = selection.inner.start;
 
-    Range line_range = GetLineRange(buffer, inner_range);
+    Range line_range = GetLineRange(buffer, selection.inner);
 
-    BeginUndoBatch(CurrentBuffer(editor));
-    CHG_DeleteSelection(editor, outer_range, inner_range);
+    BeginUndoBatch(GetActiveBuffer());
+    BufferReplaceRange(buffer, selection.inner, ""_str);
     if (line_range.start != line_range.end)
     {
         AutoIndentLineAt(buffer, cursor->pos);
     }
-    CMD_EnterTextMode(editor);
+    CMD_EnterTextMode();
+}
+
+CHANGE_PROC(ChangeOuterSelection)
+{
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    cursor->pos = selection.outer.start;
+
+    Range line_range = GetLineRange(buffer, selection.outer);
+
+    BeginUndoBatch(GetActiveBuffer());
+    BufferReplaceRange(buffer, selection.outer, ""_str);
+    if (line_range.start != line_range.end)
+    {
+        AutoIndentLineAt(buffer, cursor->pos);
+    }
+    CMD_EnterTextMode();
 }
 
 CHANGE_PROC(ToUppercase)
 {
-    UNUSED_VARIABLE(outer_range);
-
-    Buffer *buffer = CurrentBuffer(editor);
-    String string = BufferPushRange(platform->GetTempArena(), buffer, inner_range);
+    Buffer *buffer = GetActiveBuffer();
+    String string = BufferPushRange(platform->GetTempArena(), buffer, selection.inner);
     for (size_t i = 0; i < string.size; i += 1)
     {
         string.data[i] = ToUpperAscii(string.data[i]);
     }
-    BufferReplaceRange(buffer, inner_range, string);
+    BufferReplaceRange(buffer, selection.inner, string);
 }
 
 COMMAND_PROC(RepeatLastCommand)
 {
-    UNUSED_VARIABLE(editor);
     // dummy command
 }
 
 COMMAND_PROC(Copy)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    Range range = SanitizeRange(cursor->outer_selection);
+    Range range = SanitizeRange(cursor->selection.outer);
     String string = BufferSubstring(buffer, range);
 
     platform->WriteClipboard(string);
@@ -727,7 +839,7 @@ COMMAND_PROC(Copy)
 
 COMMAND_PROC(PasteBefore)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -740,7 +852,7 @@ COMMAND_PROC(PasteBefore)
 
 COMMAND_PROC(PasteAfter)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
@@ -753,18 +865,16 @@ COMMAND_PROC(PasteAfter)
 
 CHANGE_PROC(PasteReplaceSelection)
 {
-    UNUSED_VARIABLE(inner_range);
-
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
 
     Arena *arena = platform->GetTempArena();
     ScopedMemory temp_memory(arena);
 
-    String replaced_string = BufferPushRange(arena, buffer, outer_range);
+    String replaced_string = BufferPushRange(arena, buffer, selection.outer);
     String string = platform->ReadClipboard(arena);
 
-    int64_t pos = BufferReplaceRange(buffer, outer_range, string);
+    int64_t pos = BufferReplaceRange(buffer, selection.outer, string);
     SetCursor(view, pos);
 
     platform->WriteClipboard(replaced_string);
@@ -772,11 +882,11 @@ CHANGE_PROC(PasteReplaceSelection)
 
 COMMAND_PROC(OpenNewLineBelow)
 {
-    View *view = CurrentView(editor);
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    CMD_EnterTextMode(editor);
+    CMD_EnterTextMode();
 
     String line_end = LineEndString(buffer->line_end);
 
@@ -788,7 +898,7 @@ COMMAND_PROC(OpenNewLineBelow)
 
 TEXT_COMMAND_PROC(WriteText)
 {
-    View   *view   = CurrentView(editor);
+    View   *view   = GetActiveView();
     Buffer *buffer = GetBuffer(view);
 
     uint8_t     buf[256];
@@ -857,36 +967,34 @@ TEXT_COMMAND_PROC(WriteText)
 function void
 OnMouseDown(void)
 {
-    View *view = CurrentView(editor_state);
+    View *view = GetActiveView();
     Cursor *cursor = GetCursor(view);
 
-    if (editor_state->token_at_mouse)
+    if (editor->token_at_mouse)
     {
-        Token *t = editor_state->token_at_mouse;
-        if (cursor->inner_selection.start == t->pos &&
-            cursor->inner_selection.end   == t->pos + t->length)
+        Token *t = editor->token_at_mouse;
+        if (cursor->selection.inner.start == t->pos &&
+            cursor->selection.inner.end   == t->pos + t->length)
         {
-            if (cursor->pos == cursor->inner_selection.start)
+            if (cursor->pos == cursor->selection.inner.start)
             {
-                cursor->pos = cursor->inner_selection.end;
+                cursor->pos = cursor->selection.inner.end;
             }
-            else if (cursor->pos == cursor->inner_selection.end)
+            else if (cursor->pos == cursor->selection.inner.end)
             {
-                cursor->pos = cursor->inner_selection.start;
+                cursor->pos = cursor->selection.inner.start;
             }
         }
         else
         {
             cursor->pos = t->pos;
-            cursor->inner_selection = MakeRangeStartLength(t->pos, t->length);
-            cursor->outer_selection = cursor->inner_selection;
+            cursor->selection = MakeSelection(MakeRangeStartLength(t->pos, t->length));
         }
     }
     else
     {
-        cursor->pos = editor_state->pos_at_mouse;
-        cursor->inner_selection = MakeRange(cursor->pos);
-        cursor->outer_selection = cursor->inner_selection;
+        cursor->pos = editor->pos_at_mouse;
+        cursor->selection = MakeSelection(MakeRange(cursor->pos));
     }
 }
 

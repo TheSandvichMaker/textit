@@ -556,7 +556,7 @@ RenderCommandsToBitmap(Bitmap *target)
     // int tile_w = (target->w + tile_count_x - 1) / tile_count_x;
     // int tile_h = (target->h + tile_count_y - 1) / tile_count_y;
 
-    V2i glyph_dim = GlyphDim(&editor_state->font);
+    V2i glyph_dim = GlyphDim(&editor->font);
 
     for (int tile_y = 0; tile_y < tile_count_y; ++tile_y)
     for (int tile_x = 0; tile_x < tile_count_x; ++tile_x)
@@ -630,7 +630,7 @@ PrintRenderCommandsUnderCursor(void)
             } break;
         }
 
-        if (IsInRect(surface_area, editor_state->screen_mouse_p))
+        if (IsInRect(surface_area, editor->screen_mouse_p))
         {
             platform->DebugPrint("type: %s, index: %d\n", type, index);
         }

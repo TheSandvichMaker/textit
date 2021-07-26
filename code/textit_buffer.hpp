@@ -43,12 +43,6 @@ struct UndoState
     UndoNode *at;
 };
 
-struct ObjectSelection
-{
-    Range inner;
-    Range outer;
-};
-
 struct BufferLocation
 {
     int64_t pos;

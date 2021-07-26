@@ -1,6 +1,12 @@
 #ifndef TEXTIT_SHARED_HPP
 #define TEXTIT_SHARED_HPP
 
+enum Direction
+{
+    Direction_Forward,
+    Direction_Backward,
+};
+
 static constexpr inline bool
 IsPow2(size_t size)
 {

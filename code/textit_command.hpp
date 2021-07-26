@@ -5,6 +5,39 @@
 
 struct EditorState;
 
+struct Selection
+{
+    Range inner;
+    Range outer;
+};
+
+function Selection
+MakeSelection(int64_t pos)
+{
+    Selection result;
+    result.inner.start = pos;
+    result.outer.start = pos;
+    result.inner.end   = pos + 1;
+    result.outer.end   = pos + 1;
+    return result;
+}
+
+function Selection
+MakeSelection(Range inner, Range outer = {})
+{
+    if (outer.start == 0 &&
+        outer.end   == 0)
+    {
+        outer = inner;
+    }
+
+    Selection result;
+    result.inner = inner;
+    result.outer = outer;
+
+    return result;
+}
+
 enum CommandKind
 {
     Command_Basic,
@@ -20,9 +53,8 @@ enum_flags(int, MoveFlags)
 
 struct Move
 {
-    Range inner_selection;
-    Range outer_selection;
     int64_t pos;
+    Selection selection;
     MoveFlags flags;
 };
 
@@ -30,8 +62,8 @@ function Move
 MakeMove(Range selection, int64_t pos = -1)
 {
     Move result = {};
-    result.inner_selection = selection;
-    result.outer_selection = selection;
+    result.selection.inner = selection;
+    result.selection.outer = selection;
     result.pos             = pos;
     if (pos < 0)
     {
@@ -46,29 +78,29 @@ MakeMove(int64_t pos)
     return MakeMove(MakeRange(pos), pos);
 }
 
-typedef void (*CommandProc)(EditorState *editor);
+typedef void (*CommandProc)(void);
 #define COMMAND_PROC(name, ...)                                                                                                    \
-    static void Paste(CMD_, name)(EditorState *editor);                                                                            \
+    static void Paste(CMD_, name)(void);                                                                                           \
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), (void *)&Paste(CMD_, name), ##__VA_ARGS__); \
-    static void Paste(CMD_, name)(EditorState *editor)
+    static void Paste(CMD_, name)(void)
 
-typedef void (*TextCommandProc)(EditorState *editor, String text);
+typedef void (*TextCommandProc)(String text);
 #define TEXT_COMMAND_PROC(name)                                                                                                    \
-    static void Paste(CMD_, name)(EditorState *editor, String text);                                                               \
+    static void Paste(CMD_, name)(String text);                                                                                    \
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), (void *)&Paste(CMD_, name));                 \
-    static void Paste(CMD_, name)(EditorState *editor, String text)
+    static void Paste(CMD_, name)(String text)
 
-typedef Move (*MovementProc)(EditorState *editor);
+typedef Move (*MovementProc)(void);
 #define MOVEMENT_PROC(name)                                                                                                        \
-    static Move Paste(MOV_, name)(EditorState *editor);                                                                            \
+    static Move Paste(MOV_, name)(void);                                                                                           \
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), (void *)&Paste(MOV_, name));             \
-    static Move Paste(MOV_, name)(EditorState *editor)
+    static Move Paste(MOV_, name)(void)
 
-typedef void (*ChangeProc)(EditorState *editor, Range inner_range, Range outer_range);
+typedef void (*ChangeProc)(Selection selection);
 #define CHANGE_PROC(name)                                                                                                          \
-    static void Paste(CHG_, name)(EditorState *editor, Range inner_range, Range outer_range);                                      \
+    static void Paste(CHG_, name)(Selection selection);                                                                            \
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), (void *)&Paste(CHG_, name));               \
-    static void Paste(CHG_, name)(EditorState *editor, Range inner_range, Range outer_range)
+    static void Paste(CHG_, name)(Selection selection)
 
 enum_flags(int, CommandFlags)
 {
@@ -92,7 +124,7 @@ struct Command
 };
 
 function void
-CMD_Stub(EditorState *)
+CMD_Stub(void)
 {
     platform->DebugPrint("Someone called the stub command.\n");
 }
