@@ -3,19 +3,18 @@
 
 struct ThemeColor
 {
-    String name;
+    StringID key;
     Color color;
 };
 
 #define MAX_THEME_COLORS 256
 struct Theme
 {
-    size_t color_count;
-    ThemeColor colors[MAX_THEME_COLORS];
+    ThemeColor map[MAX_THEME_COLORS];
 };
 
-static inline void LoadDefaultTheme();
-static inline void SetThemeColor(String name, Color color);
-static inline Color GetThemeColor(String name);
+function void LoadDefaultTheme();
+function void SetThemeColor(StringID key, Color color);
+function Color GetThemeColor(StringID key);
 
 #endif /* TEXTIT_THEME_HPP */

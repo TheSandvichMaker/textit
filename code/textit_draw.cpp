@@ -48,20 +48,20 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     bool show_line_numbers               = core_config->show_line_numbers;
     int  indent_width                    = core_config->indent_width;
 
-    Color text_comment                 = GetThemeColor("text_comment"_str);
-    Color text_preprocessor            = GetThemeColor("text_preprocessor"_str);
-    Color text_foreground              = GetThemeColor("text_foreground"_str);
-    Color text_foreground_dim          = GetThemeColor("text_foreground_dim"_str);
-    Color text_foreground_dimmer       = GetThemeColor("text_foreground_dimmer"_str);
-    Color text_foreground_dimmest      = GetThemeColor("text_foreground_dimmest"_str);
-    Color text_background              = GetThemeColor("text_background"_str);
-    Color text_background_unreachable  = GetThemeColor("text_background_unreachable"_str);
-    Color text_background_highlighted  = GetThemeColor("text_background_highlighted"_str);
-    Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_str);
-    Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_str);
-    Color inner_selection_background   = GetThemeColor("inner_selection_background"_str);
-    Color outer_selection_background   = GetThemeColor("outer_selection_background"_str);
-    Color line_highlight               = GetThemeColor("line_highlight"_str);
+    Color text_comment                 = GetThemeColor("text_comment"_id);
+    Color text_preprocessor            = GetThemeColor("text_preprocessor"_id);
+    Color text_foreground              = GetThemeColor("text_foreground"_id);
+    Color text_foreground_dim          = GetThemeColor("text_foreground_dim"_id);
+    Color text_foreground_dimmer       = GetThemeColor("text_foreground_dimmer"_id);
+    Color text_foreground_dimmest      = GetThemeColor("text_foreground_dimmest"_id);
+    Color text_background              = GetThemeColor("text_background"_id);
+    Color text_background_unreachable  = GetThemeColor("text_background_unreachable"_id);
+    Color text_background_highlighted  = GetThemeColor("text_background_highlighted"_id);
+    Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_id);
+    Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_id);
+    Color inner_selection_background   = GetThemeColor("inner_selection_background"_id);
+    Color outer_selection_background   = GetThemeColor("outer_selection_background"_id);
+    Color line_highlight               = GetThemeColor("line_highlight"_id);
 
     Rect2i inner_bounds = bounds;
     inner_bounds.min += MakeV2i(2, 1);
@@ -120,6 +120,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         }
 
         actual_line_height += 1;
+
+        bool empty_line = data->newline_pos == data->range.start;
 
         Color base_background = text_background;
 
@@ -196,7 +198,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                         TokenKind kind = (TokenKind)PointerToInt(StringMapFind(buffer->language->idents, string));
                         if (kind)
                         {
-                            foreground = GetThemeColor(TokenThemeName(kind));
+                            foreground = GetThemeColor(TokenThemeIndex(kind));
                             token->kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
                                                 // but maybe it should be moved outside of the actual drawing function
                         }
@@ -204,7 +206,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 }
                 else
                 {
-                    foreground = GetThemeColor(TokenThemeName(token->kind));
+                    foreground = GetThemeColor(TokenThemeIndex(token->kind));
                 }
 
                 if (pos >= token->pos &&
@@ -217,6 +219,10 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             }
 
             String string = {};
+            if (empty_line)
+            {
+                string = " "_str;
+            }
 
             int64_t advance          = 1;
             bool right_align         = false;
@@ -295,7 +301,20 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                      cursor;
                      cursor = cursor->next)
                 {
-                    if (draw_selection)
+                    if (pos == cursor->pos)
+                    {
+                        if (string.size == 0)
+                        {
+                            background = text_foreground;
+                            string = " "_str;
+                        }
+                        else
+                        {
+                            Swap(foreground, background);
+                        }
+                        break;
+                    }
+                    else if (draw_selection)
                     {
                         Range inner = SanitizeRange(cursor->selection.inner);
                         Range outer = SanitizeRange(cursor->selection.outer);
@@ -316,16 +335,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                             foreground.g = 255 - outer_selection_background.g;
                             foreground.b = 255 - outer_selection_background.b;
                         }
-                    }
-
-                    if (pos == cursor->pos)
-                    {
-                        Swap(foreground, background);
-                        if (string.size == 0)
-                        {
-                            string = " "_str;
-                        }
-                        break;
                     }
                 }
             }
@@ -405,19 +414,19 @@ DrawView(View *view, bool is_active_window)
     Buffer *buffer = GetBuffer(view);
     Rect2i bounds = view->viewport;
 
-    Color text_foreground = GetThemeColor("text_foreground"_str);
-    Color text_background = GetThemeColor("text_background"_str);
-    Color filebar_text_foreground = GetThemeColor("filebar_text_foreground"_str);
+    Color text_foreground         = GetThemeColor("text_foreground"_id);
+    Color text_background         = GetThemeColor("text_background"_id);
+    Color filebar_text_foreground = GetThemeColor("filebar_text_foreground"_id);
 
-    String filebar_text_background_str = "filebar_text_inactive"_str;
+    uint64_t filebar_text_background_id = "filebar_text_inactive"_id;
     if (is_active_window)
     {
-        filebar_text_background_str = "filebar_text_background"_str;
+        filebar_text_background_id = "filebar_text_background"_id;
         switch (editor->edit_mode)
         {
             case EditMode_Text:
             {
-                filebar_text_background_str = "filebar_text_background_text_mode"_str;
+                filebar_text_background_id = "filebar_text_background_text_mode"_id;
             } break;
 
             default:
@@ -427,7 +436,7 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
-    Color filebar_text_background = GetThemeColor(filebar_text_background_str);
+    Color filebar_text_background = GetThemeColor(filebar_text_background_id);
 
     Cursor *cursor = GetCursor(view);
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
@@ -469,8 +478,8 @@ DrawView(View *view, bool is_active_window)
 function void
 DrawCommandLineInput()
 {
-    Color text_foreground = GetThemeColor("text_foreground"_str);
-    Color text_background = GetThemeColor("text_background"_str);
+    Color text_foreground = GetThemeColor("text_foreground"_id);
+    Color text_background = GetThemeColor("text_background"_id);
 
     V2i p = MakeV2i(2, render_state->viewport.max.y - 1);
     if (editor->command_line_prediction_count > 0)

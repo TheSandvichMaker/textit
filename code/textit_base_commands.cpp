@@ -41,6 +41,11 @@ COMMAND_PROC(ToggleVisualizeWhitespace, "Toggle the visualization of whitespaces
     core_config->visualize_whitespace = !core_config->visualize_whitespace;
 }
 
+COMMAND_PROC(ToggleLineNumbers, "Toggle the line number display"_str)
+{
+    core_config->show_line_numbers = !core_config->show_line_numbers;
+}
+
 COMMAND_PROC(EnterTextMode,
              "Enter Text Input Mode"_str)
 {

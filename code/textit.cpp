@@ -387,8 +387,8 @@ DestroyWindowInternal(Window *window)
             Window *first_child = parent->first_child;
 
             first_child->parent = parent->parent;
-            parent->split = first_child->split;
-            parent->view  = first_child->view;
+            parent->split       = first_child->split;
+            parent->view        = first_child->view;
             parent->first_child = parent->first_child->first_child;
             parent->last_child  = parent->last_child->last_child;
 
@@ -605,8 +605,6 @@ StringMapInsert(StringMap *map, String string, void *data)
     node->data = data;
 }
 
-// Ryan's text controls example: https://hatebin.com/ovcwtpsfmj
-
 function void
 SetDebugDelay(int milliseconds, int frame_count)
 {
@@ -643,7 +641,7 @@ LoadFontFromDisk(Arena *arena, String filename, int glyph_w, int glyph_h)
 {
     Font result = {};
 
-    String file = platform->ReadFile(arena, filename);
+    String file = platform->ReadFile(platform->GetTempArena(), filename);
     if (!file.size)
     {
         platform->ReportError(PlatformError_Nonfatal,
@@ -651,7 +649,7 @@ LoadFontFromDisk(Arena *arena, String filename, int glyph_w, int glyph_h)
         return result;
     }
 
-    Bitmap bitmap = ParseBitmap(file);
+    Bitmap bitmap = ParseBitmap(arena, file);
     if (!bitmap.data)
     {
         platform->ReportError(PlatformError_Nonfatal,

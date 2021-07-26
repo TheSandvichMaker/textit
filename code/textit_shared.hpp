@@ -25,6 +25,14 @@ MakeColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
     return color;
 }
 
+TEXTIT_INLINE Color
+MakeColor(uint32_t argb)
+{
+    Color color;
+    color.u32 = argb;
+    return color;
+}
+
 #define COLOR_BLACK MakeColor(0, 0, 0)
 #define COLOR_WHITE MakeColor(255, 255, 255)
 
@@ -267,6 +275,7 @@ SafeTruncateI64(int64_t value)
 function uint32_t
 Permute(uint32_t index, uint32_t len, uint32_t seed)
 {
+    // Permute an array without duplicating storage
     // SOURCE: https://andrew-helmer.github.io/permute/
 
     uint32_t mask = len - 1;
@@ -295,6 +304,49 @@ Permute(uint32_t index, uint32_t len, uint32_t seed)
 
     uint32_t result = (index + seed) % len;
     return result;
+}
+
+constexpr function uint32_t
+Fnv1a32(size_t size, const void *data_init)
+{
+    const uint32_t fnv_offset_basis = 0x811c9dc5;
+    const uint32_t fnv_prime        = 0x01000193;
+
+    uint32_t result = fnv_offset_basis;
+
+    const char *data = (const char *)data_init;
+    for (size_t i = 0; i < size; i += 1)
+    {
+        result *= fnv_prime;
+        result ^= data[i];
+    }
+
+    return result;
+}
+
+constexpr function uint64_t
+Fnv1a64(size_t size, const void *data_init)
+{
+    const uint64_t fnv_offset_basis = 0xcbf29ce484222325ull;
+    const uint64_t fnv_prime        = 0x00000100000001B3ull;
+
+    uint64_t result = fnv_offset_basis;
+
+    const char *data = (const char *)data_init;
+    for (size_t i = 0; i < size; i += 1)
+    {
+        result *= fnv_prime;
+        result ^= data[i];
+    }
+
+    return result;
+}
+
+typedef uint64_t StringID;
+constexpr uint64_t
+operator ""_id(const char *data, size_t size)
+{
+    return Fnv1a64(size, data);
 }
 
 #endif /* TEXTIT_SHARED_HPP */
