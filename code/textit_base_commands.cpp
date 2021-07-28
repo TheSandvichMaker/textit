@@ -1,3 +1,118 @@
+COMMAND_PROC(ReportMetrics,
+             "Report some relevant metrics for development"_str)
+{
+    Buffer *buffer = GetActiveBuffer();
+    platform->DebugPrint("Metrics for buffer %.*s:\n", StringExpand(buffer->name));
+
+    platform->DebugPrint("\tBuffer count: %lld, line count: %u, token count: %u\n",
+                         buffer->count, buffer->line_data.count, buffer->tokens.count);
+
+    size_t text_bytes  = (size_t)buffer->count;
+    size_t line_bytes  = sizeof(LineData)*(size_t)buffer->line_data.count; 
+    size_t token_bytes = sizeof(Token)*(size_t)buffer->tokens.count;       
+    size_t arena_bytes = buffer->arena.used;
+
+    platform->DebugPrint("\tText memory: %s, line memory: %s, token memory: %s, buffer arena: %s, total: %s\n",
+                         FormatHumanReadableBytes(text_bytes).data,
+                         FormatHumanReadableBytes(line_bytes).data,
+                         FormatHumanReadableBytes(token_bytes).data,
+                         FormatHumanReadableBytes(arena_bytes).data,
+                         FormatHumanReadableBytes(text_bytes + line_bytes + token_bytes + arena_bytes).data);
+
+    platform->DebugPrint("\tLine memory ratio: %f, token memory ratio: %f\n",
+                         (double)line_bytes / (double)text_bytes,
+                         (double)token_bytes / (double)text_bytes);
+}
+
+COMMAND_PROC(TestLineSearches,
+             "Test optimized pos -> line functions against reference implementation"_str)
+{
+    Buffer *buffer = GetActiveBuffer();
+
+    RandomSeries entropy = MakeRandomSeries(0xDEADBEEF);
+
+    size_t run_count = 1000;
+    for (size_t i = 0; i < run_count; i += 1)
+    {
+        int64_t pos = (int64_t)RandomChoice(&entropy, (uint32_t)buffer->count);
+        BufferLocation reference_loc = CalculateBufferLocationFromPosLinearSearch(buffer, pos);
+        BufferLocation bs_loc        = CalculateBufferLocationFromPos(buffer, pos);
+        BufferLocation o1_loc        = CalculateBufferLocationFromPosO1Search(buffer, pos);
+        Assert(reference_loc.line == bs_loc.line);
+        Assert(reference_loc.line == o1_loc.line);
+    }
+    platform->DebugPrint("Success\n");
+}
+
+COMMAND_PROC(BenchmarkPosToLine,
+             "Run a benchmark for the pos -> line function"_str)
+{
+    Buffer *buffer = GetActiveBuffer();
+
+    int64_t orig_line_count = buffer->line_data.count;
+    int64_t orig_buff_count = buffer->count;
+
+    static volatile int64_t dont_optimize_me;
+
+    RandomSeries entropy = MakeRandomSeries(0xDEADBEEF);
+
+    int64_t divisor = 128;
+    while (divisor)
+    {
+        int64_t test_line_count = orig_line_count / divisor;
+        int64_t test_buff_count = buffer->line_data[test_line_count - 1].range.end;
+
+        buffer->line_data.count = (unsigned)test_line_count;
+        buffer->count           = test_buff_count;
+
+        platform->DebugPrint("Running pos to line benchmark, buffer size: %lld, line count: %lld\n",
+                             buffer->count, buffer->line_data.count);
+
+        {
+            unsigned int dummy;
+            uint64_t clocks = 0;
+
+            size_t run_count = 32000;
+            for (size_t i = 0; i < run_count; i += 1)
+            {
+                uint64_t start = __rdtscp(&dummy);
+                int64_t pos = (int64_t)RandomChoice(&entropy, (uint32_t)buffer->count);
+                BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos);
+                dont_optimize_me = loc.line;
+                uint64_t end = __rdtscp(&dummy);
+                clocks += end - start;
+            }
+
+            platform->DebugPrint("\tBinary search ran %zu tests in %f megacycles, %llu cycles per test\n",
+                                 run_count, (double)clocks / 1000000.0, clocks / run_count);
+        }
+
+        {
+            unsigned int dummy;
+            uint64_t clocks = 0;
+
+            size_t run_count = 32000;
+            for (size_t i = 0; i < run_count; i += 1)
+            {
+                uint64_t start = __rdtscp(&dummy);
+                int64_t pos = (int64_t)RandomChoice(&entropy, (uint32_t)buffer->count);
+                BufferLocation loc = CalculateBufferLocationFromPosO1Search(buffer, pos);
+                dont_optimize_me = loc.line;
+                uint64_t end = __rdtscp(&dummy);
+                clocks += end - start;
+            }
+
+            platform->DebugPrint("\tO(1) search ran %zu tests in %f megacycles, %llu cycles per test\n\n",
+                                 run_count, (double)clocks / 1000000.0, clocks / run_count);
+        }
+
+        divisor >>= 1;
+    }
+
+    buffer->line_data.count = (unsigned)orig_line_count;
+    buffer->count           = orig_buff_count;
+}
+
 COMMAND_PROC(ForceTick,
              "Force the editor to tick"_str)
 {

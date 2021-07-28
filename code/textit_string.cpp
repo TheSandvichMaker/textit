@@ -341,6 +341,36 @@ PushTempStringF(const char *fmt, ...)
     return result;
 }
 
+function String
+FormatHumanReadableBytes(size_t bytes)
+{
+    size_t log = 0;
+    for (size_t x = bytes / 1024; x > 0; x /= 1024) log += 1;
+
+    String string = {};
+    if (log == 0)
+    {
+        string = PushTempStringF("%zuB", bytes);
+    }
+    else if (log == 1)
+    {
+        string = PushTempStringF("%zuKiB", bytes / 1024);
+    }
+    else if (log == 2)
+    {
+        string = PushTempStringF("%zuMiB", bytes / 1024 / 1024);
+    }
+    else if (log == 3)
+    {
+        string = PushTempStringF("%zuGiB", bytes / 1024 / 1024 / 1024);
+    }
+    else if (log >= 4)
+    {
+        string = PushTempStringF("%zuTiB", bytes / 1024 / 1024 / 1024 / 1024);
+    }
+    return string;
+}
+
 function bool
 IsEmpty(StringList *list)
 {

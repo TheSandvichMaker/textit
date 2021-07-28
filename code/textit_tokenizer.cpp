@@ -349,7 +349,7 @@ parse_operator:
         uint8_t *end = tok->at;
 
         t.pos = (int64_t)(start - buffer->text);
-        t.length = (int64_t)(end - start);
+        t.length = (int32_t)(end - start);
 
 #if 0
         String string = MakeString((size_t)(end - start), start);

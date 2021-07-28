@@ -228,11 +228,10 @@ struct EditorState
     Command *last_change;
     bool clutch;
 
-    int debug_delay;
-    int debug_delay_frame_count;
-
     struct
     {
+        int delay;
+        int delay_frame_count;
         int allocated_window_count;
     } debug;
 

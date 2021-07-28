@@ -96,7 +96,7 @@ struct Win32State
     volatile uint32_t event_write_index;
     uint32_t working_write_index;
     PlatformEvent null_event;
-    PlatformEvent events[64];
+    PlatformEvent events[4096];
 };
 
 #endif /* WIN32_TEXTIT_HPP */

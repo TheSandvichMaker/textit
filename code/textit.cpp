@@ -188,8 +188,11 @@ DestroyBuffer(BufferID id)
         DestroyCursor(view_id, id);
     }
 
-    Release(&buffer->arena);
     editor->buffers[id.index] = nullptr;
+
+    buffer->line_data.Release();
+    buffer->tokens.Release();
+    Release(&buffer->arena);
 }
 
 function View *
@@ -608,8 +611,8 @@ StringMapInsert(StringMap *map, String string, void *data)
 function void
 SetDebugDelay(int milliseconds, int frame_count)
 {
-    editor->debug_delay = milliseconds;
-    editor->debug_delay_frame_count = frame_count;
+    editor->debug.delay = milliseconds;
+    editor->debug.delay_frame_count = frame_count;
 }
 
 static Font
@@ -941,7 +944,7 @@ AppUpdateAndRender(Platform *platform_)
 
         editor->null_view = OpenNewView(BufferID::Null());
 
-        Buffer *scratch_buffer = OpenBufferFromFile("test_file.txt"_str);
+        Buffer *scratch_buffer = OpenBufferFromFile("test_file_big.txt"_str);
         View *scratch_view = OpenNewView(scratch_buffer->id);
 
         editor->root_window.view = scratch_view->id;
@@ -1158,9 +1161,9 @@ AppUpdateAndRender(Platform *platform_)
     Buffer *active_buffer = GetBuffer(GetView(editor->active_window->view));
     platform->window_title = PushTempStringF("%.*s - TextIt", StringExpand(active_buffer->name));
                                              
-    if (editor->debug_delay_frame_count > 0)
+    if (editor->debug.delay_frame_count > 0)
     {
-        platform->SleepThread(editor->debug_delay);
-        editor->debug_delay_frame_count -= 1;
+        platform->SleepThread(editor->debug.delay);
+        editor->debug.delay_frame_count -= 1;
     }
 }

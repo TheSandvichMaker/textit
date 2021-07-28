@@ -268,6 +268,15 @@ struct VirtualArray
         count = 0;
     }
 
+    void
+    Release()
+    {
+        platform->DeallocateMemory(data);
+        count     = 0;
+        committed = 0;
+        data      = nullptr;
+    }
+
     unsigned
     EnsureSpace(unsigned push_count = 1)
     {

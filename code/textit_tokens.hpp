@@ -75,11 +75,10 @@ enum_flags(uint8_t, TokenFlags)
 
 struct Token
 {
-    TokenKind kind;
-    TokenFlags flags;
-
-    int64_t pos;
-    int64_t length;
+    TokenKind kind;   // 2
+    TokenFlags flags; // 4
+    int32_t length;   // 8
+    int64_t pos;      // 16
 };
 
 struct TokenIterator

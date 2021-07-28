@@ -153,20 +153,44 @@ MakeTokenIterator(Buffer *buffer, int index, int count = 0)
 }
 
 function TokenIterator
-SeekTokenIterator(Buffer *buffer, int64_t start_pos = 0)
+SeekTokenIterator(Buffer *buffer, int64_t pos = 0)
 {
+    pos = ClampToBufferRange(buffer, pos);
+
     TokenIterator result = {};
     result.tokens     = buffer->tokens.data;
     result.tokens_end = result.tokens + buffer->tokens.count;
+    result.token      = result.tokens;
 
-    int64_t token_count = buffer->tokens.count;
-    for (int index = 0; index < token_count; index += 1)
+    if (pos != 0)
     {
-        Token *t = &buffer->tokens[index];
-        if (t->pos >= start_pos)
+        int64_t token_count = buffer->tokens.count;
+        int64_t lo = 0;
+        int64_t hi = token_count - 1;
+        while (lo <= hi)
         {
-            result.token = t;
-            break;
+            int64_t index = (lo + hi) / 2;
+            Token *t = &buffer->tokens[index];
+            if (pos < t->pos)
+            {
+                hi = index - 1;
+            }
+            else if (index + 1 < token_count &&
+                     pos >= (t + 1)->pos)
+            {
+                lo = index + 1;
+            }
+            else
+            {
+                result.token = t;
+                break;
+            }
+        }
+
+        if (lo > hi)
+        {
+            // I don't want this binary search to ever fail to find a token
+            INVALID_CODE_PATH;
         }
     }
 

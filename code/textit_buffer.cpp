@@ -385,18 +385,95 @@ GetLineRanges(Buffer *buffer, int64_t line, Range *inner, Range *outer)
 }
 
 function BufferLocation
+CalculateBufferLocationFromPosLinearSearch(Buffer *buffer, int64_t pos)
+{
+    pos = ClampToBufferRange(buffer, pos);
+
+    BufferLocation result = {};
+
+    for (int64_t line = 0; line < buffer->line_data.count; line += 1)
+    {
+        LineData *data = &buffer->line_data[line];
+        if ((pos >= data->range.start) &&
+            (pos <  data->range.end))
+        {
+            result.line = line;
+            result.pos  = Min(pos, data->newline_pos);
+            result.col  = result.pos - data->range.start;
+            result.line_range = data->range;
+
+            break;
+        }
+    }
+
+    return result;
+}
+
+function BufferLocation
 CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
 {
     pos = ClampToBufferRange(buffer, pos);
 
     BufferLocation result = {};
 
-    // TODO: Binary search
-    for (int64_t line = 0; line < buffer->line_data.count; line += 1)
+    int64_t lo = 0;
+    int64_t hi = buffer->line_data.count - 1;
+    while (lo <= hi)
+    {
+        int64_t line = (lo + hi) / 2;
+
+        LineData *data = &buffer->line_data[line];
+        if (pos < data->range.start)
+        {
+            hi = line - 1;
+        }
+        else if (pos >= data->range.end)
+        {
+            lo = line + 1;
+        }
+        else
+        {
+            result.line = line;
+            result.pos  = Min(pos, data->newline_pos);
+            result.col  = result.pos - data->range.start;
+            result.line_range = data->range;
+
+            break;
+        }
+    }
+
+    return result;
+}
+
+function BufferLocation
+CalculateBufferLocationFromPosO1Search(Buffer *buffer, int64_t pos)
+{
+    pos = ClampToBufferRange(buffer, pos);
+
+    BufferLocation result = {};
+
+    int64_t line_count = buffer->line_data.count;
+    int64_t buff_count = buffer->count;
+    int64_t line = pos*line_count / buff_count;
+    int64_t max_delta = line_count;
+    for (;;)
     {
         LineData *data = &buffer->line_data[line];
-        if ((pos >= data->range.start) &&
-            (pos <  data->range.end))
+        int64_t start = data->range.start;
+        int64_t end   = data->range.end;
+        if (pos < start)
+        {
+            int64_t delta = Max(1, Min(max_delta, (start - pos)*line_count / buff_count));
+            line -= delta;
+            max_delta = delta - 1;
+        }
+        else if (pos >= end)
+        {
+            int64_t delta = Max(1, Min(max_delta, (pos - end)*line_count / buff_count));
+            line += delta;
+            max_delta = delta - 1;
+        }
+        else
         {
             result.line = line;
             result.pos  = Min(pos, data->newline_pos);
@@ -422,29 +499,8 @@ GetLineRange(Buffer *buffer, Range range)
     range = ClampRange(range, BufferRange(buffer));
 
     Range result = {};
-
-    bool got_one = false;
-    // TODO: Binary search
-    for (int64_t line = 0; line < buffer->line_data.count; line += 1)
-    {
-        LineData *data = &buffer->line_data[line];
-        if ((range.start >= data->range.start) &&
-            (range.start <  data->range.end))
-        {
-            result.start = line;
-
-            if (got_one) break;
-            got_one = true;
-        }
-        if ((range.end >= data->range.start) &&
-            (range.end <  data->range.end))
-        {
-            result.end = line;
-
-            if (got_one) break;
-            got_one = true;
-        }
-    }
+    result.start = CalculateBufferLocationFromPos(buffer, range.start).line;
+    result.end   = CalculateBufferLocationFromPos(buffer, range.end).line;
 
     return result;
 }
