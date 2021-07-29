@@ -175,8 +175,7 @@ SeekTokenIterator(Buffer *buffer, int64_t pos = 0)
             {
                 hi = index - 1;
             }
-            else if (index + 1 < token_count &&
-                     pos >= (t + 1)->pos)
+            else if (pos >= t->pos + t->length)
             {
                 lo = index + 1;
             }
@@ -189,8 +188,7 @@ SeekTokenIterator(Buffer *buffer, int64_t pos = 0)
 
         if (lo > hi)
         {
-            // I don't want this binary search to ever fail to find a token
-            INVALID_CODE_PATH;
+            result.token = &buffer->tokens[lo];
         }
     }
 

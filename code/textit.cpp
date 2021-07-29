@@ -512,30 +512,6 @@ DrawWindows(Window *window)
         bool is_active_window = (window == editor->active_window);
 
         view->actual_viewport_line_height = DrawView(view, is_active_window);
-
-        {
-            int64_t viewport_height = view->actual_viewport_line_height;
-            if (viewport_height != estimated_viewport_height)
-            {
-                int64_t top = view->scroll_at;
-                int64_t bot = view->scroll_at + viewport_height;
-
-                Cursor *cursor = GetCursor(view);
-                BufferLocation loc = CalculateBufferLocationFromPos(GetBuffer(view), cursor->pos);
-
-                if (loc.line < top)
-                {
-                    view->scroll_at += loc.line - top;
-                }
-                if (loc.line > bot)
-                {
-                    view->scroll_at += loc.line - bot;
-                }
-
-                PushRect(Layer_Text, view->viewport, COLOR_BLACK);
-                DrawView(view, is_active_window);
-            }
-        }
     }
     else
     {

@@ -16,6 +16,7 @@ struct View
     Rect2i viewport;
     int64_t actual_viewport_line_height;
     int64_t scroll_at;
+    Range visible_range;
 };
 
 static inline View *GetView(ViewID id);

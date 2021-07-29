@@ -97,6 +97,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     LineData *data = &buffer->line_data[min_line];
 
     int64_t pos = data->range.start;
+    view->visible_range.start = pos;
 
     for (;;)
     {
@@ -396,6 +397,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         row += 1;
     }
+    view->visible_range.end = pos;
 
     if (top_left.y + row < inner_bounds.max.y)
     {
