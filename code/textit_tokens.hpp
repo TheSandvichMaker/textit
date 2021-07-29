@@ -83,15 +83,33 @@ struct Token
 
 struct TokenIterator
 {
+    Token *token;
     Token *tokens;
     Token *tokens_end;
-    Token *token;
 };
 
 function bool
 IsValid(TokenIterator *it)
 {
     return !!it->token;
+}
+
+function void
+Rewind(TokenIterator *it, Token *t)
+{
+    Assert(t >= it->tokens && t < it->tokens_end);
+    it->token = t;
+}
+
+function Token *
+PeekNext(TokenIterator *it, int offset = 0)
+{
+    Token *result = nullptr;
+    if ((it->token + offset) < it->tokens_end)
+    {
+        result = it->token + offset;
+    }
+    return result;
 }
 
 function Token *
@@ -105,6 +123,17 @@ Next(TokenIterator *it)
     if (it->token >= it->tokens_end)
     {
         it->token = nullptr;
+    }
+    return result;
+}
+
+function Token *
+PeekPrev(TokenIterator *it, int offset = 0)
+{
+    Token *result = nullptr;
+    if ((it->token - offset - 1) >= it->tokens)
+    {
+        result = it->token - offset - 1;
     }
     return result;
 }

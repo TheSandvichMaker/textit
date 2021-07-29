@@ -944,7 +944,7 @@ AppUpdateAndRender(Platform *platform_)
 
         editor->null_view = OpenNewView(BufferID::Null());
 
-        Buffer *scratch_buffer = OpenBufferFromFile("test_file_big.txt"_str);
+        Buffer *scratch_buffer = OpenBufferFromFile("test_file.txt"_str);
         View *scratch_view = OpenNewView(scratch_buffer->id);
 
         editor->root_window.view = scratch_view->id;

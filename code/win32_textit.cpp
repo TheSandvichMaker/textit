@@ -21,7 +21,7 @@ static WINDOWPLACEMENT g_window_position = { sizeof(g_window_position) };
 static Win32State win32_state;
 static Platform platform_;
 
-static bool g_use_d3d = true;
+static bool g_use_d3d = false;
 
 function PlatformEventIterator
 Win32_IterateEvents(PlatformEventFilter filter)

@@ -517,72 +517,91 @@ MOVEMENT_PROC(EncloseParameter)
     Cursor *cursor = GetCursor(view);
 
     Move result = {};
-    result.flags           = MoveFlag_NoAutoRepeat;
     result.pos             = cursor->pos;
     result.selection.inner = cursor->selection.inner;
     result.selection.outer = cursor->selection.outer;
     
     int64_t pos = cursor->pos;
 
-    int64_t start_pos       = -1;
-    int64_t inner_start_pos = -1;
+    Token *alternative_start = nullptr;
+    TokenKind end_kind      = 0;
+    int64_t   end_pos       = -1;
+    int64_t   inner_end_pos = -1;
 
     NestHelper nests = {};
     TokenIterator it = SeekTokenIterator(buffer, pos);
 
-    Token *prev_t = it.token;
-    while (IsValid(&it))
+    while (IsValid(&it) || alternative_start)
     {
-        Token *t = Prev(&it);
+        if (!IsValid(&it) && alternative_start)
+        {
+            Clear(&nests);
+            Rewind(&it, alternative_start);
+            alternative_start = nullptr;
+        }
+
+        Token *t = Next(&it);
         if (!t) break;
 
-        if (IsInNest(&nests, t->kind, Direction_Backward))
+        if (!alternative_start &&
+            t->kind == Token_LeftParen)
+        {
+            alternative_start = PeekNext(&it);
+        }
+
+        if (IsInNest(&nests, t->kind, Direction_Forward))
         {
             continue;
         }
 
-        if (t->kind == Token_LeftParen ||
+        if (t->kind == Token_RightParen ||
             t->kind == ',')
         {
-            inner_start_pos = (prev_t ? prev_t->pos : t->pos + t->length);
+            end_kind      = t->kind;
+            inner_end_pos = t->pos;
+            end_pos       = t->pos;
             if (t->kind == ',')
             {
-                start_pos = t->pos;
+                end_pos = t->pos + t->length;
+                Token *next = PeekNext(&it);
+                if (next)
+                {
+                    end_pos = next->pos;
+                }
             }
-            else
-            {
-                start_pos = inner_start_pos;
-            }
-            Next(&it);
             break;
         }
-
-        prev_t = t;
     }
 
-    if (start_pos >= 0)
+    if (end_pos >= 0)
     {
+        Prev(&it); // skip the end token we were on
         while (IsValid(&it))
         {
-            Token *t = Next(&it);
+            Token *t = Prev(&it);
             if (!t) break;
 
-            if (IsInNest(&nests, t->kind, Direction_Forward))
+            if (IsInNest(&nests, t->kind, Direction_Backward))
             {
                 continue;
             }
 
-            if (t->kind == Token_RightParen ||
+            if (t->kind == Token_LeftParen ||
                 t->kind == ',')
             {
-                int64_t inner_end_pos = t->pos;
-                int64_t end_pos = inner_end_pos;
+                int64_t inner_start_pos = t->pos + t->length;
 
-                if (t->kind == ',')
+                Token *next = PeekNext(&it, 1);
+                if (next)
                 {
-                    start_pos = inner_start_pos;
-                    t = Next(&it);
-                    end_pos = t->pos;
+                    inner_start_pos = next->pos;
+                }
+
+                int64_t start_pos = inner_start_pos;
+                if (t->kind  == ',' &&
+                    end_kind == Token_RightParen)
+                {
+                    start_pos = t->pos;
                 }
 
                 result.selection.inner.start = inner_start_pos;
