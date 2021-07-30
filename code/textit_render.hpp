@@ -124,6 +124,7 @@ enum RenderLayer
     Layer_Background,
     Layer_Text,
     Layer_Overlay,
+    Layer_OverlayText,
     Layer_COUNT,
 };
 
@@ -160,6 +161,7 @@ struct RenderState
 
     Bitmap *target;
 
+    RenderLayer current_layer;
     Font *fonts[Layer_COUNT];
 
     uint64_t *prev_dirty_rects;
@@ -177,7 +179,21 @@ struct RenderState
     uint32_t cb_sort_key_at;
     char *command_buffer;
 };
-
 GLOBAL_STATE(RenderState, render_state);
+
+struct ScopedRenderLayer
+{
+    RenderLayer old_layer;
+    ScopedRenderLayer(RenderLayer new_layer)
+    {
+        old_layer = render_state->current_layer;
+        render_state->current_layer = new_layer;
+    }
+    ~ScopedRenderLayer()
+    {
+        render_state->current_layer = old_layer;
+    }
+};
+#define PushScopedRenderLayer(layer) ScopedRenderLayer Paste(scoped_render_layer, __LINE__)
 
 #endif /* TEXTIT_RENDER_HPP */

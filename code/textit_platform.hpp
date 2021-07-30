@@ -84,6 +84,8 @@
                                                     prev_##it = prev_##it->next, it = prev_##it->next)
 #define ForDll(it, sentinel) ForDllUnique(it, sentinel, next, prev)
 
+#define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
+
 #define IntToPointer(i) (void *)(intptr_t)(i)
 #define PointerToInt(i) (intptr_t)(i)
 

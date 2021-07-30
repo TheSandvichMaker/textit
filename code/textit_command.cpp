@@ -66,6 +66,8 @@ LoadDefaultBindings()
     BindCommand(command, 'L',                      Modifier_Ctrl,  "FocusWindowRight"_str);
     BindCommand(command, 'Q',                      Modifier_Ctrl,  "DestroyWindow"_str);
 
+    BindCommand(command, 'O',                      Modifier_Ctrl,  "OpenBuffer"_str);
+
     BindCommand(command, 'D',                      0,              "DeleteSelection"_str);
     BindCommand(command, 'D',                      Modifier_Shift, "DeleteInnerSelection"_str);
     BindCommand(command, 'C',                      0,              "ChangeSelection"_str);

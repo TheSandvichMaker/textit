@@ -1,10 +1,11 @@
 function void
 InitializeRenderState(Arena *arena, Bitmap *target, Font *font)
 {
-    render_state->target     = target;
-    render_state->fonts[Layer_Background] = font;
-    render_state->fonts[Layer_Text]       = font;
-    render_state->fonts[Layer_Overlay]    = font;
+    render_state->target = target;
+    render_state->fonts[Layer_Background]  = font;
+    render_state->fonts[Layer_Text]        = font;
+    render_state->fonts[Layer_Overlay]     = font;
+    render_state->fonts[Layer_OverlayText] = font;
 
     render_state->cb_size = Megabytes(4); // random choice
     render_state->command_buffer = PushArrayNoClear(arena, render_state->cb_size, char);

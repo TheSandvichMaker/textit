@@ -9,6 +9,7 @@ struct View
 
     Arena arena;
     BufferID buffer;
+    BufferID next_buffer;
 
     int64_t sticky_col;
     int64_t repeat_value;

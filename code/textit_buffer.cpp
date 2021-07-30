@@ -417,7 +417,7 @@ CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
     BufferLocation result = {};
 
     int64_t lo = 0;
-    int64_t hi = buffer->line_data.count - 1;
+    int64_t hi = (int64_t)buffer->line_data.count - 1;
     while (lo <= hi)
     {
         int64_t line = (lo + hi) / 2;

@@ -717,151 +717,308 @@ ExecuteCommand(View *view, Command *command)
 }
 
 function bool
-HandleViewEvents(ViewID view_id)
+HandleViewEvent(ViewID view_id, const PlatformEvent &event)
 {
-    bool result = false;
-
-    PlatformEvent event;
-    for (PlatformEventIterator it = platform->IterateEvents(PlatformEventFilter_ANY);
-         platform->NextEvent(&it, &event);
-         )
-    {
-        result = true;
-
-        View *view = GetView(view_id);
-        Buffer *buffer = GetBuffer(view);
-
-        BindingMap *bindings = &editor->bindings[editor->edit_mode];
-
-        Cursor *cursor = GetCursor(view);
-        BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
-        if ((event.type == PlatformEvent_Text) && bindings->text_command)
-        {
-            String text = MakeString(event.text_length, event.text);
-            bindings->text_command->text(text);
-        }
-        else if (MatchFilter(event.type, PlatformEventFilter_KeyDown))
-        {
-            bool ctrl_down  = event.ctrl_down;
-            bool shift_down = event.shift_down;
-            bool alt_down   = event.alt_down;
-
-            Modifiers modifiers = 0;
-            if (ctrl_down)  modifiers |= Modifier_Ctrl;
-            if (shift_down) modifiers |= Modifier_Shift;
-            if (alt_down)   modifiers |= Modifier_Alt;
-
-            bool consumed_digit = false;
-            if (!modifiers &&
-                editor->edit_mode == EditMode_Command &&
-                event.input_code >= PlatformInputCode_0 &&
-                event.input_code <= PlatformInputCode_9)
-            {
-                if (event.input_code > PlatformInputCode_0 ||
-                    view->repeat_value > 0)
-                {
-                    consumed_digit = true;
-
-                    int64_t digit = (int64_t)(event.input_code - PlatformInputCode_0);
-                    view->repeat_value *= 10;
-                    view->repeat_value += digit;
-
-                    if (view->repeat_value > 9999)
-                    {
-                        view->repeat_value = 9999;
-                    }
-                }
-            }
-
-            if (!consumed_digit)
-            {
-                editor->clutch = shift_down;
-
-                Binding *binding = &bindings->by_code[event.input_code];
-                Command *command = binding->by_modifiers[modifiers];
-                if (!command)
-                {
-                    modifiers &= ~Modifier_Shift;
-                    command = binding->by_modifiers[modifiers];
-                }
-
-                if (command)
-                {
-                    if (modifiers & Modifier_Shift)
-                    {
-                        // if this command was really bound with shift, don't enable the clutch
-                        editor->clutch = false;
-                    }
-
-                    int64_t undo_ordinal = CurrentUndoOrdinal(buffer);
-
-                    int64_t repeat = Max(1, view->repeat_value);
-                    view->repeat_value = 0;
-
-                    if (AreEqual(command->name, "RepeatLastCommand"_str))
-                    {
-                        for (int64_t i = 0; i < repeat*editor->last_repeat; i += 1)
-                        {
-                            ExecuteCommand(view, editor->last_movement_for_change);
-                            ExecuteCommand(view, editor->last_change);
-                        }
-                        editor->last_movement = editor->last_movement_for_change;
-                    }
-                    else
-                    {
-                        for (int64_t i = 0; i < repeat; i += 1)
-                        {
-                            ExecuteCommand(view, command);
-                        }
-                        switch (command->kind)
-                        {
-                            INCOMPLETE_SWITCH;
-                            
-                            case Command_Change:
-                            {
-                                editor->last_movement_for_change = editor->last_movement;
-                                editor->last_change = command;
-                            } break;
-                        }
-
-                        editor->last_repeat = repeat;
-                    }
-
-                    MergeUndoHistory(buffer, undo_ordinal, CurrentUndoOrdinal(buffer));
-                }
-            }
-        }
-        else if (MatchFilter(event.type, PlatformEventFilter_Mouse))
-        {
-            if (event.input_code == PlatformInputCode_LButton)
-            {
-                if (event.pressed)
-                {
-                    editor->mouse_down = true;
-                    OnMouseDown();
-                }
-                else
-                {
-                    editor->mouse_down = false;
-                    OnMouseUp();
-                }
-            }
-        }
-
-        Assert(!buffer->bulk_edit);
-    }
+    bool result = true;
 
     View *view = GetView(view_id);
     Buffer *buffer = GetBuffer(view);
 
-    if ((editor->next_edit_mode == EditMode_Text) &&
-        (buffer->flags & Buffer_ReadOnly))
+    BindingMap *bindings = &editor->bindings[editor->edit_mode];
+
+    Cursor *cursor = GetCursor(view);
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+    if ((event.type == PlatformEvent_Text) && bindings->text_command)
     {
-        editor->next_edit_mode = EditMode_Command;
+        String text = MakeString(event.text_length, event.text);
+        bindings->text_command->text(text);
     }
-    editor->edit_mode = editor->next_edit_mode;
+    else if (MatchFilter(event.type, PlatformEventFilter_KeyDown))
+    {
+        bool ctrl_down  = event.ctrl_down;
+        bool shift_down = event.shift_down;
+        bool alt_down   = event.alt_down;
+
+        Modifiers modifiers = 0;
+        if (ctrl_down)  modifiers |= Modifier_Ctrl;
+        if (shift_down) modifiers |= Modifier_Shift;
+        if (alt_down)   modifiers |= Modifier_Alt;
+
+        bool consumed_digit = false;
+        if (!modifiers &&
+            editor->edit_mode == EditMode_Command &&
+            event.input_code >= PlatformInputCode_0 &&
+            event.input_code <= PlatformInputCode_9)
+        {
+            if (event.input_code > PlatformInputCode_0 ||
+                view->repeat_value > 0)
+            {
+                consumed_digit = true;
+
+                int64_t digit = (int64_t)(event.input_code - PlatformInputCode_0);
+                view->repeat_value *= 10;
+                view->repeat_value += digit;
+
+                if (view->repeat_value > 9999)
+                {
+                    view->repeat_value = 9999;
+                }
+            }
+        }
+
+        if (!consumed_digit)
+        {
+            editor->clutch = shift_down;
+
+            Binding *binding = &bindings->by_code[event.input_code];
+            Command *command = binding->by_modifiers[modifiers];
+            if (!command)
+            {
+                modifiers &= ~Modifier_Shift;
+                command = binding->by_modifiers[modifiers];
+            }
+
+            if (command)
+            {
+                if (modifiers & Modifier_Shift)
+                {
+                    // if this command was really bound with shift, don't enable the clutch
+                    editor->clutch = false;
+                }
+
+                int64_t undo_ordinal = CurrentUndoOrdinal(buffer);
+
+                int64_t repeat = Max(1, view->repeat_value);
+                view->repeat_value = 0;
+
+                if (AreEqual(command->name, "RepeatLastCommand"_str))
+                {
+                    for (int64_t i = 0; i < repeat*editor->last_repeat; i += 1)
+                    {
+                        ExecuteCommand(view, editor->last_movement_for_change);
+                        ExecuteCommand(view, editor->last_change);
+                    }
+                    editor->last_movement = editor->last_movement_for_change;
+                }
+                else
+                {
+                    for (int64_t i = 0; i < repeat; i += 1)
+                    {
+                        ExecuteCommand(view, command);
+                    }
+                    switch (command->kind)
+                    {
+                        INCOMPLETE_SWITCH;
+                        
+                        case Command_Change:
+                        {
+                            editor->last_movement_for_change = editor->last_movement;
+                            editor->last_change = command;
+                        } break;
+                    }
+
+                    editor->last_repeat = repeat;
+                }
+
+                MergeUndoHistory(buffer, undo_ordinal, CurrentUndoOrdinal(buffer));
+            }
+        }
+    }
+    else if (MatchFilter(event.type, PlatformEventFilter_Mouse))
+    {
+        if (event.input_code == PlatformInputCode_LButton)
+        {
+            if (event.pressed)
+            {
+                editor->mouse_down = true;
+                OnMouseDown();
+            }
+            else
+            {
+                editor->mouse_down = false;
+                OnMouseUp();
+            }
+        }
+    }
 
     return result;
+}
+
+function void
+EndCommandLine()
+{
+    editor->command_line = nullptr;
+    Clear(&editor->command_arena);
+}
+
+function CommandLine *
+BeginCommandLine()
+{
+    if (editor->command_line)
+    {
+        EndCommandLine();
+        editor->fuck_you = true;
+    }
+
+    CommandLine *cl = PushStruct(&editor->command_arena, CommandLine);
+    cl->arena = PushSubArena(&editor->command_arena);
+    editor->command_line = cl;
+    return cl;
+}
+
+function bool
+HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
+{
+    bool handled_any_events = false;
+
+    if (MatchFilter(event.type, PlatformEventFilter_Text|PlatformEventFilter_Keyboard))
+    {
+        handled_any_events = true;
+
+        if (event.type == PlatformEvent_Text)
+        {
+            String text = MakeString(event.text_length, event.text);
+
+            for (size_t i = 0; i < text.size; i += 1)
+            {
+                if (IsPrintableAscii(text.data[i]) && text.data[i] != ':')
+                {
+                    cl->cycling_predictions = false;
+
+                    size_t left = ArrayCount(cl->text) - cl->count;
+                    if (left > 0)
+                    {
+                        memmove(cl->text + cl->cursor + 1,
+                                cl->text + cl->cursor,
+                                left);
+                        cl->text[cl->cursor++] = text.data[i];
+                        cl->count += 1;
+                    }
+                }
+            }
+        }
+        else if (event.type == PlatformEvent_KeyDown)
+        {
+            cl->cycling_predictions = false;
+
+            switch (event.input_code)
+            {
+                INCOMPLETE_SWITCH;
+
+                case PlatformInputCode_Left:
+                {
+                    if (cl->cursor > 0)
+                    {
+                        cl->cursor -= 1;
+                    }
+                } break;
+
+                case PlatformInputCode_Right:
+                {
+                    if (cl->cursor < cl->count)
+                    {
+                        cl->cursor += 1;
+                    }
+                } break;
+
+                case PlatformInputCode_Escape:
+                {
+                    EndCommandLine();
+                } break;
+
+                case PlatformInputCode_1: case PlatformInputCode_2: case PlatformInputCode_3:
+                case PlatformInputCode_4: case PlatformInputCode_5: case PlatformInputCode_6:
+                case PlatformInputCode_7: case PlatformInputCode_8: case PlatformInputCode_9:
+                {
+                    int as_digit = (int)event.input_code - '0';
+
+                    cl->prediction_selected_index = as_digit - 1;
+                    cl->prediction_index = (as_digit) % cl->prediction_count;
+                } // FALLTHROUGH
+                case PlatformInputCode_Return:
+                {
+                    if (!cl->cycling_predictions && cl->prediction_count > 0)
+                    {
+                        String prediction = cl->predictions[0];
+
+                        cl->count = (int)prediction.size;
+                        CopyArray(cl->count, prediction.data, cl->text);
+                        cl->cursor = cl->count;
+                    }
+
+                    cl->AcceptEntry(cl);
+                    if (!editor->fuck_you)
+                    {
+                        EndCommandLine();
+                    }
+                } break;
+
+                case PlatformInputCode_Tab:
+                {
+                    cl->cycling_predictions = true;
+                    if (cl->prediction_count > 0)
+                    {
+                        int index = cl->prediction_index++;
+                        cl->prediction_selected_index = index;
+
+                        String prediction = cl->predictions[index];
+                        cl->prediction_index %= cl->prediction_count;
+
+                        cl->count = (int)prediction.size;
+                        CopyArray(cl->count, prediction.data, cl->text);
+                        cl->cursor = cl->count;
+                    }
+                } break;
+                
+                case PlatformInputCode_Back:
+                {
+                    size_t left = ArrayCount(cl->text) - cl->cursor;
+                    if (cl->cursor > 0)
+                    {
+                        memmove(cl->text + cl->cursor - 1,
+                                cl->text + cl->cursor,
+                                left);
+                        cl->cursor -= 1;
+                        cl->count  -= 1;
+                    }
+                } break;
+
+                case PlatformInputCode_Delete:
+                {
+                    size_t left = ArrayCount(cl->text) - cl->cursor;
+                    if (cl->count > cl->cursor)
+                    {
+                        memmove(cl->text + cl->cursor,
+                                cl->text + cl->cursor + 1,
+                                left);
+                        cl->count -= 1;
+                        if (cl->cursor > cl->count)
+                        {
+                            cl->cursor = cl->count;
+                        }
+                    }
+                } break;
+            }
+        }
+
+        if (!cl->cycling_predictions)
+        {
+            cl->prediction_count = 0;
+            cl->prediction_index = 0;
+            cl->prediction_selected_index = -1;
+            Clear(cl->arena);
+
+            cl->GatherPredictions(cl);
+            if (cl->prediction_index > cl->prediction_count)
+            {
+                cl->prediction_index = cl->prediction_count;
+            }
+        }
+
+        editor->fuck_you = false;
+    }
+
+    return handled_any_events;
 }
 
 void
@@ -917,6 +1074,7 @@ AppUpdateAndRender(Platform *platform_)
 
         editor->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
         editor->message_buffer = OpenNewBuffer("messages"_str, Buffer_Indestructible|Buffer_ReadOnly);
+        OpenNewBuffer("scratch"_str, Buffer_Indestructible);
 
         editor->null_view = OpenNewView(BufferID::Null());
 
@@ -952,184 +1110,46 @@ AppUpdateAndRender(Platform *platform_)
         OnMouseHeld();
     }
 
-    switch (editor->input_mode)
+    PlatformEvent event;
+    for (PlatformEventIterator it = platform->IterateEvents(PlatformEventFilter_ANY);
+         platform->NextEvent(&it, &event);
+         )
     {
-        case InputMode_Editor:
-        {
-            handled_any_events = HandleViewEvents(editor->active_window->view);
-        } break;
-
-        case InputMode_CommandLine:
+        if (editor->command_line)
         {
             editor->clutch = false;
-
-            PlatformEvent event;
-            for (PlatformEventIterator it = platform->IterateEvents(PlatformEventFilter_Text|PlatformEventFilter_Keyboard);
-                 platform->NextEvent(&it, &event);
-                 )
-            {
-                handled_any_events = true;
-
-                if (event.type == PlatformEvent_Text)
-                {
-                    String text = MakeString(event.text_length, event.text);
-
-                    for (size_t i = 0; i < text.size; i += 1)
-                    {
-                        if (IsPrintableAscii(text.data[i]))
-                        {
-                            editor->cycling_predictions = false;
-
-                            size_t left = ArrayCount(editor->command_line) - editor->command_line_count;
-                            if (left > 0)
-                            {
-                                memmove(editor->command_line + editor->command_line_cursor + 1,
-                                        editor->command_line + editor->command_line_cursor,
-                                        left);
-                                editor->command_line[editor->command_line_cursor++] = text.data[i];
-                                editor->command_line_count += 1;
-                            }
-                        }
-                    }
-                }
-                else if (event.type == PlatformEvent_KeyDown)
-                {
-                    editor->cycling_predictions = false;
-
-                    switch (event.input_code)
-                    {
-                        INCOMPLETE_SWITCH;
-
-                        case PlatformInputCode_Left:
-                        {
-                            if (editor->command_line_cursor > 0)
-                            {
-                                editor->command_line_cursor -= 1;
-                            }
-                        } break;
-
-                        case PlatformInputCode_Right:
-                        {
-                            if (editor->command_line_cursor < editor->command_line_count)
-                            {
-                                editor->command_line_cursor += 1;
-                            }
-                        } break;
-
-                        case PlatformInputCode_Escape:
-                        {
-                            editor->command_line_cursor = 0;
-                            editor->command_line_count = 0;
-                            editor->input_mode = InputMode_Editor;
-                        } break;
-
-                        case PlatformInputCode_Return:
-                        {
-                            String command_string = MakeString(editor->command_line_count, editor->command_line);
-                            Command *command = FindCommand(command_string, StringMatch_CaseInsensitive);
-                            if (command &&
-								(command->kind == Command_Basic) &&
-								(command->flags & Command_Visible))
-                            {
-                                command->command();
-                            }
-                            editor->command_line_cursor = 0;
-                            editor->command_line_count = 0;
-                            editor->input_mode = InputMode_Editor;
-                        } break;
-
-                        case PlatformInputCode_Tab:
-                        {
-                            editor->cycling_predictions = true;
-                            if (editor->command_line_prediction_count > 0)
-                            {
-                                int index = editor->command_line_prediction_index++;
-                                editor->command_line_prediction_selected_index = index;
-
-                                Command *prediction = editor->command_line_predictions[index];
-                                editor->command_line_prediction_index %= editor->command_line_prediction_count;
-
-                                editor->command_line_count = (int)prediction->name.size;
-                                CopyArray(editor->command_line_count, prediction->name.data, editor->command_line);
-                                editor->command_line_cursor = editor->command_line_count;
-                            }
-                        } break;
-                        
-                        case PlatformInputCode_Back:
-                        {
-                            size_t left = ArrayCount(editor->command_line) - editor->command_line_cursor;
-                            if (editor->command_line_cursor > 0)
-                            {
-                                memmove(editor->command_line + editor->command_line_cursor - 1,
-                                        editor->command_line + editor->command_line_cursor,
-                                        left);
-                                editor->command_line_cursor -= 1;
-                                editor->command_line_count  -= 1;
-                            }
-                        } break;
-
-                        case PlatformInputCode_Delete:
-                        {
-                            size_t left = ArrayCount(editor->command_line) - editor->command_line_cursor;
-                            if (editor->command_line_count > editor->command_line_cursor)
-                            {
-                                memmove(editor->command_line + editor->command_line_cursor,
-                                        editor->command_line + editor->command_line_cursor + 1,
-                                        left);
-                                editor->command_line_count -= 1;
-                                if (editor->command_line_cursor > editor->command_line_count)
-                                {
-                                    editor->command_line_cursor = editor->command_line_count;
-                                }
-                            }
-                        } break;
-                    }
-                }
-
-                if (!editor->cycling_predictions)
-                {
-                    editor->command_line_prediction_count = 0;
-                    editor->command_line_prediction_index = 0;
-                    editor->command_line_prediction_selected_index = -1;
-
-                    if (editor->command_line_count > 0)
-                    {
-                        String command_string = MakeString(editor->command_line_count, editor->command_line);
-                        for (size_t i = 0; i < command_list->command_count; i += 1)
-                        {
-                            Command *command = &command_list->commands[i];
-                            if ((command->kind == Command_Basic) &&
-                                (command->flags & Command_Visible) &&
-                                MatchPrefix(command->name, command_string, StringMatch_CaseInsensitive))
-                            {
-                                editor->command_line_predictions[editor->command_line_prediction_count++] = command;
-                            }
-
-                            if (editor->command_line_prediction_count >=
-                                (int64_t)ArrayCount(editor->command_line_predictions))
-                            {
-                                break;
-                            }
-                        }
-
-                        if (editor->command_line_prediction_index > editor->command_line_prediction_count)
-                        {
-                            editor->command_line_prediction_index = editor->command_line_prediction_count;
-                        }
-                    }
-                }
-            }
-        } break;
+            handled_any_events = HandleCommandLineEvent(editor->command_line, event);
+        }
+        else
+        {
+            handled_any_events = HandleViewEvent(editor->active_window->view, event);
+        }
     }
+
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+
+    if (view->next_buffer)
+    {
+        view->buffer = view->next_buffer;
+        view->next_buffer = {};
+    }
+
+    if ((editor->next_edit_mode == EditMode_Text) &&
+        (buffer->flags & Buffer_ReadOnly))
+    {
+        editor->next_edit_mode = EditMode_Command;
+    }
+    editor->edit_mode = editor->next_edit_mode;
 
     if (handled_any_events)
     {
         RecalculateViewBounds(&editor->root_window, render_state->viewport);
         DrawWindows(&editor->root_window);
 
-        if (editor->input_mode)
+        if (editor->command_line)
         {
-            DrawCommandLineInput();
+            DrawCommandLine(editor->command_line);
         }
     }
     EndRender();

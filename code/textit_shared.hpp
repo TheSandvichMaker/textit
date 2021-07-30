@@ -52,8 +52,6 @@ struct DeferDoodadHelp
 
 #define defer const auto Paste(defer_, __LINE__) = DeferDoodadHelp() + [&]()
 
-#define ArrayCount(x) (sizeof(x) / sizeof((x)[0]))
-
 function void
 SetMemory(size_t size, void *data, char value)
 {

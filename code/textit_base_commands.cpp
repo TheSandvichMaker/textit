@@ -113,6 +113,35 @@ COMMAND_PROC(BenchmarkPosToLine,
     buffer->count           = orig_buff_count;
 }
 
+COMMAND_PROC(NextBuffer,
+             "Select the next buffer"_str)
+{
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+
+    BufferID next_buffer = {};
+    for (size_t index = 1; index < editor->buffer_count; index += 1)
+    {
+        BufferID id = editor->used_buffer_ids[index];
+        if (id == buffer->id)
+        {
+            if (index + 1 == editor->buffer_count)
+            {
+                next_buffer = editor->used_buffer_ids[1];
+            }
+            else
+            {
+                next_buffer = editor->used_buffer_ids[index + 1];
+            }
+        }
+    }
+
+    if (next_buffer)
+    {
+        view->next_buffer = next_buffer;
+    }
+}
+
 COMMAND_PROC(ForceTick,
              "Force the editor to tick"_str)
 {
@@ -133,7 +162,76 @@ COMMAND_PROC(LoadOtherIndentRules,
 
 COMMAND_PROC(EnterCommandLineMode)
 {
-    editor->input_mode = InputMode_CommandLine;
+    CommandLine *cl = BeginCommandLine();
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        if (cl->count == 0) return;
+
+        cl->predictions = PushArray(cl->arena, command_list->command_count, String);
+
+        String command_string = MakeString(cl->count, cl->text);
+        for (size_t i = 0; i < command_list->command_count; i += 1)
+        {
+            Command *command = &command_list->commands[i];
+            if ((command->kind == Command_Basic) &&
+                (command->flags & Command_Visible) &&
+                MatchPrefix(command->name, command_string, StringMatch_CaseInsensitive))
+            {
+                cl->predictions[cl->prediction_count++] = command->name;
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String command_string = MakeString(cl->count, cl->text);
+        Command *command = FindCommand(command_string, StringMatch_CaseInsensitive);
+        if (command &&
+            (command->kind == Command_Basic) &&
+            (command->flags & Command_Visible))
+        {
+            command->command();
+        }
+    };
+}
+
+COMMAND_PROC(OpenBuffer,
+             "Interactively open a buffer"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Open Buffer"_str;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        cl->predictions = PushArray(cl->arena, editor->buffer_count, String);
+
+        String string = MakeString(cl->count, cl->text);
+        for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+        {
+            Buffer *buffer = it.buffer;
+            if (string.size == 0 ||
+                MatchPrefix(buffer->name, string, StringMatch_CaseInsensitive))
+            {
+                cl->predictions[cl->prediction_count++] = buffer->name;
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = MakeString(cl->count, cl->text);
+        for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+        {
+            Buffer *buffer = it.buffer;
+            if (AreEqual(buffer->name, string))
+            {
+                View *view = GetActiveView();
+                view->next_buffer = buffer->id;
+                break;
+            }
+        }
+    };
 }
 
 COMMAND_PROC(Exit, "Exit the editor"_str)
@@ -512,7 +610,7 @@ MOVEMENT_PROC(EncloseSurroundingParen)
 
 MOVEMENT_PROC(EncloseParameter)
 {
-    View *view = GetActiveView();
+    View   *view   = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 

@@ -3,7 +3,7 @@
 
 #define DEFAULT_ARENA_CAPACITY Gigabytes(8)
 
-static inline size_t
+function size_t
 GetAlignOffset(Arena *arena, size_t Align)
 {
     size_t Offset = (size_t)(arena->base + arena->used) & (Align - 1);
@@ -14,7 +14,7 @@ GetAlignOffset(Arena *arena, size_t Align)
     return Offset;
 }
 
-static inline char *
+function char *
 GetNextAllocationLocation(Arena *arena, size_t Align)
 {
     size_t AlignOffset = GetAlignOffset(arena, Align);
@@ -22,7 +22,7 @@ GetNextAllocationLocation(Arena *arena, size_t Align)
     return Result;
 }
 
-static inline size_t
+function size_t
 GetSizeRemaining(Arena *arena, size_t Align)
 {
     size_t AlignOffset = GetAlignOffset(arena, Align);
@@ -30,7 +30,7 @@ GetSizeRemaining(Arena *arena, size_t Align)
     return Result;
 }
 
-static inline void
+function void
 Clear(Arena *arena)
 {
     Assert(arena->temp_count == 0);
@@ -38,21 +38,21 @@ Clear(Arena *arena)
     arena->temp_count = 0;
 }
 
-static inline void
+function void
 Release(Arena *arena)
 {
     Assert(arena->temp_count == 0);
     platform->DeallocateMemory(arena->base);
 }
 
-static inline void
+function void
 ResetTo(Arena *arena, char *Target)
 {
     Assert((Target >= arena->base) && (Target <= (arena->base + arena->used)));
     arena->used = (Target - arena->base);
 }
 
-static inline void
+function void
 SetCapacity(Arena *arena, size_t capacity)
 {
     Assert(!arena->capacity);
@@ -60,7 +60,7 @@ SetCapacity(Arena *arena, size_t capacity)
     arena->capacity = capacity;
 }
 
-static inline void
+function void
 InitWithMemory(Arena *arena, size_t MemorySize, void *Memory)
 {
     ZeroStruct(arena);
@@ -72,7 +72,7 @@ InitWithMemory(Arena *arena, size_t MemorySize, void *Memory)
     arena->base = (char *)Memory;
 }
 
-static inline void
+function void
 CheckArena(Arena* arena)
 {
     Assert(arena->temp_count == 0);
@@ -105,7 +105,7 @@ CheckArena(Arena* arena)
 #define PushAlignedSizeNoClear(arena, size, align) \
     PushSize_(arena, size, align, false, LOCATION_STRING(#arena))
 
-static inline void *
+function void *
 PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
 {
     if (!arena->capacity)
@@ -150,7 +150,7 @@ PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
 #define BootstrapPushStruct(Type, Member, ...)                                        \
     (Type *)BootstrapPushStruct_(sizeof(Type), alignof(Type), offsetof(Type, Member), \
                                  LOCATION_STRING("Bootstrap " #Type "::" #Member), ##__VA_ARGS__)
-static inline void *
+function void *
 BootstrapPushStruct_(size_t Size, size_t Align, size_t arenaOffset, const char *Tag, size_t capacity = DEFAULT_ARENA_CAPACITY)
 {
     Arena arena = {};
@@ -160,7 +160,19 @@ BootstrapPushStruct_(size_t Size, size_t Align, size_t arenaOffset, const char *
     return State;
 }
 
-static inline char *
+function Arena *
+PushSubArena(Arena *arena, size_t capacity = SIZE_MAX)
+{
+    size_t max_capacity = GetSizeRemaining(arena, alignof(Arena));
+    if (capacity > max_capacity) capacity = max_capacity;
+
+    Arena *result = PushStruct(arena, Arena);
+    result->capacity = capacity;
+    result->base     = (char *)(result + 1);
+    return result;
+}
+
+function char *
 PushNullTerminatedString(Arena *arena, size_t size, char *data)
 {
     char *result = PushArrayNoClear(arena, size + 1, char);
@@ -171,7 +183,7 @@ PushNullTerminatedString(Arena *arena, size_t size, char *data)
     return result;
 }
 
-static inline char *
+function char *
 PushNullTerminatedString(Arena *arena, String string)
 {
     char *result = PushArrayNoClear(arena, string.size + 1, char);
@@ -188,7 +200,7 @@ struct TemporaryMemory
     size_t used;
 };
 
-static inline TemporaryMemory
+function TemporaryMemory
 BeginTemporaryMemory(Arena *arena)
 {
     TemporaryMemory result = {};
@@ -198,7 +210,7 @@ BeginTemporaryMemory(Arena *arena)
     return result;
 }
 
-static inline void
+function void
 EndTemporaryMemory(TemporaryMemory Temp)
 {
     if (Temp.arena)
@@ -209,7 +221,7 @@ EndTemporaryMemory(TemporaryMemory Temp)
     }
 }
 
-static inline void
+function void
 CommitTemporaryMemory(TemporaryMemory *Temp)
 {
     Arena *arena = Temp->arena;
@@ -231,7 +243,7 @@ struct ScopedMemory
 };
 
 template <typename T>
-static inline Array<T>
+function Array<T>
 PushArrayContainer(Arena *arena, size_t capacity)
 {
     Array<T> result = {};
@@ -275,6 +287,11 @@ struct VirtualArray
         count     = 0;
         committed = 0;
         data      = nullptr;
+    }
+
+    bool Empty()
+    {
+        return count == 0;
     }
 
     unsigned

@@ -31,7 +31,6 @@
 enum InputMode
 {
     InputMode_Editor,
-    InputMode_CommandLine,
 };
 
 enum EditMode
@@ -83,7 +82,7 @@ function void DestroyWindow(Window *window);
 
 struct CoreConfig
 {
-    bool visualize_newlines              = true;
+    bool visualize_newlines              = false;
     bool right_align_visualized_newlines = false;
     bool visualize_whitespace            = true;
     bool show_line_numbers               = true;
@@ -158,6 +157,28 @@ struct CursorHashEntry
     Cursor cursor;
 };
 
+struct CommandLine
+{
+    Arena *arena;
+    String name;
+
+    int cursor;
+    int count;
+    uint8_t text[256];
+
+    bool cycling_predictions;
+    int prediction_index;
+    int prediction_selected_index;
+    int prediction_count;
+    String *predictions;
+
+    void (*GatherPredictions)(CommandLine *cl);
+    void (*AcceptEntry)(CommandLine *cl);
+};
+
+function CommandLine *BeginCommandLine();
+function void EndCommandLine();
+
 struct EditorState
 {
     GlobalState global_state;
@@ -166,19 +187,13 @@ struct EditorState
     Arena transient_arena;
     Arena undo_scratch;
 
+    Arena command_arena;
+
     Theme theme;
 
     InputMode input_mode;
-
-    int command_line_cursor;
-    int command_line_count;
-    uint8_t command_line[256];
-
-    bool cycling_predictions;
-    int command_line_prediction_index;
-    int command_line_prediction_selected_index;
-    int command_line_prediction_count;
-    Command *command_line_predictions[32];
+    bool fuck_you;
+    CommandLine *command_line;
 
     EditMode edit_mode;
     EditMode next_edit_mode;

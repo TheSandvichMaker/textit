@@ -94,12 +94,18 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     }
 
     int64_t line = min_line;
-    LineData *data = &buffer->line_data[min_line];
+
+    LineData null_data = {};
+    LineData *data = &null_data;
+    if (!buffer->line_data.Empty())
+    {
+        data = &buffer->line_data[min_line];
+    }
 
     int64_t pos = data->range.start;
     view->visible_range.start = pos;
 
-    for (;;)
+    while (IsInBufferRange(buffer, pos))
     {
         if ((line + 1 == max_line) &&
             RangeSize(data->range) == 0)
@@ -159,7 +165,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         int64_t left_col = col;
 
-        for (;;)
+        while (IsInBufferRange(buffer, pos))
         {
             uint8_t b = ReadBufferByte(buffer, pos);
 
@@ -193,7 +199,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     {
                         foreground = text_preprocessor;
                     }
-                    else
+                    else if (buffer->language)
                     {
                         String string = MakeString(token->length, &buffer->text[token->pos]);
                         TokenKind kind = (TokenKind)PointerToInt(StringMapFind(buffer->language->idents, string));
@@ -402,7 +408,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     if (top_left.y + row < inner_bounds.max.y)
     {
         PushRect(Layer_Text,
-                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, top_left.y + row),
+                 MakeRect2iMinMax(MakeV2i(bounds.min.x + 1, top_left.y + Max(1, row)),
                                   MakeV2i(bounds.max.x - 1, bounds.max.y)),
                  text_background_unreachable);
     }
@@ -462,7 +468,7 @@ DrawView(View *view, bool is_active_window)
 
     int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
 
-    int64_t line_count = buffer->line_data.count;
+    int64_t line_count = Max(1, (int64_t)buffer->line_data.count);
     int64_t bounds_height = GetHeight(bounds) - 2;
     int64_t scrollbar_size = Max(1, bounds_height*bounds_height / line_count);
     int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*bounds_height / line_count);
@@ -478,45 +484,72 @@ DrawView(View *view, bool is_active_window)
 }
 
 function void
-DrawCommandLineInput()
+DrawCommandLine(CommandLine *cl)
 {
-    Color text_foreground = GetThemeColor("text_foreground"_id);
-    Color text_background = GetThemeColor("text_background"_id);
+    Color text_foreground    = GetThemeColor("text_foreground"_id);
+    Color text_background    = GetThemeColor("text_background"_id);
+    Color overlay_background = GetThemeColor("text_background_unreachable"_id);
+
+    int64_t total_width  = 0;
+    int64_t total_height = cl->prediction_count;
 
     V2i p = MakeV2i(2, render_state->viewport.max.y - 1);
-    if (editor->command_line_prediction_count > 0)
+    V2i text_p = p;
+    if (cl->name.size)
+    {
+        text_p = DrawLine(p, cl->name, MakeColor(192, 127, 127), text_background);
+        PushTile(Layer_OverlayText, text_p, MakeSprite(' ', text_foreground, text_background));
+        text_p.x += 1;
+    }
+
+    if (cl->prediction_count > 0)
     {
         int prediction_offset = 1;
-        for (int i = 0; i < editor->command_line_prediction_count; i += 1)
+        for (int i = 0; i < cl->prediction_count; i += 1)
         {
-            Command *other_prediction = editor->command_line_predictions[i];
+            String other_prediction = cl->predictions[i];
 
             Color color = MakeColor(127, 127, 127);
-            if (i == editor->command_line_prediction_selected_index)
+            if (i == cl->prediction_selected_index)
             {
                 color = MakeColor(192, 127, 127);
             }
 
-            DrawLine(p + MakeV2i(0, -prediction_offset), other_prediction->name, color, text_background);
+            if (i < 9)
+            {
+                PushTile(Layer_OverlayText, p + MakeV2i(0, -prediction_offset), MakeSprite('1' + i, MakeColor(128, 192, 128), overlay_background));
+                PushTile(Layer_OverlayText, p + MakeV2i(1, -prediction_offset), MakeSprite(' ', color, overlay_background));
+            }
+
+            for (size_t j = 0; j < other_prediction.size; j += 1)
+            {
+                Sprite sprite = MakeSprite(other_prediction.data[j], color, overlay_background);
+                PushTile(Layer_OverlayText, p + MakeV2i(2 + j, -prediction_offset), sprite);
+            }
+
+            total_width = Max(total_width, 2 + (int64_t)other_prediction.size);
+
             prediction_offset += 1;
         }
     }
 
-    for (int i = 0; i < editor->command_line_count + 1; i += 1)
+    PushRect(Layer_Overlay, MakeRect2iMinDim(p + MakeV2i(0, -total_height), MakeV2i(total_width, total_height)), overlay_background);
+
+    for (int i = 0; i < cl->count + 1; i += 1)
     {
         Sprite sprite;
-        if (i < editor->command_line_count)
+        if (i < cl->count)
         {
-            sprite = MakeSprite(editor->command_line[i], text_foreground, text_background);
+            sprite = MakeSprite(cl->text[i], text_foreground, text_background);
         }
         else
         {
             sprite = MakeSprite(0, text_foreground, text_background);
         }
-        if (i == editor->command_line_cursor)
+        if (i == cl->cursor)
         {
             Swap(sprite.foreground, sprite.background);
         }
-        PushTile(Layer_Text, p + MakeV2i(i, 0), sprite);
+        PushTile(Layer_OverlayText, text_p + MakeV2i(i, 0), sprite);
     }
 }
