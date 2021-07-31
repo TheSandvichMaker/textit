@@ -227,6 +227,25 @@ parse_operator:
                 }
             } break;
 
+            case '\'':
+            {
+                if (Peek(tok) != '\'')
+                {
+                    Match(tok, '\\');
+                    if (Peek(tok) != '\'')
+                    {
+                        tok->at++;
+                        if (Match(tok, '\''))
+                        {
+                            t.kind = Token_CharacterLiteral;
+                            break;
+                        }
+                    }
+                }
+
+                goto parse_operator;
+            } break;
+
             case '/':
             {
                 if (CharsLeft(tok) && Peek(tok) == '/')
@@ -420,6 +439,8 @@ PushCppLanguageSpec(Arena *arena)
 
     StringMapInsert(result->idents, "true"_str, IntToPointer(Token_Literal));
     StringMapInsert(result->idents, "false"_str, IntToPointer(Token_Literal));
+    StringMapInsert(result->idents, "nullptr"_str, IntToPointer(Token_Literal));
+    StringMapInsert(result->idents, "NULL"_str, IntToPointer(Token_Literal));
 
     StringMapInsert(result->idents, "void"_str, IntToPointer(Token_Type)); 
     StringMapInsert(result->idents, "char"_str, IntToPointer(Token_Type)); 

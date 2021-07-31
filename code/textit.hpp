@@ -24,6 +24,7 @@
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
 #include "textit_view.hpp"
+#include "textit_command_line.hpp"
 #include "textit_auto_indent.hpp"
 
 #define CURSOR_HASH_SIZE 512
@@ -157,28 +158,6 @@ struct CursorHashEntry
     Cursor cursor;
 };
 
-struct CommandLine
-{
-    Arena *arena;
-    String name;
-
-    int cursor;
-    int count;
-    uint8_t text[256];
-
-    bool cycling_predictions;
-    int prediction_index;
-    int prediction_selected_index;
-    int prediction_count;
-    String *predictions;
-
-    void (*GatherPredictions)(CommandLine *cl);
-    void (*AcceptEntry)(CommandLine *cl);
-};
-
-function CommandLine *BeginCommandLine();
-function void EndCommandLine();
-
 struct EditorState
 {
     GlobalState global_state;
@@ -192,7 +171,7 @@ struct EditorState
     Theme theme;
 
     InputMode input_mode;
-    bool fuck_you;
+    bool changed_command_line;
     CommandLine *command_line;
 
     EditMode edit_mode;
@@ -254,6 +233,7 @@ struct EditorState
 static EditorState *editor;
 
 function void ExecuteCommand(View *view, Command *command);
+function Buffer *OpenBufferFromFile(String filename);
 
 function Cursor *GetCursor(ViewID view, BufferID buffer);
 function Cursor *GetCursor(View *view, Buffer *buffer = nullptr);
@@ -269,7 +249,8 @@ function BufferIterator
 IterateBuffers(void)
 {
     BufferIterator result = {};
-    result.buffer = GetBuffer(editor->used_buffer_ids[0]);
+    result.index  = 1;
+    result.buffer = GetBuffer(editor->used_buffer_ids[1]);
     return result;
 }
 

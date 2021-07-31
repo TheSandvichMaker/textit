@@ -161,14 +161,12 @@ BootstrapPushStruct_(size_t Size, size_t Align, size_t arenaOffset, const char *
 }
 
 function Arena *
-PushSubArena(Arena *arena, size_t capacity = SIZE_MAX)
+PushSubArena(Arena *arena, size_t capacity)
 {
-    size_t max_capacity = GetSizeRemaining(arena, alignof(Arena));
-    if (capacity > max_capacity) capacity = max_capacity;
-
     Arena *result = PushStruct(arena, Arena);
-    result->capacity = capacity;
-    result->base     = (char *)(result + 1);
+    result->capacity  = capacity;
+    result->committed = capacity;
+    result->base      = PushArrayNoClear(arena, capacity, char);
     return result;
 }
 

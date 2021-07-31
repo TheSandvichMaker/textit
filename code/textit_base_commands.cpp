@@ -163,12 +163,11 @@ COMMAND_PROC(LoadOtherIndentRules,
 COMMAND_PROC(EnterCommandLineMode)
 {
     CommandLine *cl = BeginCommandLine();
+    cl->name = "Command"_str;
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
         if (cl->count == 0) return;
-
-        cl->predictions = PushArray(cl->arena, command_list->command_count, String);
 
         String command_string = MakeString(cl->count, cl->text);
         for (size_t i = 0; i < command_list->command_count; i += 1)
@@ -178,7 +177,10 @@ COMMAND_PROC(EnterCommandLineMode)
                 (command->flags & Command_Visible) &&
                 MatchPrefix(command->name, command_string, StringMatch_CaseInsensitive))
             {
-                cl->predictions[cl->prediction_count++] = command->name;
+                if (!AddPrediction(cl, command->name))
+                {
+                    break;
+                }
             }
         }
     };
@@ -192,7 +194,9 @@ COMMAND_PROC(EnterCommandLineMode)
             (command->flags & Command_Visible))
         {
             command->command();
+            return true;
         }
+        return true;
     };
 }
 
@@ -204,8 +208,6 @@ COMMAND_PROC(OpenBuffer,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        cl->predictions = PushArray(cl->arena, editor->buffer_count, String);
-
         String string = MakeString(cl->count, cl->text);
         for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
         {
@@ -213,7 +215,10 @@ COMMAND_PROC(OpenBuffer,
             if (string.size == 0 ||
                 MatchPrefix(buffer->name, string, StringMatch_CaseInsensitive))
             {
-                cl->predictions[cl->prediction_count++] = buffer->name;
+                if (!AddPrediction(cl, buffer->name))
+                {
+                    break;
+                }
             }
         }
     };
@@ -228,9 +233,38 @@ COMMAND_PROC(OpenBuffer,
             {
                 View *view = GetActiveView();
                 view->next_buffer = buffer->id;
+                return true;
+            }
+        }
+        return true;
+    };
+}
+
+COMMAND_PROC(OpenFile,
+             "Interactively open a file"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Open File"_str;
+    cl->no_quickselect = true;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = MakeString(cl->count, cl->text);
+        for (PlatformFileInfoIterator *it = platform->FindFiles(cl->arena, string); it->IsValid(it); it->Next(it))
+        {
+            if (!AddPrediction(cl, it->info.name))
+            {
                 break;
             }
         }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = MakeString(cl->count, cl->text);
+        View *view = GetActiveView();
+        view->next_buffer = OpenBufferFromFile(string)->id;
+        return true;
     };
 }
 
@@ -773,6 +807,11 @@ COMMAND_PROC(BackspaceChar)
         to_delete = newline_length;
     }
 
+    while (IsTrailingUtf8Byte(ReadBufferByte(buffer, pos - to_delete)))
+    {
+        to_delete += 1;
+    }
+
     int64_t line_start = FindLineStart(buffer, pos);
 
     int64_t consecutive_space_count = 0;
@@ -1182,7 +1221,7 @@ TEXT_COMMAND_PROC(WriteText)
                 (c == '\n' ||
                  c == '\t' ||
                  (c >= ' ' && c <= '~') ||
-                 (c >= 128)))
+                 c >= 128))
             {
                 buf[buf_at++] = c;
             }

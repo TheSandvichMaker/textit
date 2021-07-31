@@ -14,6 +14,7 @@ enum_flags(uint8_t, TokenKind)
     Token_String,
     Token_Number,
     Token_Literal,
+    Token_CharacterLiteral,
     Token_LineComment,
     Token_OpenBlockComment,
     Token_CloseBlockComment,
@@ -50,6 +51,7 @@ TokenThemeIndex(TokenKind kind)
         case Token_String:            return "text_string"_id;
         case Token_Number:            return "text_number"_id;
         case Token_Literal:           return "text_literal"_id;
+        case Token_CharacterLiteral:  return "text_literal"_id;
         case Token_LineComment:       return "text_line_comment"_id;
         case Token_OpenBlockComment:  return "text_line_comment"_id;
         case Token_CloseBlockComment: return "text_line_comment"_id;

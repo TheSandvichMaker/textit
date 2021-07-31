@@ -56,7 +56,7 @@ Win32_NextEvent(PlatformEventIterator *it, PlatformEvent *out_event)
 }
 
 function void
-PushEvent(const PlatformEvent &event)
+Win32_PushEvent(const PlatformEvent &event)
 {
     uint32_t read_index  = win32_state.event_read_index;
     uint32_t write_index = win32_state.event_write_index;
@@ -74,7 +74,7 @@ Win32_PushTickEvent(void)
 {
     PlatformEvent event = {};
     event.type = PlatformEvent_Tick;
-    PushEvent(event);
+    Win32_PushEvent(event);
 }
 
 static void *
@@ -206,31 +206,6 @@ Win32_Utf8ToUtf16(Arena *arena, const char *utf8, int length = -1)
     return result;
 }
 
-function uint8_t *
-Win32_Utf16ToUtf8(Arena *arena, const wchar_t *utf16, int *out_length = nullptr)
-{
-    uint8_t *result = nullptr;
-
-    int char_count = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, nullptr, 0, nullptr, nullptr);
-    result = PushArrayNoClear(arena, char_count, uint8_t);
-
-    if (result)
-    {
-        if (!WideCharToMultiByte(CP_UTF8, 0, utf16, -1, (LPSTR)result, char_count, nullptr, nullptr))
-        {
-            Win32_DisplayLastError();
-        }
-
-        if (out_length) *out_length = char_count - 1;
-    }
-    else
-    {
-        if (out_length) *out_length = 0;
-    }
-
-    return result;
-}
-
 function String_utf16
 Win32_Utf8ToUtf16(Arena *arena, String utf8)
 {
@@ -256,15 +231,15 @@ Win32_Utf8ToUtf16(Arena *arena, String utf8)
 }
 
 function String
-Win32_Utf16ToUtf8(Arena *arena, String_utf16 utf16)
+Win32_Utf16ToUtf8(Arena *arena, wchar_t *string, int size = -1)
 {
     String result = {};
 
-    result.size = (size_t)WideCharToMultiByte(CP_UTF8, 0, utf16.data, (int)utf16.size, nullptr, 0, nullptr, nullptr);
+    result.size = (size_t)WideCharToMultiByte(CP_UTF8, 0, string, size, nullptr, 0, nullptr, nullptr);
     result.data = PushArrayNoClear(arena, result.size + 1, uint8_t);
     if (result.data)
     {
-        if (!WideCharToMultiByte(CP_UTF8, 0, utf16.data, (int)utf16.size, (char *)result.data, (int)result.size, nullptr, nullptr))
+        if (!WideCharToMultiByte(CP_UTF8, 0, string, size, (char *)result.data, (int)result.size, nullptr, nullptr))
         {
             Win32_DisplayLastError();
         }
@@ -276,6 +251,13 @@ Win32_Utf16ToUtf8(Arena *arena, String_utf16 utf16)
         INVALID_CODE_PATH;
     }
 
+    return result;
+}
+
+function String
+Win32_Utf16ToUtf8(Arena *arena, String_utf16 utf16)
+{
+    String result = Win32_Utf16ToUtf8(arena, utf16.data, (int)utf16.size);
     return result;
 }
 
@@ -308,7 +290,7 @@ FormatWString(Arena *arena, wchar_t *fmt, ...)
     return result;
 }
 
-function char *
+function String
 FormatStringV(Arena *arena, char *fmt, va_list args_init)
 {
     va_list args_size;
@@ -317,22 +299,24 @@ FormatStringV(Arena *arena, char *fmt, va_list args_init)
     va_list args_fmt;
     va_copy(args_fmt, args_init);
 
-    int chars_required = vsnprintf(nullptr, 0, fmt, args_size) + 1;
+    String result = {};
+
+    result.size = vsnprintf(nullptr, 0, fmt, args_size);
     va_end(args_size);
 
-    char *result = PushArrayNoClear(arena, chars_required, char);
-    vsnprintf(result, chars_required, fmt, args_fmt);
+    result.data = PushArrayNoClear(arena, result.size + 1, uint8_t);
+    vsnprintf((char *)result.data, result.size + 1, fmt, args_fmt);
     va_end(args_fmt);
 
     return result;
 }
 
-function char *
+function String
 FormatString(Arena *arena, char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    char *result = FormatStringV(arena, fmt, args);
+    String result = FormatStringV(arena, fmt, args);
     va_end(args);
     return result;
 }
@@ -345,7 +329,7 @@ Win32_DebugPrint(char *fmt, ...)
 
     va_list args;
     va_start(args, fmt);
-    char *formatted = FormatStringV(arena, fmt, args);
+    char *formatted = (char *)FormatStringV(arena, fmt, args).data;
     va_end(args);
 
     wchar_t *fmt_wide = Win32_Utf8ToUtf16(arena, formatted);
@@ -364,7 +348,7 @@ Win32_LogPrint(PlatformLogLevel level, char *fmt, ...)
 
     va_list args;
     va_start(args, fmt);
-    char *formatted = FormatStringV(arena, fmt, args);
+    char *formatted = (char *)FormatStringV(arena, fmt, args).data;
     va_end(args);
 
     Win32_DebugPrint("LOG MESSAGE: %s\n", formatted);
@@ -475,7 +459,7 @@ Win32_ReportError(PlatformErrorType type, char *error, ...)
 
     va_list args;
     va_start(args, error);
-    char *formatted_error = FormatStringV(arena, error, args);
+    char *formatted_error = (char *)FormatStringV(arena, error, args).data;
     va_end(args);
 
     wchar_t *error_wide = Win32_Utf8ToUtf16(arena, formatted_error);
@@ -598,9 +582,7 @@ Win32_ReadClipboard(Arena *arena)
 
                         case CF_UNICODETEXT:
                         {
-                            int result_size;
-                            result.data = Win32_Utf16ToUtf8(arena, (wchar_t *)data, &result_size);
-                            result.size = (size_t)result_size;
+                            result = Win32_Utf16ToUtf8(arena, (wchar_t *)data);
                         } break;
                     }
                     GlobalUnlock(handle);
@@ -751,6 +733,66 @@ Win32_ReadFile(Arena *arena, String filename)
     }
 
     return result;
+}
+
+struct Win32FileInfoIterator
+{
+    PlatformFileInfoIterator it;
+    HANDLE handle;
+    WIN32_FIND_DATAW find_data;
+};
+
+function void
+Win32_UpdateIterFileInfo(PlatformFileInfoIterator *it)
+{
+    Win32FileInfoIterator *win32_it = (Win32FileInfoIterator *)it;
+    String query_path = GetPath(it->query);
+    // String  = Win32_Utf16ToUtf8(it->arena, win32_it->find_data.cFileName);
+    it->info.directory = !!(win32_it->find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    it->info.name = FormatString(it->arena, "%.*s%S%s",
+                                 StringExpand(query_path),
+                                 win32_it->find_data.cFileName,
+                                 it->info.directory ? "\\" : "");
+}
+
+static bool
+Win32_FileInfoIteratorIsValid(PlatformFileInfoIterator *it)
+{
+    Win32FileInfoIterator *win32_it = (Win32FileInfoIterator *)it;
+    return (win32_it->handle != INVALID_HANDLE_VALUE);
+}
+
+static void
+Win32_FileInfoIteratorNext(PlatformFileInfoIterator *it)
+{
+    Win32FileInfoIterator *win32_it = (Win32FileInfoIterator *)it;
+    if (FindNextFileW(win32_it->handle, &win32_it->find_data))
+    {
+        Win32_UpdateIterFileInfo(it);
+    }
+    else
+    {
+        win32_it->handle = INVALID_HANDLE_VALUE;
+    }
+}
+
+static PlatformFileInfoIterator *
+Win32_FindFiles(Arena *arena, String query)
+{
+    Win32FileInfoIterator *win32_it = PushStruct(arena, Win32FileInfoIterator);
+
+    PlatformFileInfoIterator *it = &win32_it->it;
+    it->arena   = arena;
+    it->query   = PushString(arena, query);
+    it->IsValid = Win32_FileInfoIteratorIsValid;
+    it->Next    = Win32_FileInfoIteratorNext;
+
+    wchar_t *wquery = FormatWString(arena, L"%.*S*", StringExpand(it->query));
+    win32_it->handle = FindFirstFileW(wquery, &win32_it->find_data);
+
+    Win32_UpdateIterFileInfo(it);
+
+    return &win32_it->it;
 }
 
 function void
@@ -1457,14 +1499,6 @@ Win32_CloseJobQueue(PlatformJobQueue *queue)
     CloseHandle(queue->done);
 }
 
-function bool
-Win32_RegisterFontFile(String file_name_utf8)
-{
-    String_utf16 file_name = Win32_Utf8ToUtf16(platform->GetTempArena(), file_name_utf8);
-    bool result = !!AddFontResourceExW(file_name.data, FR_PRIVATE, 0);
-    return result;
-}
-
 static uint8_t codepage_437_utf8[] =
 {
     0x0,  0xE2, 0x98, 0xBA, 0xE2, 0x98, 0xBB, 0xE2, 0x99, 0xA5, 0xE2, 0x99, 0xA6, 0xE2, 0x99, 0xA3,
@@ -1540,6 +1574,14 @@ static wchar_t codepage_437_ascii[] =
     224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
     240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
 };
+
+function bool
+Win32_RegisterFontFile(String file_name_utf8)
+{
+    String_utf16 file_name = Win32_Utf8ToUtf16(platform->GetTempArena(), file_name_utf8);
+    bool result = !!AddFontResourceExW(file_name.data, FR_PRIVATE, 0);
+    return result;
+}
 
 function bool
 Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, PlatformFontRasterFlags flags)
@@ -1700,7 +1742,7 @@ Win32_AppThread(LPVOID userdata)
         {
             PlatformEvent event = {};
             event.type = PlatformEvent_Redraw;
-            PushEvent(event);
+            Win32_PushEvent(event);
         }
 
         platform->render_w = client_w;
@@ -1848,6 +1890,7 @@ main(int, char **)
     platform->ReadFile               = Win32_ReadFile;
     platform->ReadFileInto           = Win32_ReadFileInto;
     platform->GetFileSize            = Win32_GetFileSize;
+    platform->FindFiles              = Win32_FindFiles;
     platform->GetTime                = Win32_GetTime;
     platform->RegisterFontFile       = Win32_RegisterFontFile;
     platform->MakeAsciiFont          = Win32_MakeAsciiFont;
@@ -1951,7 +1994,7 @@ main(int, char **)
                     event.ctrl_down = ctrl_down;
                     event.shift_down = shift_down;
                     event.input_code = (PlatformInputCode)vk_code; // I gave myself a 1:1 mapping of VK codes to platform input codes, so that's nice.
-                    PushEvent(event);
+                    Win32_PushEvent(event);
 
                     TranslateMessage(&message);
                 }
@@ -2001,7 +2044,7 @@ main(int, char **)
                     } break;
                 }
 
-                PushEvent(event);
+                Win32_PushEvent(event);
             } break;
 
             case WM_MOUSEMOVE:
@@ -2012,7 +2055,7 @@ main(int, char **)
                 event.shift_down = !!(message.wParam & MK_SHIFT);
                 event.pos_x = LOWORD(message.lParam);
                 event.pos_y = HIWORD(message.lParam);
-                PushEvent(event);
+                Win32_PushEvent(event);
             } break;
 
             case WM_CHAR:
@@ -2044,9 +2087,9 @@ main(int, char **)
                     }
                 }
                 event.type = PlatformEvent_Text;
-                event.text = Win32_Utf16ToUtf8(platform->GetTempArena(), chars, &event.text_length);
+                event.text = Win32_Utf16ToUtf8(platform->GetTempArena(), chars);
 
-                PushEvent(event);
+                Win32_PushEvent(event);
             } break;
 
             case WM_IME_CHAR:

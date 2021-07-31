@@ -408,8 +408,7 @@ struct PlatformEvent
 
     int pos_x, pos_y;
 
-    int text_length;
-    uint8_t *text;
+    String text;
 
     bool consumed_;
 };
@@ -466,6 +465,21 @@ struct PlatformEventIterator
 {
     PlatformEventFilter filter;
     uint32_t index;
+};
+
+struct PlatformFileInfo
+{
+    String name;
+    bool directory;
+};
+
+struct PlatformFileInfoIterator
+{
+    Arena *arena;
+    String query;
+    PlatformFileInfo info;
+    bool (*IsValid)(PlatformFileInfoIterator *it);
+    void (*Next)(PlatformFileInfoIterator *it);
 };
 
 struct Platform
@@ -525,6 +539,8 @@ struct Platform
     String (*ReadFile)(Arena *arena, String filename);
     size_t (*ReadFileInto)(size_t buffer_size, void *buffer, String filename);
     size_t (*GetFileSize)(String filename);
+
+    PlatformFileInfoIterator *(*FindFiles)(Arena *arena, String query);
 
     PlatformHighResTime (*GetTime)(void);
     double (*SecondsElapsed)(PlatformHighResTime start, PlatformHighResTime end);

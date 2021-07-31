@@ -10,9 +10,21 @@
 #include "textit_view.cpp"
 #include "textit_command.cpp"
 #include "textit_theme.cpp"
+#include "textit_draw.cpp"
+#include "textit_command_line.cpp"
 #include "textit_auto_indent.cpp"
 #include "textit_base_commands.cpp"
-#include "textit_draw.cpp"
+
+//
+// Idea for how to support big file editing
+// keep area around where I'm working in memory, page in the file as you scroll, any edits
+// that get paged out get written to temp file for caching, when you save the file the
+// in memory + cached edits applied to source file proper
+//
+// by limiting the in-memory text to a fixed size, we place a predictable load on the
+// tokenizer and insert memmove without needing to do anything incremental or gap-buffer
+// or whatever the crap
+//
 
 //
 // PRIOR ART: https://github.com/helix-editor/helix <--- look at how this lad does things
@@ -649,8 +661,9 @@ GetGlyphBitmap(Font *font, Glyph glyph)
 }
 
 function void
-ApplyMove(Cursor *cursor, Move move)
+ApplyMove(Buffer *buffer, Cursor *cursor, Move move)
 {
+    int direction = (move.pos >= cursor->pos ? 1 : -1);
     if (editor->clutch)
     {
         cursor->selection.inner = Union(cursor->selection.inner, move.selection.inner);
@@ -661,6 +674,11 @@ ApplyMove(Cursor *cursor, Move move)
     {
         cursor->selection = move.selection;
         cursor->pos = move.pos;
+    }
+    while (IsInBufferRange(buffer, cursor->pos + direction) &&
+           IsTrailingUtf8Byte(ReadBufferByte(buffer, cursor->pos)))
+    {
+        cursor->pos += direction;
     }
 }
 
@@ -684,7 +702,7 @@ ExecuteCommand(View *view, Command *command)
             Cursor *cursor = GetCursor(view);
 
             Move move = command->movement();
-            ApplyMove(cursor, move);
+            ApplyMove(GetBuffer(view), cursor, move);
 
             editor->last_movement   = command; 
             editor->last_move_flags = move.flags;
@@ -709,7 +727,7 @@ ExecuteCommand(View *view, Command *command)
                 else if (editor->next_edit_mode == EditMode_Command)
                 {
                     Move next_move = editor->last_movement->movement();
-                    ApplyMove(cursor, next_move);
+                    ApplyMove(GetBuffer(view), cursor, next_move);
                 }
             }
         } break;
@@ -730,7 +748,7 @@ HandleViewEvent(ViewID view_id, const PlatformEvent &event)
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
     if ((event.type == PlatformEvent_Text) && bindings->text_command)
     {
-        String text = MakeString(event.text_length, event.text);
+        String text = event.text;
         bindings->text_command->text(text);
     }
     else if (MatchFilter(event.type, PlatformEventFilter_KeyDown))
@@ -842,183 +860,6 @@ HandleViewEvent(ViewID view_id, const PlatformEvent &event)
     }
 
     return result;
-}
-
-function void
-EndCommandLine()
-{
-    editor->command_line = nullptr;
-    Clear(&editor->command_arena);
-}
-
-function CommandLine *
-BeginCommandLine()
-{
-    if (editor->command_line)
-    {
-        EndCommandLine();
-        editor->fuck_you = true;
-    }
-
-    CommandLine *cl = PushStruct(&editor->command_arena, CommandLine);
-    cl->arena = PushSubArena(&editor->command_arena);
-    editor->command_line = cl;
-    return cl;
-}
-
-function bool
-HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
-{
-    bool handled_any_events = false;
-
-    if (MatchFilter(event.type, PlatformEventFilter_Text|PlatformEventFilter_Keyboard))
-    {
-        handled_any_events = true;
-
-        if (event.type == PlatformEvent_Text)
-        {
-            String text = MakeString(event.text_length, event.text);
-
-            for (size_t i = 0; i < text.size; i += 1)
-            {
-                if (IsPrintableAscii(text.data[i]) && text.data[i] != ':')
-                {
-                    cl->cycling_predictions = false;
-
-                    size_t left = ArrayCount(cl->text) - cl->count;
-                    if (left > 0)
-                    {
-                        memmove(cl->text + cl->cursor + 1,
-                                cl->text + cl->cursor,
-                                left);
-                        cl->text[cl->cursor++] = text.data[i];
-                        cl->count += 1;
-                    }
-                }
-            }
-        }
-        else if (event.type == PlatformEvent_KeyDown)
-        {
-            cl->cycling_predictions = false;
-
-            switch (event.input_code)
-            {
-                INCOMPLETE_SWITCH;
-
-                case PlatformInputCode_Left:
-                {
-                    if (cl->cursor > 0)
-                    {
-                        cl->cursor -= 1;
-                    }
-                } break;
-
-                case PlatformInputCode_Right:
-                {
-                    if (cl->cursor < cl->count)
-                    {
-                        cl->cursor += 1;
-                    }
-                } break;
-
-                case PlatformInputCode_Escape:
-                {
-                    EndCommandLine();
-                } break;
-
-                case PlatformInputCode_1: case PlatformInputCode_2: case PlatformInputCode_3:
-                case PlatformInputCode_4: case PlatformInputCode_5: case PlatformInputCode_6:
-                case PlatformInputCode_7: case PlatformInputCode_8: case PlatformInputCode_9:
-                {
-                    int as_digit = (int)event.input_code - '0';
-
-                    cl->prediction_selected_index = as_digit - 1;
-                    cl->prediction_index = (as_digit) % cl->prediction_count;
-                } // FALLTHROUGH
-                case PlatformInputCode_Return:
-                {
-                    if (!cl->cycling_predictions && cl->prediction_count > 0)
-                    {
-                        String prediction = cl->predictions[0];
-
-                        cl->count = (int)prediction.size;
-                        CopyArray(cl->count, prediction.data, cl->text);
-                        cl->cursor = cl->count;
-                    }
-
-                    cl->AcceptEntry(cl);
-                    if (!editor->fuck_you)
-                    {
-                        EndCommandLine();
-                    }
-                } break;
-
-                case PlatformInputCode_Tab:
-                {
-                    cl->cycling_predictions = true;
-                    if (cl->prediction_count > 0)
-                    {
-                        int index = cl->prediction_index++;
-                        cl->prediction_selected_index = index;
-
-                        String prediction = cl->predictions[index];
-                        cl->prediction_index %= cl->prediction_count;
-
-                        cl->count = (int)prediction.size;
-                        CopyArray(cl->count, prediction.data, cl->text);
-                        cl->cursor = cl->count;
-                    }
-                } break;
-                
-                case PlatformInputCode_Back:
-                {
-                    size_t left = ArrayCount(cl->text) - cl->cursor;
-                    if (cl->cursor > 0)
-                    {
-                        memmove(cl->text + cl->cursor - 1,
-                                cl->text + cl->cursor,
-                                left);
-                        cl->cursor -= 1;
-                        cl->count  -= 1;
-                    }
-                } break;
-
-                case PlatformInputCode_Delete:
-                {
-                    size_t left = ArrayCount(cl->text) - cl->cursor;
-                    if (cl->count > cl->cursor)
-                    {
-                        memmove(cl->text + cl->cursor,
-                                cl->text + cl->cursor + 1,
-                                left);
-                        cl->count -= 1;
-                        if (cl->cursor > cl->count)
-                        {
-                            cl->cursor = cl->count;
-                        }
-                    }
-                } break;
-            }
-        }
-
-        if (!cl->cycling_predictions)
-        {
-            cl->prediction_count = 0;
-            cl->prediction_index = 0;
-            cl->prediction_selected_index = -1;
-            Clear(cl->arena);
-
-            cl->GatherPredictions(cl);
-            if (cl->prediction_index > cl->prediction_count)
-            {
-                cl->prediction_index = cl->prediction_count;
-            }
-        }
-
-        editor->fuck_you = false;
-    }
-
-    return handled_any_events;
 }
 
 void

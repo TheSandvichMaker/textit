@@ -271,6 +271,22 @@ GetExtension(String string)
     return result;
 }
 
+function String
+GetPath(String string)
+{
+    String result = string;
+    result.size   = 0;
+    for (size_t i = 0; i < string.size; i += 1)
+    {
+        if (string.data[i] == '/' ||
+            string.data[i] == '\\')
+        {
+            result.size = i + 1;
+        }
+    }
+    return result;
+}
+
 function bool
 MatchPrefix(String string, String prefix, StringMatchFlags flags = 0)
 {
