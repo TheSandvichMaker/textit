@@ -378,9 +378,11 @@ GetLineRanges(Buffer *buffer, int64_t line, Range *inner, Range *outer)
 {
     if (LineIsInBuffer(buffer, line))
     {
-        *inner = MakeRange(buffer->line_data[line].tokens->pos, // FIXME: WHACK!
-                           buffer->line_data[line].newline_pos);
-        *outer = buffer->line_data[line].range;
+        LineData *data = &buffer->line_data[line];
+        Token *t = &buffer->tokens[data->token_index];
+        *inner = MakeRange(t->pos, // FIXME: WHACK!
+                           data->newline_pos);
+        *outer = data->range;
     }
 }
 

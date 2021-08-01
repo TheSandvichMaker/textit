@@ -76,7 +76,7 @@ TokenizeBuffer(Buffer *buffer)
     LineData *line_data = buffer->line_data.Push();
     ZeroStruct(line_data);
 
-    line_data->tokens = buffer->tokens.data;
+    line_data->token_index = 0;
 
     Token *prev_token = nullptr;
 
@@ -117,7 +117,7 @@ TokenizeBuffer(Buffer *buffer)
                     }
 
                     line_data->range.end = tok->at - tok->start;
-                    line_data->token_count = buffer->tokens.count - tokens_at_start_of_line;
+                    line_data->token_count = (int16_t)(buffer->tokens.count - tokens_at_start_of_line);
                     
                     line_count += 1;
                     Assert(line_count <= 1000000);
@@ -130,7 +130,7 @@ TokenizeBuffer(Buffer *buffer)
                     ZeroStruct(line_data);
 
                     line_data->range.start = tok->at - tok->start;
-                    line_data->tokens = &buffer->tokens[buffer->tokens.count];
+                    line_data->token_index = (int32_t)buffer->tokens.count;
                     tokens_at_start_of_line = buffer->tokens.count;
                 }
             }

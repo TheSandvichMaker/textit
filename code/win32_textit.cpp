@@ -740,19 +740,16 @@ struct Win32FileInfoIterator
     PlatformFileInfoIterator it;
     HANDLE handle;
     WIN32_FIND_DATAW find_data;
+    char name_buffer[1024];
 };
 
 function void
 Win32_UpdateIterFileInfo(PlatformFileInfoIterator *it)
 {
     Win32FileInfoIterator *win32_it = (Win32FileInfoIterator *)it;
-    String query_path = GetPath(it->query);
-    // String  = Win32_Utf16ToUtf8(it->arena, win32_it->find_data.cFileName);
     it->info.directory = !!(win32_it->find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
-    it->info.name = FormatString(it->arena, "%.*s%S%s",
-                                 StringExpand(query_path),
-                                 win32_it->find_data.cFileName,
-                                 it->info.directory ? "\\" : "");
+    it->info.name.data = (uint8_t *)win32_it->name_buffer;
+    it->info.name.size = snprintf(win32_it->name_buffer, sizeof(win32_it->name_buffer), "%S", win32_it->find_data.cFileName);
 }
 
 static bool

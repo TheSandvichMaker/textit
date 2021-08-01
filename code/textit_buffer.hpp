@@ -57,18 +57,18 @@ enum_flags(int, BufferFlags)
     Buffer_ReadOnly = 0x2,
 };
 
-enum_flags(int, LineFlags)
+enum_flags(uint16_t, LineFlags)
 {
     Line_Empty = 0x1,
 };
 
 struct LineData
 {
-    Range range;
-    int64_t newline_pos;
-    LineFlags flags;
-    int token_count;
-    Token *tokens;
+    Range range;          // 16
+    int64_t newline_pos;  // 24
+    LineFlags flags;      // 26
+    int16_t token_count;  // 28
+    uint32_t token_index; // 32
 };
 
 #define TEXTIT_BUFFER_SIZE Megabytes(128)

@@ -238,6 +238,7 @@ struct ScopedMemory
     ScopedMemory(TemporaryMemory temp) : temp(temp) {}
     ~ScopedMemory() { EndTemporaryMemory(temp); }
     operator TemporaryMemory *() { return &temp; }
+    operator Arena *() { return temp.arena; }
 };
 
 template <typename T>

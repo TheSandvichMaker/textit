@@ -149,8 +149,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             }
         }
 
-        Token *token     = data->tokens;
-        Token *token_end = data->tokens + data->token_count;
+        Token *token     = &buffer->tokens[data->token_index];
+        Token *token_end = token + data->token_count;
 
         int64_t end   = data->range.end;
         int64_t col   = 0;

@@ -177,7 +177,7 @@ COMMAND_PROC(EnterCommandLineMode)
                 (command->flags & Command_Visible) &&
                 MatchPrefix(command->name, command_string, StringMatch_CaseInsensitive))
             {
-                if (!AddPrediction(cl, command->name))
+                if (!AddPrediction(cl, MakePrediction(command->name)))
                 {
                     break;
                 }
@@ -205,17 +205,34 @@ COMMAND_PROC(OpenBuffer,
 {
     CommandLine *cl = BeginCommandLine();
     cl->name = "Open Buffer"_str;
+    cl->no_quickselect = true;
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
         String string = MakeString(cl->count, cl->text);
+
+        String leaf;
+        String path = SplitPath(string, &leaf);
+
+        String ext;
+        String name = SplitExtension(leaf, &ext);
+
         for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
         {
             Buffer *buffer = it.buffer;
-            if (string.size == 0 ||
-                MatchPrefix(buffer->name, string, StringMatch_CaseInsensitive))
+
+            String test_ext = {};
+            String test_name = buffer->name;
+            if (ext.size)
             {
-                if (!AddPrediction(cl, buffer->name))
+                test_name = SplitExtension(test_name, &test_ext);
+            }
+
+            if (string.size == 0 ||
+                (FindSubstring(test_name, name, StringMatch_CaseInsensitive) != test_name.size &&
+                 (!ext.size || FindSubstring(test_ext, ext, StringMatch_CaseInsensitive) != test_ext.size)))
+            {
+                if (!AddPrediction(cl, MakePrediction(buffer->name)))
                 {
                     break;
                 }
@@ -244,17 +261,52 @@ COMMAND_PROC(OpenFile,
              "Interactively open a file"_str)
 {
     CommandLine *cl = BeginCommandLine();
-    cl->name = "Open File"_str;
+    cl->name           = "Open File"_str;
     cl->no_quickselect = true;
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
         String string = MakeString(cl->count, cl->text);
-        for (PlatformFileInfoIterator *it = platform->FindFiles(cl->arena, string); it->IsValid(it); it->Next(it))
+
+        String leaf;
+        String path = SplitPath(string, &leaf);
+
+        String ext;
+        String name = SplitExtension(leaf, &ext);
+
+        char *separator = "/";
+        if (PeekEnd(path) == '\\') separator = "\\";
+
+        for (PlatformFileInfoIterator *it = platform->FindFiles(cl->arena, path); it->IsValid(it); it->Next(it))
         {
-            if (!AddPrediction(cl, it->info.name))
+            if (AreEqual(it->info.name, "."_str) ||
+                AreEqual(it->info.name, ".."_str))
             {
-                break;
+                continue;
+            }
+
+            String test_ext = {};
+            String test_name = it->info.name;
+            if (ext.size)
+            {
+                test_name = SplitExtension(test_name, &test_ext);
+            }
+
+            if (FindSubstring(test_name, name, StringMatch_CaseInsensitive) != test_name.size &&
+                (!ext.size || FindSubstring(test_ext, ext, StringMatch_CaseInsensitive) != test_ext.size))
+            {
+                Prediction prediction = {};
+                prediction.text         = PushTempStringF("%.*s%.*s%s", StringExpand(path), StringExpand(it->info.name), it->info.directory ? separator : "");
+                prediction.preview_text = it->info.name;
+                if (it->info.directory)
+                {
+                    prediction.incomplete = true;
+                    prediction.color      = "command_line_option_directory"_id;
+                }
+                if (!AddPrediction(cl, prediction))
+                {
+                    break;
+                }
             }
         }
     };
@@ -663,6 +715,8 @@ MOVEMENT_PROC(EncloseParameter)
     NestHelper nests = {};
     TokenIterator it = SeekTokenIterator(buffer, pos);
 
+    TokenKind open_token = 0;
+
     while (IsValid(&it) || alternative_start)
     {
         if (!IsValid(&it) && alternative_start)
@@ -687,6 +741,7 @@ MOVEMENT_PROC(EncloseParameter)
         }
 
         if (t->kind == Token_RightParen ||
+            t->kind == Token_RightScope ||
             t->kind == ',')
         {
             end_kind      = t->kind;
@@ -700,6 +755,10 @@ MOVEMENT_PROC(EncloseParameter)
                 {
                     end_pos = next->pos;
                 }
+            }
+            else
+            {
+                open_token = GetOtherNestTokenKind(t->kind);
             }
             break;
         }
@@ -718,7 +777,10 @@ MOVEMENT_PROC(EncloseParameter)
                 continue;
             }
 
-            if (t->kind == Token_LeftParen ||
+            if ((!open_token &&
+                 (t->kind == Token_LeftParen   ||
+                  t->kind == Token_LeftScope)) ||
+                t->kind == open_token          ||
                 t->kind == ',')
             {
                 int64_t inner_start_pos = t->pos + t->length;
@@ -731,7 +793,7 @@ MOVEMENT_PROC(EncloseParameter)
 
                 int64_t start_pos = inner_start_pos;
                 if (t->kind  == ',' &&
-                    end_kind == Token_RightParen)
+                    end_kind != ',')
                 {
                     start_pos = t->pos;
                 }

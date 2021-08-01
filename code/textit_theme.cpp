@@ -57,14 +57,22 @@ LoadDefaultTheme()
     SetThemeColor("text_background"_id, MakeColor(12, 20, 32));
     SetThemeColor("text_background_unreachable"_id, MakeColor(24, 40, 64));
     SetThemeColor("text_background_highlighted"_id, MakeColor(48, 80, 128));
+    SetThemeColor("unrenderable_text_foreground"_id, MakeColor(255, 255, 255));
+    SetThemeColor("unrenderable_text_background"_id, MakeColor(192, 0, 0));
+
     SetThemeColor("filebar_text_foreground"_id, MakeColor(0, 0, 0));
     SetThemeColor("filebar_text_background"_id, MakeColor(192, 255, 128));
     SetThemeColor("filebar_text_inactive"_id, MakeColor(128, 128, 128));
     SetThemeColor("filebar_text_background_text_mode"_id, MakeColor(255, 192, 128));
     SetThemeColor("filebar_text_background_clutch"_id, MakeColor(64, 128, 255));
-    SetThemeColor("unrenderable_text_foreground"_id, MakeColor(255, 255, 255));
-    SetThemeColor("unrenderable_text_background"_id, MakeColor(192, 0, 0));
+
     SetThemeColor("inner_selection_background"_id, MakeColor(32, 96, 128));
     SetThemeColor("outer_selection_background"_id, MakeColor(128, 96, 32));
     SetThemeColor("line_highlight"_id, MakeColor(18, 30, 48));
+
+    SetThemeColor("command_line_name"_id, MakeColor(192, 128, 128));
+    SetThemeColor("command_line_option"_id, MakeColor(128, 128, 128));
+    SetThemeColor("command_line_option_selected"_id, MakeColor(192, 128, 128));
+    SetThemeColor("command_line_option_numbers"_id, MakeColor(128, 192, 128));
+    SetThemeColor("command_line_option_directory"_id, MakeColor(192, 192, 128));
 }

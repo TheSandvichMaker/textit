@@ -30,10 +30,6 @@ enum_flags(uint8_t, TokenKind)
     Token_RightScope,
     Token_LastOperator = Token_RightScope,
 
-    // "ghost" tokens, mark-up of the code for convenience that doesn't match actual physical characters
-
-    Token_LineEnd,
-
     Token_COUNT,
 };
 

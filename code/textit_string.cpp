@@ -257,22 +257,35 @@ AreEqual(const String &a, const String &b, StringMatchFlags flags = 0)
 }
 
 function String
-GetExtension(String string)
+SplitExtension(String string, String *right)
 {
-    String result = {};
-    for (size_t i = 0; i < string.size - 1; i += 1)
+    String result = string;
+    if (right)
     {
-        if (string.data[i] == '.')
+        right->data = string.data;
+        right->size = 0;
+    }
+    if (string.size > 0)
+    {
+        for (size_t i = 0; i < string.size ; i += 1)
         {
-            result.data = string.data + i + 1;
-            result.size = i - string.size - 1;
+            if (string.data[i] == '.')
+            {
+                result.data = string.data;
+                result.size = i;
+                if (right && i + 1 < string.size)
+                {
+                    right->data = string.data + i + 1;
+                    right->size = string.size - i - 1;
+                }
+            }
         }
     }
     return result;
 }
 
 function String
-GetPath(String string)
+SplitPath(String string, String *leaf = nullptr)
 {
     String result = string;
     result.size   = 0;
@@ -284,6 +297,22 @@ GetPath(String string)
             result.size = i + 1;
         }
     }
+    if (leaf)
+    {
+        leaf->data = string.data + result.size;
+        leaf->size = string.size - result.size;
+    }
+    return result;
+}
+
+function uint8_t
+PeekEnd(String string)
+{
+    uint8_t result = 0;
+    if (string.size > 0)
+    {
+        result = string.data[string.size - 1];
+    }
     return result;
 }
 
@@ -293,6 +322,89 @@ MatchPrefix(String string, String prefix, StringMatchFlags flags = 0)
     if (prefix.size > string.size) return false;
     if (string.size > prefix.size) string.size = prefix.size;
     return AreEqual(string, prefix, flags);
+}
+
+function size_t
+FindSubstring(String text, String pattern, StringMatchFlags flags = 0)
+{
+    size_t m = pattern.size;
+    size_t R = ~1ull;
+    size_t pattern_mask[256];
+
+    if (m == 0) return 0;
+    if (m >= 8*sizeof(size_t)) return text.size; // too long
+
+    for (size_t i = 0; i < 256; i += 1) pattern_mask[i] = ~0ull;
+    for (size_t i = 0; i < m;   i += 1)
+    {
+        uint8_t c = pattern.data[i];
+        if (flags & StringMatch_CaseInsensitive) c = ToLowerAscii(c);
+        pattern_mask[c] &= ~(1ull << i);
+    }
+
+    for (size_t i = 0; i < text.size; i += 1)
+    {
+        uint8_t c = text.data[i];
+        if (flags & StringMatch_CaseInsensitive) c = ToLowerAscii(c);
+        R |= pattern_mask[c];
+        R <<= 1;
+
+        if ((R & (1ull << m)) == 0)
+        {
+            return i - m + 1;
+        }
+    }
+
+    return text.size;
+}
+
+function int
+LevenshteinDistance(String s, String t)
+{
+    int n = (int)s.size;
+    int m = (int)t.size;
+    int stride = n + 1;
+
+    ScopedMemory temp(platform->GetTempArena());
+    int *matrix = PushArray(temp, (n + 1)*(m + 1), int);
+
+    auto SetCell = [&matrix, stride](int x, int y, int value)
+    {
+        matrix[y*stride + x] = value;
+    };
+
+    auto GetCell = [&matrix, stride](int x, int y)
+    {
+        return matrix[y*stride + x];
+    };
+
+    auto Min3 = [](int a, int b, int c)
+    {
+        int result = a;
+        if (b < result) result = b;
+        if (c < result) result = c;
+        return result;
+    };
+
+    for (int i = 1; i <= n; i += 1) SetCell(i, 0, i);
+    for (int i = 1; i <= m; i += 1) SetCell(0, i, i);
+
+    for (int i = 1; i <= n; i += 1)
+    {
+        uint8_t s_i = s.data[i - 1];
+        for (int j = 1; j <= m; j += 1)
+        {
+            uint8_t t_j = t.data[j - 1];
+
+            int cost = (s_i == t_j ? 0 : 1);
+            int value = Min3(GetCell(i - 1, j) + 1,
+                             GetCell(i, j - 1) + 1,
+                             GetCell(i - 1, j - 1) + cost);
+            SetCell(i, j, value);
+        }
+    }
+
+    return GetCell(n, m);
 }
 
 function String
@@ -313,6 +425,16 @@ PushStringSpace(Arena *arena, int64_t size)
     result.size = size;
     result.data = PushArray(arena, result.size + 1, uint8_t);
     result.data[result.size] = 0;
+    return result;
+}
+
+function size_t
+FormatStringBuffer(size_t size, uint8_t *buffer, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    size_t result = vsnprintf((char *const)buffer, size, fmt, args);
+    va_end(args);
     return result;
 }
 
