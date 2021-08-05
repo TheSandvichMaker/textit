@@ -616,8 +616,8 @@ Win32_GetFileSize(String filename)
 {
     size_t result = 0;
 
-    ScopedMemory filename_temp_memory(platform->GetTempArena());
-    wchar_t *file_wide = Win32_Utf8ToUtf16(platform->GetTempArena(), (char *)filename.data, (int)filename.size);
+    ScopedMemory temp(platform->GetTempArena());
+    wchar_t *file_wide = Win32_Utf8ToUtf16(temp, (char *)filename.data, (int)filename.size);
 
     HANDLE handle = CreateFileW(file_wide, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     if (handle != INVALID_HANDLE_VALUE)
@@ -636,6 +636,14 @@ Win32_GetFileSize(String filename)
     return result;
 }
 
+static bool
+Win32_SetWorkingDirectory(String path)
+{
+    wchar_t *wpath = Win32_Utf8ToUtf16(platform->GetTempArena(), (char *)path.data, (int)path.size);
+    bool result = SetCurrentDirectory(wpath);
+    return result;
+}
+
 static size_t
 Win32_ReadFileInto(size_t buffer_size, void *buffer, String filename)
 {
@@ -643,8 +651,8 @@ Win32_ReadFileInto(size_t buffer_size, void *buffer, String filename)
 
     size_t result = 0;
 
-    ScopedMemory filename_temp_memory(platform->GetTempArena());
-    wchar_t *file_wide = Win32_Utf8ToUtf16(platform->GetTempArena(), (char *)filename.data, (int)filename.size);
+    ScopedMemory temp(platform->GetTempArena());
+    wchar_t *file_wide = Win32_Utf8ToUtf16(temp, (char *)filename.data, (int)filename.size);
 
     HANDLE handle = CreateFileW(file_wide, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     if (handle != INVALID_HANDLE_VALUE)
@@ -692,8 +700,8 @@ Win32_ReadFile(Arena *arena, String filename)
 {
     String result = {};
 
-    ScopedMemory filename_temp_memory(platform->GetTempArena());
-    wchar_t *file_wide = Win32_Utf8ToUtf16(platform->GetTempArena(), (char *)filename.data, (int)filename.size);
+    ScopedMemory temp(platform->GetTempArena());
+    wchar_t *file_wide = Win32_Utf8ToUtf16(temp, (char *)filename.data, (int)filename.size);
 
     HANDLE handle = CreateFileW(file_wide, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     if (handle != INVALID_HANDLE_VALUE)
@@ -735,37 +743,37 @@ Win32_ReadFile(Arena *arena, String filename)
     return result;
 }
 
-struct Win32FileInfoIterator
+struct Win32FileIterator
 {
-    PlatformFileInfoIterator it;
+    PlatformFileIterator it;
     HANDLE handle;
     WIN32_FIND_DATAW find_data;
     char name_buffer[1024];
 };
 
 function void
-Win32_UpdateIterFileInfo(PlatformFileInfoIterator *it)
+Win32_UpdateFileIterData(PlatformFileIterator *it)
 {
-    Win32FileInfoIterator *win32_it = (Win32FileInfoIterator *)it;
+    Win32FileIterator *win32_it = (Win32FileIterator *)it;
     it->info.directory = !!(win32_it->find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
     it->info.name.data = (uint8_t *)win32_it->name_buffer;
     it->info.name.size = snprintf(win32_it->name_buffer, sizeof(win32_it->name_buffer), "%S", win32_it->find_data.cFileName);
 }
 
 static bool
-Win32_FileInfoIteratorIsValid(PlatformFileInfoIterator *it)
+Win32_FileIteratorIsValid(PlatformFileIterator *it)
 {
-    Win32FileInfoIterator *win32_it = (Win32FileInfoIterator *)it;
+    Win32FileIterator *win32_it = (Win32FileIterator *)it;
     return (win32_it->handle != INVALID_HANDLE_VALUE);
 }
 
 static void
-Win32_FileInfoIteratorNext(PlatformFileInfoIterator *it)
+Win32_FileIteratorNext(PlatformFileIterator *it)
 {
-    Win32FileInfoIterator *win32_it = (Win32FileInfoIterator *)it;
+    Win32FileIterator *win32_it = (Win32FileIterator *)it;
     if (FindNextFileW(win32_it->handle, &win32_it->find_data))
     {
-        Win32_UpdateIterFileInfo(it);
+        Win32_UpdateFileIterData(it);
     }
     else
     {
@@ -773,21 +781,17 @@ Win32_FileInfoIteratorNext(PlatformFileInfoIterator *it)
     }
 }
 
-static PlatformFileInfoIterator *
+static PlatformFileIterator *
 Win32_FindFiles(Arena *arena, String query)
 {
-    Win32FileInfoIterator *win32_it = PushStruct(arena, Win32FileInfoIterator);
+    Win32FileIterator *win32_it = PushStruct(arena, Win32FileIterator);
 
-    PlatformFileInfoIterator *it = &win32_it->it;
-    it->arena   = arena;
-    it->query   = PushString(arena, query);
-    it->IsValid = Win32_FileInfoIteratorIsValid;
-    it->Next    = Win32_FileInfoIteratorNext;
+    PlatformFileIterator *it = &win32_it->it;
 
-    wchar_t *wquery = FormatWString(arena, L"%.*S*", StringExpand(it->query));
+    wchar_t *wquery = FormatWString(platform->GetTempArena(), L"%.*S*", StringExpand(query));
     win32_it->handle = FindFirstFileW(wquery, &win32_it->find_data);
 
-    Win32_UpdateIterFileInfo(it);
+    Win32_UpdateFileIterData(it);
 
     return &win32_it->it;
 }
@@ -1687,12 +1691,43 @@ Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, Platfo
     return result;
 }
 
+static void
+Win32_LoadDefaultFonts()
+{
+    wchar_t *font_folder = FormatWString(platform->GetTempArena(), L"\\\\?\\%s\\fonts\\*", win32_state.exe_folder);
+
+    WIN32_FIND_DATAW find_data;
+    HANDLE handle = FindFirstFileW(font_folder, &find_data);
+    if (handle != INVALID_HANDLE_VALUE)
+    {
+        for (;;)
+        {
+            if (find_data.cFileName[0] != '.')
+            {
+                wchar_t *full_path = FormatWString(platform->GetTempArena(), L"\\\\?\\%s\\fonts\\%s", win32_state.exe_folder, find_data.cFileName);
+                bool succeeded = AddFontResourceExW(full_path, FR_PRIVATE, 0);
+                if (!succeeded)
+                {
+                    platform->DebugPrint("%S failed to load as a font\n", find_data.cFileName);
+                }
+            }
+            if (!FindNextFileW(handle, &find_data))
+            {
+                break;
+            }
+        }
+    }
+}
+
 static DWORD WINAPI
 Win32_AppThread(LPVOID userdata)
 {
     UNUSED_VARIABLE(userdata);
 
     HWND window = win32_state.window;
+
+    ThreadLocalContext tls_context = {};
+    Win32_InitializeTLSForThread(&tls_context);
 
     win32_state.exe_folder = FindExeFolderLikeAMonkeyInAMonkeySuit();
     win32_state.dll_path   = FormatWString(&win32_state.arena, L"\\\\?\\%s\\textit.dll", win32_state.exe_folder);
@@ -1704,8 +1739,7 @@ Win32_AppThread(LPVOID userdata)
     }
      platform->exe_reloaded = true;
 
-    ThreadLocalContext tls_context = {};
-    Win32_InitializeTLSForThread(&tls_context);
+     Win32_LoadDefaultFonts();
 
     HCURSOR arrow_cursor = LoadCursorW(nullptr, IDC_ARROW);
 
@@ -1884,10 +1918,13 @@ main(int, char **)
     platform->GetTempArena           = Win32_GetTempArena;
     platform->AddJob                 = Win32_AddJob;
     platform->WaitForJobs            = Win32_WaitForJobs;
+    platform->SetWorkingDirectory    = Win32_SetWorkingDirectory;
     platform->ReadFile               = Win32_ReadFile;
     platform->ReadFileInto           = Win32_ReadFileInto;
     platform->GetFileSize            = Win32_GetFileSize;
     platform->FindFiles              = Win32_FindFiles;
+    platform->FileIteratorIsValid    = Win32_FileIteratorIsValid;
+    platform->FileIteratorNext       = Win32_FileIteratorNext;
     platform->GetTime                = Win32_GetTime;
     platform->RegisterFontFile       = Win32_RegisterFontFile;
     platform->MakeAsciiFont          = Win32_MakeAsciiFont;
@@ -2013,6 +2050,8 @@ main(int, char **)
                                  message.message == WM_RBUTTONDOWN ||
                                  message.message == WM_XBUTTONDOWN);
                 event.type = (event.pressed ? PlatformEvent_MouseDown : PlatformEvent_MouseUp);
+                event.ctrl_down = !!(GetKeyState(VK_CONTROL) & 0xFF00);
+                event.shift_down = !!(GetKeyState(VK_SHIFT) & 0xFF00);
                 switch (message.message)
                 {
                     case WM_LBUTTONDOWN: case WM_LBUTTONUP:
@@ -2058,6 +2097,9 @@ main(int, char **)
             case WM_CHAR:
             {
                 PlatformEvent event = {};
+
+                event.ctrl_down = !!(GetKeyState(VK_CONTROL) & 0xFF00);
+                event.shift_down = !!(GetKeyState(VK_SHIFT) & 0xFF00);
 
                 wchar_t chars[3] = {};
 

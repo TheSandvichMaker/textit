@@ -15,15 +15,14 @@ enum_flags(uint8_t, TokenKind)
     Token_Number,
     Token_Literal,
     Token_CharacterLiteral,
+    Token_Function,
     Token_LineComment,
     Token_OpenBlockComment,
     Token_CloseBlockComment,
     Token_Type,
 
     Token_FirstOperator,
-    Token_Equals = Token_FirstOperator,
-    Token_Assignment,
-    Token_NotEquals,
+    Token_Operator = Token_FirstOperator,
     Token_LeftParen,
     Token_RightParen,
     Token_LeftScope,
@@ -48,6 +47,7 @@ TokenThemeIndex(TokenKind kind)
         case Token_Number:            return "text_number"_id;
         case Token_Literal:           return "text_literal"_id;
         case Token_CharacterLiteral:  return "text_literal"_id;
+        case Token_Function:          return "text_function"_id;
         case Token_LineComment:       return "text_line_comment"_id;
         case Token_OpenBlockComment:  return "text_line_comment"_id;
         case Token_CloseBlockComment: return "text_line_comment"_id;

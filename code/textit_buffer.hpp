@@ -57,18 +57,23 @@ enum_flags(int, BufferFlags)
     Buffer_ReadOnly = 0x2,
 };
 
-enum_flags(uint16_t, LineFlags)
+enum_flags(uint8_t, LineFlags)
 {
     Line_Empty = 0x1,
 };
 
+enum_flags(uint8_t, LineTokenizeState)
+{
+};
+
 struct LineData
 {
-    Range range;          // 16
-    int64_t newline_pos;  // 24
-    LineFlags flags;      // 26
-    int16_t token_count;  // 28
-    uint32_t token_index; // 32
+    Range             range;          // 16
+    int64_t           newline_pos;    // 24
+    LineFlags         flags;          // 25
+    LineTokenizeState tokenize_state; // 26
+    int16_t           token_count;    // 28
+    uint32_t          token_index;    // 32
 };
 
 #define TEXTIT_BUFFER_SIZE Megabytes(128)
@@ -104,8 +109,8 @@ struct Buffer : TextStorage
 
     LineData null_line_data;
 
-    VirtualArray<Token, 32'000'000> tokens;
-    VirtualArray<LineData, 8'000'000> line_data;
+    VirtualArray<Token> tokens;
+    VirtualArray<LineData> line_data;
 };
 
 function Buffer *GetBuffer(BufferID id);
@@ -152,6 +157,41 @@ MakeTokenIterator(Buffer *buffer, int index, int count = 0)
     return result;
 }
 
+function uint32_t
+FindTokenIndexForPos(Buffer *buffer, int64_t pos)
+{
+    uint32_t result = 0;
+
+    int64_t token_count = buffer->tokens.count;
+    int64_t lo = 0;
+    int64_t hi = token_count - 1;
+    while (lo <= hi)
+    {
+        int64_t index = (lo + hi) / 2;
+        Token *t = &buffer->tokens[index];
+        if (pos < t->pos)
+        {
+            hi = index - 1;
+        }
+        else if (pos >= t->pos + t->length)
+        {
+            lo = index + 1;
+        }
+        else
+        {
+            result = (uint32_t)index;
+            break;
+        }
+    }
+
+    if (lo > hi)
+    {
+        result = (uint32_t)lo;
+    }
+
+    return result;
+}
+
 function TokenIterator
 SeekTokenIterator(Buffer *buffer, int64_t pos = 0)
 {
@@ -160,37 +200,7 @@ SeekTokenIterator(Buffer *buffer, int64_t pos = 0)
     TokenIterator result = {};
     result.tokens     = buffer->tokens.data;
     result.tokens_end = result.tokens + buffer->tokens.count;
-    result.token      = result.tokens;
-
-    if (pos != 0)
-    {
-        int64_t token_count = buffer->tokens.count;
-        int64_t lo = 0;
-        int64_t hi = token_count - 1;
-        while (lo <= hi)
-        {
-            int64_t index = (lo + hi) / 2;
-            Token *t = &buffer->tokens[index];
-            if (pos < t->pos)
-            {
-                hi = index - 1;
-            }
-            else if (pos >= t->pos + t->length)
-            {
-                lo = index + 1;
-            }
-            else
-            {
-                result.token = t;
-                break;
-            }
-        }
-
-        if (lo > hi)
-        {
-            result.token = &buffer->tokens[lo];
-        }
-    }
+    result.token      = &buffer->tokens[FindTokenIndexForPos(buffer, pos)];
 
     return result;
 }

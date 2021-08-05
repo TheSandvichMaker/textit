@@ -175,7 +175,7 @@ COMMAND_PROC(EnterCommandLineMode)
             Command *command = &command_list->commands[i];
             if ((command->kind == Command_Basic) &&
                 (command->flags & Command_Visible) &&
-                MatchPrefix(command->name, command_string, StringMatch_CaseInsensitive))
+                (FindSubstring(command->name, command_string, StringMatch_CaseInsensitive) != command->name.size))
             {
                 if (!AddPrediction(cl, MakePrediction(command->name)))
                 {
@@ -216,6 +216,12 @@ COMMAND_PROC(OpenBuffer,
 
         String ext;
         String name = SplitExtension(leaf, &ext);
+
+        // FindSubstring implementation is limited to patterns smaller than bit count of size_t
+        // so for now I'll just do this
+        size_t size_bits = 8*sizeof(size_t);
+        if (ext.size  >= size_bits) ext.size  = size_bits - 1;
+        if (name.size >= size_bits) name.size = size_bits - 1;
 
         for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
         {
@@ -274,10 +280,18 @@ COMMAND_PROC(OpenFile,
         String ext;
         String name = SplitExtension(leaf, &ext);
 
+        // FindSubstring implementation is limited to patterns smaller than bit count of size_t
+        // so for now I'll just do this
+        size_t size_bits = 8*sizeof(size_t);
+        if (ext.size  >= size_bits) ext.size  = size_bits - 1;
+        if (name.size >= size_bits) name.size = size_bits - 1;
+
         char *separator = "/";
         if (PeekEnd(path) == '\\') separator = "\\";
 
-        for (PlatformFileInfoIterator *it = platform->FindFiles(cl->arena, path); it->IsValid(it); it->Next(it))
+        for (PlatformFileIterator *it = platform->FindFiles(platform->GetTempArena(), path);
+             platform->FileIteratorIsValid(it);
+             platform->FileIteratorNext(it))
         {
             if (AreEqual(it->info.name, "."_str) ||
                 AreEqual(it->info.name, ".."_str))
@@ -318,6 +332,120 @@ COMMAND_PROC(OpenFile,
         view->next_buffer = OpenBufferFromFile(string)->id;
         return true;
     };
+}
+
+COMMAND_PROC(ChangeWorkingDirectory,
+             "Change the working directory"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name           = "Change Working Directory"_str;
+    cl->no_quickselect = true;
+    cl->no_autoaccept  = true;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = MakeString(cl->count, cl->text);
+        String path   = SplitPath(string);
+
+        char *separator = "/";
+        if (PeekEnd(path) == '\\') separator = "\\";
+
+        for (PlatformFileIterator *it = platform->FindFiles(platform->GetTempArena(), string);
+             platform->FileIteratorIsValid(it);
+             platform->FileIteratorNext(it))
+        {
+            if (AreEqual(it->info.name, "."_str) ||
+                AreEqual(it->info.name, ".."_str))
+            {
+                continue;
+            }
+
+            if (it->info.directory)
+            {
+                Prediction prediction = {};
+                prediction.text         = PushTempStringF("%.*s%.*s%s", StringExpand(path), StringExpand(it->info.name), separator);
+                prediction.preview_text = it->info.name;
+                prediction.color        = "command_line_option_directory"_id;
+                if (!AddPrediction(cl, prediction))
+                {
+                    break;
+                }
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = MakeString(cl->count, cl->text);
+        platform->SetWorkingDirectory(string);
+        return true;
+    };
+}
+
+COMMAND_PROC(Set,
+             "Set a config value"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Set"_str;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = MakeString(cl->count, cl->text);
+
+        for (size_t i = 0; i < Introspection<CoreConfig>::member_count; i += 1)
+        {
+            const MemberInfo *member = &Introspection<CoreConfig>::members[i];
+
+            String name = SplitWord(member->name);
+            if (FindSubstring(name, string, StringMatch_CaseInsensitive) != name.size)
+            {
+                Prediction prediction = {};
+                prediction.text = name;
+
+                String formatted_value = FormatMember(member, GetMemberPointer(core_config, member));
+                prediction.preview_text = PushTempStringF("%-32.*s %.*s", StringExpand(name), StringExpand(formatted_value));
+                if (!AddPrediction(cl, prediction))
+                {
+                    break;
+                }
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = MakeString(cl->count, cl->text);
+
+        cl = BeginCommandLine();
+        cl->name = string;
+        cl->AcceptEntry = [](CommandLine *cl)
+        {
+            String string = MakeString(cl->count, cl->text);
+
+            for (size_t i = 0; i < Introspection<CoreConfig>::member_count; i += 1)
+            {
+                const MemberInfo *member = &Introspection<CoreConfig>::members[i];
+
+                String short_name = SplitWord(member->name);
+                if (AreEqual(short_name, cl->name))
+                {
+                    return ParseAndWriteMember(core_config, member, string);
+                }
+            }
+
+            return true;
+        };
+
+        return true;
+    };
+}
+
+COMMAND_PROC(ResetSelection)
+{
+    View *view = GetActiveView();
+    Cursor *cursor = GetCursor(view);
+    cursor->selection.inner = MakeRange(cursor->pos);
+    cursor->selection.outer = MakeRange(cursor->pos);
 }
 
 COMMAND_PROC(Exit, "Exit the editor"_str)
@@ -661,10 +789,7 @@ SelectSurroundingNest(View *view,
                         {
                             result.selection.outer.start = GetLineRange(buffer, start_line).start;
                             result.selection.outer.end   = GetLineRange(buffer, end_line).end;
-                        }
 
-                        if (inner_start_line != inner_end_line)
-                        {
                             result.selection.inner.start = GetInnerLineRange(buffer, inner_start_line).start;
                             result.selection.inner.end   = GetInnerLineRange(buffer, inner_end_line).end;
                         }
@@ -868,30 +993,33 @@ COMMAND_PROC(BackspaceChar)
     {
         to_delete = newline_length;
     }
-
-    while (IsTrailingUtf8Byte(ReadBufferByte(buffer, pos - to_delete)))
+    else
     {
-        to_delete += 1;
-    }
-
-    int64_t line_start = FindLineStart(buffer, pos);
-
-    int64_t consecutive_space_count = 0;
-    for (int64_t at = pos - 1; at > line_start; at -= 1)
-    {
-        if (ReadBufferByte(buffer, at) == ' ')
+        while (IsTrailingUtf8Byte(ReadBufferByte(buffer, pos - to_delete)))
         {
-            consecutive_space_count += 1;
+            to_delete += 1;
         }
-        else
+
+        if (ReadBufferByte(buffer, pos - 1) == ' ')
         {
-            break;
+            int64_t line_start = FindLineStart(buffer, pos);
+            int64_t space_indent_end = line_start;
+            while ((space_indent_end < pos) &&
+                   (ReadBufferByte(buffer, space_indent_end) == ' '))
+            {
+                space_indent_end += 1;
+            }
+            if (space_indent_end == pos)
+            {
+                int64_t space_indent = space_indent_end - line_start;
+                if (space_indent > 0 &&
+                    space_indent % core_config->indent_width == 0) // TODO: This is kind of a band-aid, really I want to actually check the auto indent to see whether this looks like an indent or alignment
+                {
+                    int64_t next_indent = RoundDownNextTabStop(space_indent, core_config->indent_width);
+                    to_delete = space_indent - next_indent;
+                }
+            }
         }
-    }
-    if ((consecutive_space_count > 0) &&
-        ((consecutive_space_count % core_config->indent_width) == 0))
-    {
-        to_delete = core_config->indent_width;
     }
 
     pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos - to_delete, to_delete), ""_str);
@@ -1248,6 +1376,9 @@ TEXT_COMMAND_PROC(WriteText)
     bool        indent_with_tabs = core_config->indent_with_tabs;
     LineEndKind line_end_kind    = buffer->line_end;
 
+    Cursor *cursor = GetCursor(view);
+    int64_t pos = cursor->pos;
+
     bool should_auto_indent = false;
     for (size_t i = 0; i < size; i += 1)
     {
@@ -1264,26 +1395,31 @@ TEXT_COMMAND_PROC(WriteText)
         {
             int left = sizeof(buf) - buf_at;
 
-            int spaces = indent_width;
-            if (spaces > left) spaces = left;
+            int64_t line_start = FindLineStart(buffer, pos);
+            int64_t col = pos - line_start;
+            int64_t target_col = RoundUpNextTabStop(col, indent_width);
 
-            for (int j = 0; j < spaces; j += 1)
+            int64_t spaces = target_col - col;
+            Assert(spaces < left);
+
+            for (int64_t j = 0; j < spaces; j += 1)
             {
                 buf[buf_at++] = ' ';
             }
         }
-        else if ((line_end_kind == LineEnd_CRLF) && (c == '\n'))
+        else if (line_end_kind == LineEnd_CRLF && c == '\n')
         {
+            Assert(buf_at + 1 < (int)sizeof(buf));
             buf[buf_at++] = '\r';
             buf[buf_at++] = '\n';
         }
         else
         {
-            if (buf_at < (int)sizeof(buf) &&
-                (c == '\n' ||
-                 c == '\t' ||
-                 (c >= ' ' && c <= '~') ||
-                 c >= 128))
+            Assert(buf_at < (int)sizeof(buf));
+            if (c == '\n' ||
+                c == '\t' ||
+                (c >= ' ' && c <= '~') ||
+                c >= 128)
             {
                 buf[buf_at++] = c;
             }
@@ -1292,8 +1428,6 @@ TEXT_COMMAND_PROC(WriteText)
 
     if (buf_at > 0)
     {
-        Cursor *cursor = GetCursor(view);
-        int64_t pos = cursor->pos;
         int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), MakeString(buf_at, buf));
         if (should_auto_indent)
         {

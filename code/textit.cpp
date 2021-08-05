@@ -2,29 +2,48 @@
 
 #include "textit_string.cpp"
 #include "textit_global_state.cpp"
+#include "textit_config.cpp"
 #include "textit_image.cpp"
 #include "textit_render.cpp"
 #include "textit_text_storage.cpp"
+#include "textit_language.cpp"
 #include "textit_buffer.cpp"
 #include "textit_tokenizer.cpp"
 #include "textit_view.cpp"
 #include "textit_command.cpp"
 #include "textit_theme.cpp"
-#include "textit_draw.cpp"
-#include "textit_command_line.cpp"
 #include "textit_auto_indent.cpp"
 #include "textit_base_commands.cpp"
+#include "textit_draw.cpp"
+#include "textit_command_line.cpp"
 
-//
-// Idea for how to support big file editing
-// keep area around where I'm working in memory, page in the file as you scroll, any edits
-// that get paged out get written to temp file for caching, when you save the file the
-// in memory + cached edits applied to source file proper
-//
-// by limiting the in-memory text to a fixed size, we place a predictable load on the
-// tokenizer and insert memmove without needing to do anything incremental or gap-buffer
-// or whatever the crap
-//
+// things missing:
+// automatic line comment inserts
+// autocomplete of any kind
+// code indexing
+// go to definition
+// jump history
+// multiple cursors
+// local search (and replace)
+// project wide search (and replace)
+// saving lmao
+// not making undo history take up one billion megabytes, have a way to flush it to disk
+// undo tree visualization / ux (I mean that was supposed to be a thing)
+// yank behaviour (yank inner vs outer / yank on delete / etc)
+// registers
+// refinement of the paradigm of course
+// better text rendering
+// better rendering
+// hardware accelerated rendering
+// rendering api that isn't dumb as bananacakes
+// incremental tokenization
+// incremental parsing for code index
+// incremental updating of line cache
+// piece table text storage?
+// editing big files without keeping them entirely in memory??
+// language support for multiple languages to test and refine things
+// manhandling of indentation (again)
+// macros
 
 //
 // PRIOR ART: https://github.com/helix-editor/helix <--- look at how this lad does things
@@ -122,14 +141,17 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     }
 
     Buffer *result = BootstrapPushStruct(Buffer, arena);
-    result->id = id;
-    result->flags = flags;
-    result->name = PushString(&result->arena, buffer_name);
-    result->undo.at = &result->undo.root;
-    result->undo.run_pos = -1;
-    result->undo.insert_pos = -1;
+    result->id                   = id;
+    result->flags                = flags;
+    result->name                 = PushString(&result->arena, buffer_name);
+    result->undo.at              = &result->undo.root;
+    result->undo.run_pos         = -1;
+    result->undo.insert_pos      = -1;
     result->undo.current_ordinal = 1;
-    result->indent_rules = &editor->default_indent_rules;
+    result->indent_rules         = &editor->default_indent_rules;
+
+    result->tokens.SetCapacity(32'000'000);
+    result->line_data.SetCapacity(8'000'000);
 
     AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
 
@@ -150,9 +172,32 @@ OpenBufferFromFile(String filename)
     }
     result->count = (int64_t)file_size;
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
-    result->language = editor->cpp_spec;
+
+    result->language = &editor->null_language;
+
+    String ext;
+    SplitExtension(filename, &ext);
+
+    for (LanguageSpec *spec = editor->first_language; spec; spec = spec->next)
+    {
+        for (int extension_index = 0; extension_index < spec->associated_extension_count; extension_index += 1)
+        {
+            if (AreEqual(spec->associated_extensions[extension_index], ext))
+            {
+                result->language = spec;
+                break;
+            }
+        }
+    }
 
     TokenizeBuffer(result);
+
+    if (editor->buffer_count == 2)
+    {
+        // if there's exactly one buffer (plus the null buffer), I guess we'll use this to set the working directory
+        String path = SplitPath(filename);
+        platform->SetWorkingDirectory(path);
+    }
 
     return result;
 }
@@ -536,66 +581,6 @@ DrawWindows(Window *window)
     }
 }
 
-function StringMap *
-PushStringMap(Arena *arena, size_t size)
-{
-    StringMap *result = PushStruct(arena, StringMap);
-    result->arena = arena;
-    result->size = size;
-    result->nodes = PushArray(arena, result->size, StringMapNode *);
-    return result;
-}
-
-function void *
-StringMapFind(StringMap *map, String string)
-{
-    void *result = nullptr;
-    uint64_t hash = HashString(string).u64[0];
-    uint64_t slot = hash % map->size;
-    for (StringMapNode *test_node = map->nodes[slot]; test_node; test_node = test_node->next)
-    {
-        if (test_node->hash == hash)
-        {
-            if (AreEqual(test_node->string, string))
-            {
-                result = test_node->data;
-                break;
-            }
-        }
-    }
-    return result;
-}
-
-function void
-StringMapInsert(StringMap *map, String string, void *data)
-{
-    uint64_t hash = HashString(string).u64[0];
-    uint64_t slot = hash % map->size;
-    StringMapNode *node = nullptr;
-    for (StringMapNode *test_node = map->nodes[slot]; test_node; test_node = test_node->next)
-    {
-        if (test_node->hash == hash)
-        {
-            if (AreEqual(test_node->string, string))
-            {
-                node = test_node;
-                break;
-            }
-        }
-    }
-    if (!node)
-    {
-        node = PushStruct(map->arena, StringMapNode);
-
-        node->hash = hash;
-        node->string = PushString(map->arena, string);
-
-        node->next = map->nodes[slot];
-        map->nodes[slot] = node;
-    }
-    node->data = data;
-}
-
 function void
 SetDebugDelay(int milliseconds, int frame_count)
 {
@@ -839,6 +824,8 @@ HandleViewEvent(ViewID view_id, const PlatformEvent &event)
                 }
 
                 MergeUndoHistory(buffer, undo_ordinal, CurrentUndoOrdinal(buffer));
+
+                editor->suppress_text_event = true;
             }
         }
     }
@@ -881,7 +868,6 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-        platform->RegisterFontFile("Bm437_OlivettiThin_8x14.FON"_str);
         if (!platform->MakeAsciiFont("Bm437 OlivettiThin 8x14"_str,
                                      &editor->font,
                                      14,
@@ -911,16 +897,14 @@ AppUpdateAndRender(Platform *platform_)
             editor->free_view_ids[i].index = MAX_VIEW_COUNT - i - 1;
         }
 
-        editor->cpp_spec = PushCppLanguageSpec(&editor->transient_arena);
+        editor->null_language.name = "none"_str;
+        PushCppLanguageSpec();
 
         editor->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
-        editor->message_buffer = OpenNewBuffer("messages"_str, Buffer_Indestructible|Buffer_ReadOnly);
-        OpenNewBuffer("scratch"_str, Buffer_Indestructible);
+        editor->null_view   = OpenNewView(BufferID::Null());
 
-        editor->null_view = OpenNewView(BufferID::Null());
-
-        Buffer *scratch_buffer = OpenBufferFromFile("test_file.txt"_str);
-        View *scratch_view = OpenNewView(scratch_buffer->id);
+        Buffer *scratch_buffer = OpenBufferFromFile("code/textit.cpp"_str);
+        View   *scratch_view   = OpenNewView(scratch_buffer->id);
 
         editor->root_window.view = scratch_view->id;
         RecalculateViewBounds(&editor->root_window, render_state->viewport);
@@ -956,6 +940,12 @@ AppUpdateAndRender(Platform *platform_)
          platform->NextEvent(&it, &event);
          )
     {
+        if (editor->suppress_text_event && event.type == PlatformEvent_Text)
+        {
+            editor->suppress_text_event = false;
+            continue;
+        }
+
         if (editor->command_line)
         {
             editor->clutch = false;
@@ -964,39 +954,51 @@ AppUpdateAndRender(Platform *platform_)
         else
         {
             handled_any_events = HandleViewEvent(editor->active_window->view, event);
+            if (editor->command_line)
+            {
+                // if we began a command line, it needs to be warmed up to not show a frame of lag for the predictions
+                editor->command_line->GatherPredictions(editor->command_line);
+            }
         }
     }
 
-    View *view = GetActiveView();
-    Buffer *buffer = GetBuffer(view);
-
-    if (view->next_buffer)
     {
-        view->buffer = view->next_buffer;
-        view->next_buffer = {};
-    }
+        View *view = GetActiveView();
+        Buffer *buffer = GetBuffer(view);
 
-    if ((editor->next_edit_mode == EditMode_Text) &&
-        (buffer->flags & Buffer_ReadOnly))
-    {
-        editor->next_edit_mode = EditMode_Command;
-    }
-    editor->edit_mode = editor->next_edit_mode;
-
-    if (handled_any_events)
-    {
-        RecalculateViewBounds(&editor->root_window, render_state->viewport);
-        DrawWindows(&editor->root_window);
-
-        if (editor->command_line)
+        if (view->next_buffer)
         {
-            DrawCommandLine(editor->command_line);
+            view->buffer = view->next_buffer;
+            view->next_buffer = {};
+        }
+
+        if ((editor->next_edit_mode == EditMode_Text) &&
+            (buffer->flags & Buffer_ReadOnly))
+        {
+            editor->next_edit_mode = EditMode_Command;
+        }
+        editor->edit_mode = editor->next_edit_mode;
+
+        if (handled_any_events)
+        {
+            RecalculateViewBounds(&editor->root_window, render_state->viewport);
+            DrawWindows(&editor->root_window);
+
+            if (editor->command_line)
+            {
+                DrawCommandLine(editor->command_line);
+            }
         }
     }
+
     EndRender();
 
-    Buffer *active_buffer = GetBuffer(GetView(editor->active_window->view));
-    platform->window_title = PushTempStringF("%.*s - TextIt", StringExpand(active_buffer->name));
+    {
+        Buffer *active_buffer = GetBuffer(GetView(editor->active_window->view));
+        String leaf;
+        SplitPath(active_buffer->name, &leaf);
+        platform->window_title = PushTempStringF("%.*s - TextIt", StringExpand(leaf));
+    }
                                              
     if (editor->debug.delay_frame_count > 0)
     {

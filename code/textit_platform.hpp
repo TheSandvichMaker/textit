@@ -13,9 +13,6 @@
          : (platform->ReportError(PlatformError_Fatal, \
                                   "Assertion Failed: " #x " at file %s, line %d", __FILE__, __LINE__), 0))
 
-// should this be inline or static inline
-#define TEXTIT_INLINE inline
-
 #ifdef DEBUG_BUILD
 #define AssertSlow(x) Assert(x)
 #else
@@ -419,7 +416,7 @@ enum PlatformErrorType
     PlatformError_Nonfatal,
 };
 
-enum PlatformMemFlag
+enum_flags(uint32_t, PlatformMemFlags)
 {
     PlatformMemFlag_NoLeakCheck = 0x1,
 };
@@ -473,13 +470,9 @@ struct PlatformFileInfo
     bool directory;
 };
 
-struct PlatformFileInfoIterator
+struct PlatformFileIterator
 {
-    Arena *arena;
-    String query;
     PlatformFileInfo info;
-    bool (*IsValid)(PlatformFileInfoIterator *it);
-    void (*Next)(PlatformFileInfoIterator *it);
 };
 
 struct Platform
@@ -521,8 +514,8 @@ struct Platform
 
     size_t page_size;
     size_t allocation_granularity;
-    void *(*AllocateMemory)(size_t size, uint32_t flags, const char *tag);
-    void *(*ReserveMemory)(size_t size, uint32_t flags, const char *tag);
+    void *(*AllocateMemory)(size_t size, PlatformMemFlags flags, const char *tag);
+    void *(*ReserveMemory)(size_t size, PlatformMemFlags flags, const char *tag);
     void *(*CommitMemory)(void *location, size_t size);
     void (*DecommitMemory)(void *location, size_t size);
     void (*DeallocateMemory)(void *memory);
@@ -536,11 +529,14 @@ struct Platform
     void (*AddJob)(PlatformJobQueue *queue, void *arg, PlatformJobProc *proc);
     void (*WaitForJobs)(PlatformJobQueue *queue);
 
+    bool (*SetWorkingDirectory)(String path);
     String (*ReadFile)(Arena *arena, String filename);
     size_t (*ReadFileInto)(size_t buffer_size, void *buffer, String filename);
     size_t (*GetFileSize)(String filename);
 
-    PlatformFileInfoIterator *(*FindFiles)(Arena *arena, String query);
+    PlatformFileIterator *(*FindFiles)(Arena *arena, String query);
+    bool (*FileIteratorIsValid)(PlatformFileIterator *it);
+    void (*FileIteratorNext)(PlatformFileIterator *it);
 
     PlatformHighResTime (*GetTime)(void);
     double (*SecondsElapsed)(PlatformHighResTime start, PlatformHighResTime end);

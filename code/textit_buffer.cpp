@@ -757,7 +757,10 @@ BufferEndBulkEdit(Buffer *buffer)
     Assert(buffer->bulk_edit);
     buffer->bulk_edit = false;
 
-    TokenizeBuffer(buffer);
+    if (!core_config->incremental_parsing)
+    {
+        TokenizeBuffer(buffer);
+    }
 }
 
 function int64_t
@@ -773,9 +776,13 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     int64_t delta = range.start - range.end + (int64_t)text.size;
     OnBufferChanged(buffer, range.start, delta);
 
-    if (!buffer->bulk_edit)
+    if (!core_config->incremental_parsing && !buffer->bulk_edit)
     {
         TokenizeBuffer(buffer);
+    }
+    else if (core_config->incremental_parsing)
+    {
+        RetokenizeRange(buffer, range.start, delta);
     }
 
     return result;

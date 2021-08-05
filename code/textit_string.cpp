@@ -306,6 +306,32 @@ SplitPath(String string, String *leaf = nullptr)
 }
 
 function uint8_t
+Peek(String string, size_t index)
+{
+    if (index < string.size)
+    {
+        return string.data[index];
+    }
+    return 0;
+}
+
+function int
+PeekNewline(String string, size_t index)
+{
+    int result = 0;
+    if (Peek(string, index) == '\n')
+    {
+        result = 1;
+    }
+    else if (Peek(string, index)     == '\r' &&
+             Peek(string, index + 1) == '\n')
+    {
+        result = 2;
+    }
+    return result;
+}
+
+function uint8_t
 PeekEnd(String string)
 {
     uint8_t result = 0;
@@ -313,6 +339,149 @@ PeekEnd(String string)
     {
         result = string.data[string.size - 1];
     }
+    return result;
+}
+
+function String
+TrimSpaces(String string)
+{
+    String result = string;
+    while (result.size > 0 && IsWhitespaceAscii(result.data[0]))
+    {
+        result.data += 1;
+        result.size -= 1;
+    }
+    while (result.size > 0 && IsWhitespaceAscii(result.data[result.size - 1]))
+    {
+        result.size -= 1;
+    }
+    return result;
+}
+
+function bool
+ParseInt(String in_string, String *out_string, int64_t *out_value)
+{
+    size_t i = 0;
+    String string = in_string;
+
+    int64_t sign = 1;
+    while (Peek(string, i) == '-' ||
+           Peek(string, i) == '+')
+    {
+        sign = string.data[i] == '-' ? -1 : 1;
+        i += 1;
+    }
+
+    int64_t base = 10;
+    if (string.data[i] == '0')                          { base = 8;  i += 1; }
+    if (string.data[i] == 'x' || string.data[i] == 'X') { base = 16; i += 1; }
+
+    string.data += i;
+    string.size -= i;
+    i = 0;
+
+    int64_t value = 0;
+    for (; i < string.size; i += 1)
+    {
+        uint8_t c = string.data[i];
+        if (c >= '0' && c <= ('0' + base))
+        {
+            int64_t digit = c - '0';
+            // TODO: Overflow protection
+            value *= base;
+            value += digit;
+        }
+    }
+
+    value *= sign;
+
+    bool result = false;
+    if (i != 0)
+    {
+        result = true;
+        *out_value = value;
+        if (out_string)
+        {
+            out_string->data = string.data + i;
+            out_string->size = string.size - i;
+        }
+    }
+
+    return result;
+}
+
+function String
+SplitLine(String string, String *rhs = nullptr)
+{
+    String result = string;
+    if (rhs)
+    {
+        rhs->data = result.data;
+        rhs->size = 0;
+    }
+    for (size_t i = 0; i < string.size; i += 1)
+    {
+        if (int nl = PeekNewline(string, i))
+        {
+            result.size = i;
+            if (rhs)
+            {
+                rhs->data = result.data + result.size + nl;
+                rhs->size = string.size - result.size - nl;
+            }
+            break;
+        }
+    }
+    return result;
+}
+
+function String
+SplitWord(String string, String *rhs = nullptr)
+{
+    size_t i = 0;
+    while (IsWhitespaceAscii(Peek(string, i))) i += 1;
+
+    String result;
+    result.data = string.data + i;
+
+    size_t j = i;
+
+    CharacterClassFlags skip_class = CharacterizeByteLoosely(Peek(string, j));
+    while (j < string.size && CharacterizeByteLoosely(Peek(string, j)) == skip_class) j += 1;
+
+    result.size = j - i;
+
+    if (rhs)
+    {
+        rhs->data = result.data + result.size;
+        rhs->size = string.size - result.size;
+    }
+
+    return result;
+}
+
+function String
+SplitAroundChar(String string, uint8_t c, String *rhs = nullptr)
+{
+    size_t i;
+    for (i = 0; i < string.size; i += 1)
+    {
+        if (string.data[i] == c)
+        {
+            break;
+        }
+    }
+
+    String result;
+    result.data = string.data;
+    result.size = i;
+
+    if (rhs)
+    {
+        rhs->data = string.data + result.size + 1;
+        rhs->size = string.size - result.size - 1;
+    }
+
     return result;
 }
 
@@ -368,12 +537,12 @@ LevenshteinDistance(String s, String t)
     ScopedMemory temp(platform->GetTempArena());
     int *matrix = PushArray(temp, (n + 1)*(m + 1), int);
 
-    auto SetCell = [&matrix, stride](int x, int y, int value)
+    auto SetCell = [matrix, stride](int x, int y, int value)
     {
         matrix[y*stride + x] = value;
     };
 
-    auto GetCell = [&matrix, stride](int x, int y)
+    auto GetCell = [matrix, stride](int x, int y)
     {
         return matrix[y*stride + x];
     };

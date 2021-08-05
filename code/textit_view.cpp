@@ -14,8 +14,8 @@ SetCursor(View *view, int64_t pos, Range inner = {}, Range outer = {})
 function void
 MoveCursorRelative(View *view, V2i delta)
 {
-    Cursor *cursor = GetCursor(view);
-    cursor->pos = CalculateRelativeMove(GetBuffer(view), cursor, delta).pos;
+    int64_t pos = CalculateRelativeMove(GetBuffer(view), GetCursor(view), delta).pos;
+    SetCursor(view, pos);
 }
 
 function Range

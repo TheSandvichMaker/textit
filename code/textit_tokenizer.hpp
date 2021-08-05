@@ -9,16 +9,14 @@ enum TokenizeFlags_ENUM : TokenizeFlags
 
 struct StringMap;
 
-struct LanguageSpec
-{
-    bool allow_nested_block_comments;
-    StringMap *idents;
-};
-
 struct Tokenizer
 {
-    Buffer *buffer;
     Token null_token;
+
+    VirtualArray<Token> *tokens;
+    VirtualArray<LineData> *line_data;
+
+    LanguageSpec *language;
 
     TokenizeFlags flags;
 
@@ -27,12 +25,13 @@ struct Tokenizer
     bool in_preprocessor;
     int block_comment_count;
 
+    int64_t base;
     uint8_t *start;
     uint8_t *at;
     uint8_t *end;
 };
 
 function void TokenizeBuffer(Buffer *buffer);
-static PLATFORM_JOB(TokenizeBufferJob);
+function void RetokenizeRange(Buffer *buffer, int64_t pos, int64_t delta);
 
 #endif /* TEXTIT_TOKENIZER_HPP */

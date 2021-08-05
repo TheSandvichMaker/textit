@@ -47,14 +47,16 @@ LoadDefaultTheme()
     SetThemeColor("text_string"_id, MakeColor(255, 192, 64));
     SetThemeColor("text_number"_id, MakeColor(64, 192, 255));
     SetThemeColor("text_literal"_id, MakeColor(64, 128, 255));
+    SetThemeColor("text_function"_id, MakeColor(128, 196, 255));
     SetThemeColor("text_line_comment"_id, MakeColor(0, 192, 0));
     SetThemeColor("text_type"_id, MakeColor(64, 255, 192));
     SetThemeColor("text_comment"_id, MakeColor(0, 192, 0));
-    SetThemeColor("text_foreground"_id, MakeColor(255, 255, 255));
+    SetThemeColor("text_foreground"_id, MakeColor(235, 235, 225));
     SetThemeColor("text_foreground_dim"_id, MakeColor(192, 192, 192));
     SetThemeColor("text_foreground_dimmer"_id, MakeColor(128, 128, 128));
     SetThemeColor("text_foreground_dimmest"_id, MakeColor(4*12, 4*20, 4*32));
     SetThemeColor("text_background"_id, MakeColor(12, 20, 32));
+    SetThemeColor("text_background_inactive"_id, MakeColor(12, 20, 32));
     SetThemeColor("text_background_unreachable"_id, MakeColor(24, 40, 64));
     SetThemeColor("text_background_highlighted"_id, MakeColor(48, 80, 128));
     SetThemeColor("unrenderable_text_foreground"_id, MakeColor(255, 255, 255));
@@ -70,9 +72,11 @@ LoadDefaultTheme()
     SetThemeColor("outer_selection_background"_id, MakeColor(128, 96, 32));
     SetThemeColor("line_highlight"_id, MakeColor(18, 30, 48));
 
+    SetThemeColor("command_line_background"_id, MakeColor(6, 10, 16));
     SetThemeColor("command_line_name"_id, MakeColor(192, 128, 128));
-    SetThemeColor("command_line_option"_id, MakeColor(128, 128, 128));
+    SetThemeColor("command_line_option"_id, MakeColor(164, 164, 164));
     SetThemeColor("command_line_option_selected"_id, MakeColor(192, 128, 128));
     SetThemeColor("command_line_option_numbers"_id, MakeColor(128, 192, 128));
+    SetThemeColor("command_line_option_numbers_highlighted"_id, MakeColor(128, 255, 128));
     SetThemeColor("command_line_option_directory"_id, MakeColor(192, 192, 128));
 }

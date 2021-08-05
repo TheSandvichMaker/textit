@@ -9,6 +9,7 @@
 #include "textit_platform.hpp"
 #include "textit_intrinsics.hpp"
 #include "textit_shared.hpp"
+#include "textit_introspection_macros.hpp"
 #include "textit_memory.hpp"
 #include "textit_string.hpp"
 #include "textit_global_state.hpp"
@@ -20,6 +21,7 @@
 #include "textit_theme.hpp"
 #include "textit_render.hpp"
 #include "textit_tokens.hpp"
+#include "textit_language.hpp"
 #include "textit_text_storage.hpp"
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
@@ -40,25 +42,6 @@ enum EditMode
     EditMode_Text,
     EditMode_COUNT,
 };
-
-struct StringMapNode
-{
-    StringMapNode *next;
-    uint64_t hash;
-    String string;
-    void *data;
-};
-
-struct StringMap
-{
-    Arena *arena;
-    size_t size;
-    StringMapNode **nodes;
-};
-
-function StringMap *PushStringMap(Arena *arena, size_t size);
-function void *StringMapFind(StringMap *map, String string);
-function void StringMapInsert(StringMap *map, String string, void *data);
 
 enum WindowSplitKind
 {
@@ -81,16 +64,16 @@ struct Window
 
 function void DestroyWindow(Window *window);
 
-struct CoreConfig
-{
-    bool visualize_newlines              = false;
-    bool right_align_visualized_newlines = false;
-    bool visualize_whitespace            = true;
-    bool show_line_numbers               = true;
-
-    bool indent_with_tabs                = true;
-    int  indent_width                    = 4;
-};
+#define CoreConfig(_, X) \
+    X(_, bool, visualize_newlines              = false) \
+    X(_, bool, right_align_visualized_newlines = false) \
+    X(_, bool, visualize_whitespace            = true)  \
+    X(_, bool, show_line_numbers               = false) \
+    X(_, bool, incremental_parsing             = false) \
+    X(_, bool, show_scrollbar                  = false) \
+    X(_, bool, indent_with_tabs                = false) \
+    X(_, int,  indent_width                    = 4)
+DeclareIntrospectedStruct(CoreConfig);
 GLOBAL_STATE(CoreConfig, core_config);
 
 struct Cursor
@@ -171,6 +154,7 @@ struct EditorState
     Theme theme;
 
     InputMode input_mode;
+    bool suppress_text_event;
     bool changed_command_line;
     CommandLine *command_line;
 
@@ -180,7 +164,8 @@ struct EditorState
 
     Font font;
 
-    LanguageSpec *cpp_spec;
+    LanguageSpec null_language;
+    LanguageSpec *first_language;
     IndentRules default_indent_rules;
 
     TextStorage default_register;
@@ -192,7 +177,6 @@ struct EditorState
     BufferID free_buffer_ids[MAX_BUFFER_COUNT];
 
     Buffer *null_buffer;
-    Buffer *message_buffer;
 
     uint32_t view_count;
     View *views[MAX_VIEW_COUNT];
@@ -280,7 +264,7 @@ function ViewIterator
 IterateViews(void)
 {
     ViewIterator result = {};
-    result.view = GetView(editor->used_view_ids[0]);
+    result.view = GetView(editor->used_view_ids[1]);
     return result;
 }
 

@@ -27,10 +27,13 @@ TextStorageReplaceRange(TextStorage *storage, Range range, String text)
 {
     range = ClampRange(range, MakeRange(0, storage->count));
 
+    PlatformHighResTime start = platform->GetTime();
+
     int64_t delta = range.start - range.end + (int64_t)text.size;
     EnsureSpace(storage, delta);
     // TODO: Decommit behaviour
 
+    int64_t total_moved = 0;
     if (delta != 0)
     {
         uint8_t *source = (delta > 0
@@ -40,6 +43,8 @@ TextStorageReplaceRange(TextStorage *storage, Range range, String text)
         uint8_t *end    = storage->text + storage->count;
         memmove(dest, source, end - source);
 
+        total_moved = end - source;
+
         storage->count += delta;
     }
     memcpy(storage->text + range.start, text.data, text.size);
@@ -48,6 +53,13 @@ TextStorageReplaceRange(TextStorage *storage, Range range, String text)
     if (delta > 0)
     {
         edit_end += delta;
+    }
+
+    PlatformHighResTime end = platform->GetTime();
+    if (total_moved != 0 || text.size != 0)
+    {
+        double time_elapsed = platform->SecondsElapsed(start, end);
+        platform->DebugPrint("moved %lld bytes, copied %zu bytes in %fms\n", total_moved, text.size, time_elapsed*1000.0);
     }
 
     return edit_end;

@@ -1,4 +1,18 @@
 function int64_t
+RoundUpNextTabStop(int64_t col, int64_t tab_width)
+{
+    col = tab_width*((col + tab_width) / tab_width);
+    return col;
+}
+
+function int64_t
+RoundDownNextTabStop(int64_t col, int64_t tab_width)
+{
+    col = tab_width*((col - 1) / tab_width);
+    return col;
+}
+
+function int64_t
 CountIndentationDepth(Buffer *buffer, int64_t pos, int64_t indent_width)
 {
     int64_t result = 0;
@@ -12,7 +26,7 @@ CountIndentationDepth(Buffer *buffer, int64_t pos, int64_t indent_width)
         }
         else if (c == '\t')
         {
-            result += indent_width;
+            result = RoundUpNextTabStop(result, indent_width);
         }
         else
         {

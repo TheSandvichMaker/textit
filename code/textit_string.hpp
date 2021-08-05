@@ -18,7 +18,7 @@ enum CharacterClassFlags_ENUM : CharacterClassFlags
     Character_Numeric              = 0x8,
     Character_Alphanumeric         = Character_Alphabetic|Character_Numeric,
     Character_Identifier           = 0x10|Character_Alphanumeric,
-    Character_Utf8                 = 0x20,
+    Character_Utf8                 = 0x40,
 };
 
 typedef uint32_t StringMatchFlags;

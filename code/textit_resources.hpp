@@ -1,7 +1,6 @@
 #ifndef TEXTIT_RESOURCES_HPP
 #define TEXTIT_RESOURCES_HPP
 
-template <typename Tag>
 struct ResourceID
 {
     uint16_t index;
@@ -34,7 +33,7 @@ struct ResourceID
     }
 };
 
-typedef ResourceID<struct BufferIDTag> BufferID;
-typedef ResourceID<struct ViewIDTag> ViewID;
+typedef ResourceID BufferID;
+typedef ResourceID ViewID;
 
 #endif /* TEXTIT_RESOURCES_HPP */

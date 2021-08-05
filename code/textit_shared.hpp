@@ -14,7 +14,7 @@ IsPow2(size_t size)
 }
 
 // TODO: where tf do I put this
-TEXTIT_INLINE Color
+function Color
 MakeColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
 {
     Color color;
@@ -25,7 +25,7 @@ MakeColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
     return color;
 }
 
-TEXTIT_INLINE Color
+function Color
 MakeColor(uint32_t argb)
 {
     Color color;
@@ -53,24 +53,24 @@ struct DeferDoodadHelp
 #define defer const auto Paste(defer_, __LINE__) = DeferDoodadHelp() + [&]()
 
 function void
-SetMemory(size_t size, void *data, char value)
+SetMemory(size_t size, void *data_init, char value)
 {
-    __stosb((unsigned char *)data, value, size);
-}
-
-function void
-ZeroSize(size_t size_init, void *data_init)
-{
+    unsigned char *data = (unsigned char *)data_init;
 #if COMPILER_MSVC
-    SetMemory(size_init, data_init, 0);
+    __stosb(data, value, size);
 #else
     size_t size = size_init;
-    char *data = (char *)data_init;
     while (size--)
     {
         *data++ = 0;
     }
 #endif
+}
+
+function void
+ZeroSize(size_t size_init, void *data_init)
+{
+    SetMemory(size_init, data_init, 0);
 }
 
 #define ZeroStruct(Struct) ZeroSize(sizeof(*(Struct)), Struct)
@@ -322,15 +322,14 @@ Fnv1a32(size_t size, const void *data_init)
     return result;
 }
 
-constexpr function uint64_t
-Fnv1a64(size_t size, const void *data_init)
+constexpr uint64_t
+Fnv1a64(size_t size, const char *data)
 {
     const uint64_t fnv_offset_basis = 0xcbf29ce484222325ull;
     const uint64_t fnv_prime        = 0x00000100000001B3ull;
 
     uint64_t result = fnv_offset_basis;
 
-    const char *data = (const char *)data_init;
     for (size_t i = 0; i < size; i += 1)
     {
         result *= fnv_prime;
@@ -341,10 +340,39 @@ Fnv1a64(size_t size, const void *data_init)
 }
 
 typedef uint64_t StringID;
-constexpr uint64_t
+
+constexpr function StringID
+HashStringID(String string)
+{
+    const uint64_t fnv_offset_basis = 0xcbf29ce484222325ull;
+    const uint64_t fnv_prime        = 0x00000100000001B3ull;
+
+    uint64_t result = fnv_offset_basis;
+
+    for (size_t i = 0; i < string.size; i += 1)
+    {
+        result *= fnv_prime;
+        result ^= string.data[i];
+    }
+
+    return result;
+}
+
+constexpr function StringID
 operator ""_id(const char *data, size_t size)
 {
-    return Fnv1a64(size, data);
+    const uint64_t fnv_offset_basis = 0xcbf29ce484222325ull;
+    const uint64_t fnv_prime        = 0x00000100000001B3ull;
+
+    uint64_t result = fnv_offset_basis;
+
+    for (size_t i = 0; i < size; i += 1)
+    {
+        result *= fnv_prime;
+        result ^= data[i];
+    }
+
+    return result;
 }
 
 #endif /* TEXTIT_SHARED_HPP */

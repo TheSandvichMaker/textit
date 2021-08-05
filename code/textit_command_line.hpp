@@ -24,10 +24,13 @@ struct CommandLine
     String name;
 
     bool no_quickselect;
+    bool no_autoaccept;
 
     int cursor;
     int count;
     uint8_t text[256];
+
+    bool highlight_numbers;
 
     bool cycling_predictions;
     int prediction_index;

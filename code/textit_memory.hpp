@@ -251,10 +251,10 @@ PushArrayContainer(Arena *arena, size_t capacity)
     return result;
 }
 
-template <typename T, unsigned Capacity>
+template <typename T>
 struct VirtualArray
 {
-    static constexpr unsigned capacity = Capacity;
+    unsigned capacity;
     unsigned count;
     unsigned committed;
     T *data;
@@ -288,14 +288,27 @@ struct VirtualArray
         data      = nullptr;
     }
 
-    bool Empty()
+    bool
+    Empty()
     {
         return count == 0;
+    }
+
+    void
+    SetCapacity(unsigned new_capacity)
+    {
+        Assert(!data);
+        capacity = new_capacity;
     }
 
     unsigned
     EnsureSpace(unsigned push_count = 1)
     {
+        if (!capacity)
+        {
+            INVALID_CODE_PATH;
+        }
+
         unsigned new_count = count + push_count;
         if (new_count > capacity)
         {

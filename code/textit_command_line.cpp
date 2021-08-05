@@ -10,12 +10,12 @@ BeginCommandLine()
 {
     if (editor->command_line)
     {
-        EndCommandLine();
         editor->changed_command_line = true;
     }
 
     CommandLine *cl = PushStruct(&editor->command_arena, CommandLine);
     cl->arena = PushSubArena(&editor->command_arena, Kilobytes(512));
+    cl->prediction_selected_index = -1;
     editor->command_line = cl;
     return cl;
 }
@@ -44,11 +44,14 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 
     auto AcceptPrediction = [](CommandLine *cl)
     {
+        if (cl->prediction_selected_index == -1) return;
         if (!cl->prediction_count) return;
 
         const Prediction &prediction = cl->predictions[cl->prediction_selected_index];
+
         cl->count = (int)prediction.text.size;
         CopyArray(cl->count, prediction.text.data, cl->text);
+
         cl->cursor = cl->count;
     };
 
@@ -59,13 +62,20 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
         {
             String text = event.text;
 
-            bool yes = false;
+            for (size_t i = 0; i < text.size; i += 1)
+            {
+                if (IsPrintableAscii(text.data[i]))
+                {
+                    AcceptPrediction(cl);
+                    break;
+                }
+            }
+
             for (size_t i = 0; i < text.size; i += 1)
             {
                 // TODO: I need to surpress text events from handled key presses so I don't have garbage like that != ':'. That's nonsense.
-                if (IsPrintableAscii(text.data[i]) && text.data[i] != ':')
+                if (IsPrintableAscii(text.data[i]))
                 {
-                    yes = true;
                     cl->cycling_predictions = false;
 
                     size_t left = ArrayCount(cl->text) - cl->count;
@@ -79,11 +89,6 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                     }
                 }
             }
-
-            if (yes)
-            {
-                if (cl->prediction_selected_index != -1) AcceptPrediction(cl);
-            }
         }
         else if (event.type == PlatformEvent_KeyDown)
         {
@@ -93,6 +98,7 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
             {
                 case PlatformInputCode_Left:
                 {
+                    AcceptPrediction(cl);
                     if (cl->cursor > 0)
                     {
                         cl->cursor -= 1;
@@ -101,10 +107,17 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 
                 case PlatformInputCode_Right:
                 {
+                    AcceptPrediction(cl);
                     if (cl->cursor < cl->count)
                     {
                         cl->cursor += 1;
                     }
+                } break;
+
+                case PlatformInputCode_Control:
+                {
+                    AcceptPrediction(cl);
+                    cl->highlight_numbers = true;
                 } break;
 
                 case PlatformInputCode_Escape:
@@ -144,10 +157,11 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 
                     if (cl->no_quickselect && !event.ctrl_down)
                     {
+                        handled_event = false;
                         break;
                     }
 
-                    if (selection <= cl->prediction_count)
+                    if (selection < cl->prediction_count)
                     {
                         cl->prediction_selected_index = selection;
                         Prediction *prediction = &cl->predictions[cl->prediction_selected_index];
@@ -157,11 +171,19 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                             break;
                         }
                     }
+                    else
+                    {
+                        handled_event = false;
+                        break;
+                    }
                 } /*** FALLTHROUGH ***/
                 case PlatformInputCode_Return:
                 {
-                    if (cl->prediction_selected_index == -1) cl->prediction_selected_index = 0;
-                    AcceptPrediction(cl);
+                    if (!cl->no_autoaccept)
+                    {
+                        if (cl->prediction_selected_index == -1) cl->prediction_selected_index = 0;
+                        AcceptPrediction(cl);
+                    }
 
                     bool terminate = cl->AcceptEntry(cl);
                     if (terminate && !editor->changed_command_line)
@@ -205,7 +227,7 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 
                 case PlatformInputCode_Back:
                 {
-                    if (cl->prediction_selected_index != -1) AcceptPrediction(cl);
+                    AcceptPrediction(cl);
                     size_t left = ArrayCount(cl->text) - cl->cursor;
                     if (cl->cursor > 0)
                     {
@@ -219,7 +241,7 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 
                 case PlatformInputCode_Delete:
                 {
-                    if (cl->prediction_selected_index != -1) AcceptPrediction(cl);
+                    AcceptPrediction(cl);
                     size_t left = ArrayCount(cl->text) - cl->cursor;
                     if (cl->count > cl->cursor)
                     {
@@ -237,6 +259,16 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 default:
                 {
                     handled_event = false;
+                } break;
+            }
+        }
+        else if (event.type == PlatformEvent_KeyUp)
+        {
+            switch (event.input_code)
+            {
+                case PlatformInputCode_Control:
+                {
+                    cl->highlight_numbers = false;
                 } break;
             }
         }
@@ -268,19 +300,26 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 function void
 DrawCommandLine(CommandLine *cl)
 {
-    View *view = GetActiveView();
+    // View *view = GetActiveView();
 
-    Color text_foreground    = GetThemeColor("text_foreground"_id);
-    Color text_background    = GetThemeColor("text_background"_id);
-    Color color_name         = GetThemeColor("command_line_name"_id);
-    Color color_selected     = GetThemeColor("command_line_option_selected"_id);
-    Color color_numbers      = GetThemeColor("command_line_option_numbers"_id);
-    Color overlay_background = GetThemeColor("text_background_unreachable"_id);
+    Color text_foreground           = GetThemeColor("text_foreground"_id);
+    Color text_background           = GetThemeColor("command_line_background"_id);
+    Color color_name                = GetThemeColor("command_line_name"_id);
+    Color color_selected            = GetThemeColor("command_line_option_selected"_id);
+    Color color_numbers             = GetThemeColor("command_line_option_numbers"_id);
+    Color color_numbers_highlighted = GetThemeColor("command_line_option_numbers_highlighted"_id);
+    Color overlay_background        = GetThemeColor("command_line_background"_id);
+
+    if (cl->highlight_numbers)
+    {
+        color_numbers = color_numbers_highlighted;
+    }
 
     int64_t total_width  = 0;
     int64_t total_height = cl->prediction_count;
 
-    V2i p = MakeV2i(view->viewport.min.x + 2, view->viewport.max.y - 1);
+    V2i p = MakeV2i(render_state->viewport.min.x, render_state->viewport.max.y - 1);
+
     V2i text_p = p;
     if (cl->name.size)
     {

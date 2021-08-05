@@ -89,6 +89,8 @@ LoadDefaultBindings()
     BindCommand(command, PlatformInputCode_F1,     0,              "ToggleVisualizeNewlines"_str);
     BindCommand(command, PlatformInputCode_Comma,  0,              "EncloseParameter"_str);
 
+    BindCommand(command, PlatformInputCode_Escape, 0,              "ResetSelection"_str);
+
     BindCommand(command, 'Y',                      0,              "Copy"_str);
     BindCommand(command, 'P',                      Modifier_Shift, "PasteAfter"_str);
     BindCommand(command, 'P',                      0,              "PasteBefore"_str);

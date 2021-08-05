@@ -8,13 +8,13 @@ AllocateLineData(void)
 function Token *
 PushToken(Tokenizer *tok, const Token &t)
 {
-    return tok->buffer->tokens.Push(t);
+    return tok->tokens->Push(t);
 }
 
 function int64_t
 AtPos(Tokenizer *tok)
 {
-    return (int64_t)(tok->at - tok->buffer->text);
+    return (int64_t)(tok->at - tok->start);
 }
 
 function int64_t
@@ -27,7 +27,7 @@ CharsLeft(Tokenizer *tok)
 function uint8_t
 Peek(Tokenizer *tok, int64_t index = 0)
 {
-    if (((tok->at + index) >= tok->buffer->text) &&
+    if (((tok->at + index) >= tok->start) &&
         ((tok->at + index) < tok->end))
     {
         return tok->at[index];
@@ -49,31 +49,37 @@ Match(Tokenizer *tok, uint8_t c)
     return false;
 }
 
-function void
-TokenizeBuffer(Buffer *buffer)
+function bool
+Match(Tokenizer *tok, String seq)
 {
-    Tokenizer tok_ = {};
-    Tokenizer *tok = &tok_;
+    for (size_t i = 0; i < seq.size; i += 1)
+    {
+        if (Peek(tok, (int64_t)i) != seq.data[i])
+        {
+            return false;
+        }
+    }
+    tok->at += seq.size;
+    return true;
+}
 
-    tok->buffer = buffer;
-    tok->start = buffer->text;
+function void
+Tokenize(Tokenizer *tok)
+{
     tok->at = tok->start;
-    tok->end = buffer->text + buffer->count;
 
-    buffer->tokens.Clear();
-    buffer->tokens.EnsureSpace(1); // TODO: jank alert? forcing the allocation so that line_data->tokens below will not be null
-    buffer->line_data.Clear();
+    tok->line_data->Clear();
+    tok->tokens->Clear();
+    tok->tokens->EnsureSpace(1); // TODO: jank alert? forcing the allocation so that line_data->tokens below will not be null
 
-    LanguageSpec *language = buffer->language;
-
-    PlatformHighResTime start_time = platform->GetTime();
+    LanguageSpec *language = tok->language;
 
     int line_count = 1;
     int tokens_at_start_of_line = 0;
 
     bool at_newline = true;
 
-    LineData *line_data = buffer->line_data.Push();
+    LineData *line_data = tok->line_data->Push();
     ZeroStruct(line_data);
 
     line_data->token_index = 0;
@@ -117,21 +123,21 @@ TokenizeBuffer(Buffer *buffer)
                     }
 
                     line_data->range.end = tok->at - tok->start;
-                    line_data->token_count = (int16_t)(buffer->tokens.count - tokens_at_start_of_line);
+                    line_data->token_count = (int16_t)(tok->tokens->count - tokens_at_start_of_line);
                     
                     line_count += 1;
-                    Assert(line_count <= 1000000);
+                    Assert(line_count <= (int64_t)tok->line_data->capacity);
 
                     //
                     // new line data
                     //
 
-                    line_data = buffer->line_data.Push();
+                    line_data = tok->line_data->Push();
                     ZeroStruct(line_data);
 
                     line_data->range.start = tok->at - tok->start;
-                    line_data->token_index = (int32_t)buffer->tokens.count;
-                    tokens_at_start_of_line = buffer->tokens.count;
+                    line_data->token_index = (int32_t)tok->tokens->count;
+                    tokens_at_start_of_line = tok->tokens->count;
                 }
             }
             else
@@ -163,6 +169,12 @@ TokenizeBuffer(Buffer *buffer)
         {
             default:
             {
+parse_default:
+                if (c == 'L' && Match(tok, '"'))       { goto parse_string; } 
+                if (c == 'u' && Match(tok, '"'))       { goto parse_string; }
+                if (c == 'U' && Match(tok, '"'))       { goto parse_string; }
+                if (c == 'u' && Match(tok, "8\""_str)) { goto parse_string; }
+
                 if (IsHeadUtf8Byte(c) || IsAlphabeticAscii(c) || c == '_')
                 {
                     t.kind = Token_Identifier;
@@ -186,8 +198,20 @@ TokenizeBuffer(Buffer *buffer)
                 }
                 else
                 {
-parse_operator:
                     t.kind = (TokenKind)c;
+                }
+            } break;
+
+            case '_':
+            {
+                if (prev_token && prev_token->kind == Token_String)
+                {
+                    t.kind = Token_Operator;
+                    while (IsValidIdentifierAscii(Peek(tok))) tok->at += 1;
+                }
+                else
+                {
+                    goto parse_default;
                 }
             } break;
 
@@ -203,6 +227,7 @@ parse_operator:
 
             case '"':
             {
+parse_string:
                 t.kind = Token_String;
                 while (CharsLeft(tok))
                 {
@@ -231,8 +256,8 @@ parse_operator:
             {
                 if (Peek(tok) != '\'')
                 {
-                    Match(tok, '\\');
-                    if (Peek(tok) != '\'')
+                    if (Match(tok, '\\') ||
+                        Peek(tok) != '\'')
                     {
                         tok->at++;
                         if (Match(tok, '\''))
@@ -243,7 +268,7 @@ parse_operator:
                     }
                 }
 
-                goto parse_operator;
+                goto parse_default;
             } break;
 
             case '/':
@@ -291,7 +316,7 @@ parse_operator:
                 }
                 else
                 {
-                    goto parse_operator;
+                    goto parse_default;
                 }
             } break;
 
@@ -320,37 +345,20 @@ parse_operator:
                 }
             } break;
 
-            case '=':
-            {
-                if (Match(tok, '='))
-                {
-                    t.kind = Token_Equals;
-                }
-                else
-                {
-                    t.kind = Token_Assignment;
-                }
-            } break;
-
-            case '!':
-            {
-                if (Match(tok, '='))
-                {
-                    t.kind = Token_NotEquals;
-                }
-                else
-                {
-                    t.kind = (TokenKind)'!';
-                }
-            } break;
-
             case '\\':
             {
                 t.kind = (TokenKind)c;
                 tok->continue_next_line = true;
             } break;
 
-            case '(': { t.kind = Token_LeftParen; } break;
+            case '(':
+            {
+                t.kind = Token_LeftParen;
+                if (prev_token && prev_token->kind == Token_Identifier)
+                {
+                    prev_token->kind = Token_Function;
+                }
+            } break;
             case ')': { t.kind = Token_RightParen; } break;
             case '{': { t.kind = Token_LeftScope; } break;
             case '}': { t.kind = Token_RightScope; } break;
@@ -367,96 +375,68 @@ parse_operator:
 
         uint8_t *end = tok->at;
 
-        t.pos = (int64_t)(start - buffer->text);
+        t.pos    = tok->base + (int64_t)(start - tok->start);
         t.length = (int32_t)(end - start);
-
-#if 0
-        String string = MakeString((size_t)(end - start), start);
-        if (t.kind == Token_Identifier)
-        {
-            TokenKind kind = (TokenKind)PointerToInt(StringMapFind(language->idents, string));
-            if (kind)
-            {
-                t.kind = kind;
-            }
-        }
-#endif
 
         prev_token = PushToken(tok, t);
     }
 
-    buffer->line_data[line_count - 1].range.end = buffer->count;
-
-    PlatformHighResTime end_time = platform->GetTime();
-
-#if 1
-    double total_time = platform->SecondsElapsed(start_time, end_time);
-
-    platform->DebugPrint("Total time: %fms for %lld tokens, %lld characters (%fns/tok, %fns/char).\n",
-                         1000.0*total_time,
-                         buffer->tokens.count,
-                         buffer->count,
-                         1'000'000'000.0*total_time / (double)buffer->tokens.count,
-                         1'000'000'000.0*total_time / (double)buffer->count);
-    platform->DebugPrint("%f megatokens/s, %fmb/s\n", 
-                         (double)buffer->tokens.count / (1'000'000.0*total_time),
-                         (double)buffer->count / (1'000'000.0*total_time));
-#endif
+    (*tok->line_data)[line_count - 1].range.end = tok->end - tok->start;
 }
 
-function LanguageSpec *
-PushCppLanguageSpec(Arena *arena)
+function void
+TokenizeBuffer(Buffer *buffer)
 {
-    LanguageSpec *result = PushStruct(arena, LanguageSpec);
-    result->idents = PushStringMap(arena, 128);
-
-    StringMapInsert(result->idents, "static"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "static"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "inline"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "operator"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "volatile"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "unsigned"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "signed"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "register"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "extern"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "const"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "struct"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "enum"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "class"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "public"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "private"_str, IntToPointer(Token_Keyword));
-    StringMapInsert(result->idents, "return"_str, IntToPointer(Token_Keyword));
-
-    StringMapInsert(result->idents, "case"_str, IntToPointer(Token_FlowControl));
-    StringMapInsert(result->idents, "continue"_str, IntToPointer(Token_FlowControl));
-    StringMapInsert(result->idents, "break"_str, IntToPointer(Token_FlowControl));
-    StringMapInsert(result->idents, "if"_str, IntToPointer(Token_FlowControl));
-    StringMapInsert(result->idents, "else"_str, IntToPointer(Token_FlowControl));
-    StringMapInsert(result->idents, "for"_str, IntToPointer(Token_FlowControl));
-    StringMapInsert(result->idents, "switch"_str, IntToPointer(Token_FlowControl));
-    StringMapInsert(result->idents, "while"_str, IntToPointer(Token_FlowControl));
-    StringMapInsert(result->idents, "do"_str, IntToPointer(Token_FlowControl));
-
-    StringMapInsert(result->idents, "true"_str, IntToPointer(Token_Literal));
-    StringMapInsert(result->idents, "false"_str, IntToPointer(Token_Literal));
-    StringMapInsert(result->idents, "nullptr"_str, IntToPointer(Token_Literal));
-    StringMapInsert(result->idents, "NULL"_str, IntToPointer(Token_Literal));
-
-    StringMapInsert(result->idents, "void"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "char"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "short"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "int"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "long"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "float"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "double"_str, IntToPointer(Token_Type));
-    StringMapInsert(result->idents, "int8_t"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "int16_t"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "int32_t"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "int64_t"_str, IntToPointer(Token_Type));
-    StringMapInsert(result->idents, "uint8_t"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "uint16_t"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "uint32_t"_str, IntToPointer(Token_Type)); 
-    StringMapInsert(result->idents, "uint64_t"_str, IntToPointer(Token_Type));
-
-    return result;
+    Tokenizer tok = {};
+    tok.tokens    = &buffer->tokens;
+    tok.line_data = &buffer->line_data;
+    tok.language  = buffer->language;
+    tok.start     = buffer->text;
+    tok.end       = buffer->text + buffer->count;
+    Tokenize(&tok);
 }
+
+function void
+RetokenizeRange(Buffer *buffer, int64_t pos, int64_t delta)
+{
+    if (delta == 0) return;
+
+    uint32_t min_token_index = FindTokenIndexForPos(buffer, pos);
+    uint32_t max_token_index = FindTokenIndexForPos(buffer, pos + Abs(delta));
+
+    if (buffer->tokens[max_token_index].pos < pos + delta)
+    {
+        max_token_index += 1;
+    }
+
+    int64_t min_pos = Min(pos, buffer->tokens[min_token_index].pos);
+    int64_t max_pos = buffer->tokens[max_token_index].pos;
+
+    VirtualArray<Token> tokens = {};
+    tokens.SetCapacity(4'000'000);
+    defer { tokens.Release(); };
+
+    VirtualArray<LineData> line_data = {};
+    line_data.SetCapacity(1'000'000);
+    defer { line_data.Release(); };
+
+    Tokenizer tok = {};
+    tok.tokens    = &tokens;
+    tok.line_data = &line_data;
+    tok.language  = buffer->language;
+    tok.base      = min_pos;
+    tok.start     = buffer->text + min_pos;
+    tok.end       = buffer->text + max_pos;
+    Tokenize(&tok);
+
+    for (size_t i = max_token_index; i < buffer->tokens.count; i += 1)
+    {
+        Token *t = &buffer->tokens[i];
+        t->pos += delta;
+    }
+
+    platform->DebugPrint("Retokenize\n");
+    platform->DebugPrint("\tpos: %lld, delta: %lld\n", pos, delta);
+    platform->DebugPrint("\tedit token index: %u\n", max_token_index);
+}
+
