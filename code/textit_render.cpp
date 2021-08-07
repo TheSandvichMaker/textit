@@ -1,17 +1,13 @@
 function void
-InitializeRenderState(Arena *arena, Bitmap *target, Font *font)
+InitializeRenderState(Arena *arena, Bitmap *target)
 {
     render_state->target = target;
-    render_state->fonts[Layer_Background]  = font;
-    render_state->fonts[Layer_Text]        = font;
-    render_state->fonts[Layer_Overlay]     = font;
-    render_state->fonts[Layer_OverlayText] = font;
 
     render_state->cb_size = Megabytes(4); // random choice
     render_state->command_buffer = PushArrayNoClear(arena, render_state->cb_size, char);
 
-    int64_t viewport_w = (target->w + font->glyph_w - 1) / font->glyph_w;
-    int64_t viewport_h = (target->h + font->glyph_h - 1) / font->glyph_h;
+    int64_t viewport_w = (target->w + editor->font_metrics.x - 1) / editor->font_metrics.x;
+    int64_t viewport_h = (target->h + editor->font_metrics.y - 1) / editor->font_metrics.y;
     render_state->viewport = MakeRect2iMinDim(0, 0, viewport_w, viewport_h);
 
     render_state->wall_segment_lookup[Wall_Top|Wall_Bottom]                                          = 179;
@@ -61,12 +57,6 @@ ViewportRelative(V2i p)
 {
     p.y = render_state->viewport.max.y - p.y - 1;
     return p;
-}
-
-function V2i
-GlyphDim(Font *font)
-{
-    return MakeV2i(font->glyph_w, font->glyph_h);
 }
 
 function Bitmap
@@ -253,7 +243,9 @@ PushTile(RenderLayer layer, V2i tile_p, Sprite sprite)
 {
     RenderCommand *command = PushRenderCommand(layer, RenderCommand_Sprite);
     command->p = tile_p;
-    command->sprite = sprite;
+    command->glyph = sprite.glyph;
+    command->foreground = sprite.foreground;
+    command->background = sprite.background;
 
     command->rect.min = tile_p;
     command->rect.max = tile_p + MakeV2i(1, 1);
@@ -262,18 +254,15 @@ PushTile(RenderLayer layer, V2i tile_p, Sprite sprite)
 function void
 PushText(RenderLayer layer, V2i p, String text, Color foreground, Color background)
 {
-    V2i at = p;
+    RenderCommand *command = PushRenderCommand(layer, RenderCommand_Text);
+    command->p = p;
 
-    Sprite sprite = {};
-    sprite.foreground = foreground;
-    sprite.background = background;
+    command->rect.min = p;
+    command->rect.max = p + MakeV2i(text.size, 1);
 
-    for (size_t i = 0; i < text.size; ++i)
-    {
-        sprite.glyph = text.data[i];
-        PushTile(layer, at, sprite);
-        at.x += 1;
-    }
+    command->text = PushString(render_state->arena, text);
+    command->foreground = foreground;
+    command->background = background;
 }
 
 function void
@@ -281,7 +270,7 @@ PushRect(RenderLayer layer, const Rect2i &rect, Color color)
 {
     RenderCommand *command = PushRenderCommand(layer, RenderCommand_Rect);
     command->rect = rect;
-    command->color = color;
+    command->foreground = color;
 }
 
 function void
@@ -329,9 +318,8 @@ BeginRender(void)
     render_state->arena = arena;
 
     Bitmap *target = render_state->target;
-    Font *font = render_state->fonts[Layer_Text];
-    int64_t viewport_w = (target->w) / font->glyph_w;
-    int64_t viewport_h = (target->h) / font->glyph_h;
+    int64_t viewport_w = (target->w) / editor->font_metrics.x;
+    int64_t viewport_h = (target->h) / editor->font_metrics.y;
     render_state->viewport = MakeRect2iMinDim(0, 0, viewport_w, viewport_h);
 
     render_state->cb_command_at = 0;
@@ -341,8 +329,8 @@ BeginRender(void)
     render_state->command_buffer_hash = 0;
 
     // TODO: Parameterize
-    int tile_count_x = 8;
-    int tile_count_y = 8;
+    int tile_count_x = 1;
+    int tile_count_y = 1;
 
     if (!render_state->prev_dirty_rects)
     {
@@ -365,6 +353,9 @@ PLATFORM_JOB(TiledRenderJob)
 
     Bitmap target = MakeBitmapView(params->target, clip_rect);
 
+    PlatformFontHandle font = editor->font;
+    V2i glyph_dim = editor->font_metrics;
+
     char *command_buffer = render_state->command_buffer;
     RenderSortKey *sort_keys = (RenderSortKey *)(command_buffer + render_state->cb_sort_key_at);
 
@@ -372,29 +363,18 @@ PLATFORM_JOB(TiledRenderJob)
     for (RenderSortKey *at = sort_keys; at < end; at += 1)
     {
         RenderCommand *command = (RenderCommand *)(command_buffer + at->offset);
-        Font *font = render_state->fonts[at->layer];
-        V2i glyph_dim = GlyphDim(font);
+        V2i p = MakeV2i(glyph_dim.x*command->p.x, glyph_dim.y*command->p.y);
 
         switch (command->kind)
         {
             case RenderCommand_Sprite:
             {
-                V2i p = MakeV2i(command->p.x, command->p.y);
-                Sprite *sprite = &command->sprite;
-
-                if (sprite->glyph == '@')
+                if (RectanglesOverlap(clip_rect, MakeRect2iMinDim(p, MakeV2i(glyph_dim.x, glyph_dim.y))))
                 {
-                    int y = 0; (void)y;
-                }
+                    uint8_t glyph = (uint8_t)command->glyph;
+                    String text = MakeString(1, &glyph);
 
-                p *= glyph_dim;
-                if (RectanglesOverlap(clip_rect, MakeRect2iMinDim(p, MakeV2i(font->glyph_w, font->glyph_h))))
-                {
-                    p -= clip_rect.min;
-
-                    Rect2i glyph_rect = GetGlyphRect(font, sprite->glyph);
-                    Bitmap glyph_bitmap = MakeBitmapView(&font->bitmap, glyph_rect);
-                    BlitBitmapMask(&target, &glyph_bitmap, p, sprite->foreground, sprite->background);
+                    platform->DrawText(font, &platform->backbuffer, text, p, command->foreground, command->background);
                 }
             } break;
 
@@ -410,7 +390,24 @@ PLATFORM_JOB(TiledRenderJob)
                     rect.min -= clip_rect.min;
                     rect.max -= clip_rect.min;
 
-                    BlitRect(&target, rect, command->color);
+                    BlitRect(&target, rect, command->foreground);
+                }
+            } break;
+
+            case RenderCommand_Text:
+            {
+                Rect2i rect = command->rect;
+
+                rect.min *= glyph_dim;
+                rect.max *= glyph_dim;
+
+                if (RectanglesOverlap(clip_rect, rect))
+                {
+                    rect.min -= clip_rect.min;
+                    rect.max -= clip_rect.min;
+
+                    BlitRect(&target, rect, command->background);
+                    platform->DrawText(font, &platform->backbuffer, command->text, p, command->foreground, command->background);
                 }
             } break;
         }
@@ -515,8 +512,8 @@ RenderCommandsToBitmap(Bitmap *target)
     }
 #endif
 
-    int tile_count_x = 8;
-    int tile_count_y = 8;
+    int tile_count_x = 1;
+    int tile_count_y = 1;
     int tile_count = tile_count_x*tile_count_y;
     TiledRenderJobParams *tiles = PushArray(render_state->arena, tile_count, TiledRenderJobParams);
 
@@ -557,7 +554,7 @@ RenderCommandsToBitmap(Bitmap *target)
     // int tile_w = (target->w + tile_count_x - 1) / tile_count_x;
     // int tile_h = (target->h + tile_count_y - 1) / tile_count_y;
 
-    V2i glyph_dim = GlyphDim(&editor->font);
+    V2i glyph_dim = editor->font_metrics;
 
     for (int tile_y = 0; tile_y < tile_count_y; ++tile_y)
     for (int tile_x = 0; tile_x < tile_count_x; ++tile_x)
@@ -587,55 +584,12 @@ RenderCommandsToBitmap(Bitmap *target)
 static void
 EndRender(void)
 {
+    PlatformHighResTime start = platform->GetTime();
     RenderCommandsToBitmap(render_state->target);
-}
-
-function void
-PrintRenderCommandsUnderCursor(void)
-{
-    char *command_buffer = render_state->command_buffer;
-    RenderSortKey *sort_keys = (RenderSortKey *)(command_buffer + render_state->cb_sort_key_at);
-
-    RenderSortKey *end = (RenderSortKey *)(command_buffer + render_state->cb_size);
-    int index = 0;
-    for (RenderSortKey *at = sort_keys; at < end; at += 1)
+    PlatformHighResTime end = platform->GetTime();
+    if (render_state->cb_command_at > 0)
     {
-        RenderCommand *command = (RenderCommand *)(command_buffer + at->offset);
-
-        Font *font = render_state->fonts[at->layer];
-        V2i glyph_dim = GlyphDim(font);
-
-        char *type = "Huh";
-        Rect2i surface_area = {};
-        switch (command->kind)
-        {
-            case RenderCommand_Sprite:
-            {
-                type = "sprite";
-
-                V2i p = MakeV2i(command->p.x, command->p.y);
-
-                p *= glyph_dim;
-                surface_area = MakeRect2iMinDim(p, glyph_dim);
-            } break;
-
-            case RenderCommand_Rect:
-            {
-                type = "rect";
-
-                Rect2i rect = command->rect;
-
-                rect.min *= glyph_dim;
-                rect.max *= glyph_dim;
-                surface_area = rect;
-            } break;
-        }
-
-        if (IsInRect(surface_area, editor->screen_mouse_p))
-        {
-            platform->DebugPrint("type: %s, index: %d\n", type, index);
-        }
-
-        ++index;
+        double time = platform->SecondsElapsed(start, end);
+        platform->DebugPrint("Rendered in %fms\n", 1000.0*time);
     }
 }

@@ -56,7 +56,7 @@ Win32_NextEvent(PlatformEventIterator *it, PlatformEvent *out_event)
 }
 
 function void
-Win32_PushEvent(const PlatformEvent &event)
+Win32_PushEvent(PlatformEvent *event)
 {
     uint32_t read_index  = win32_state.event_read_index;
     uint32_t write_index = win32_state.event_write_index;
@@ -64,7 +64,10 @@ Win32_PushEvent(const PlatformEvent &event)
 
     if (size < ArrayCount(win32_state.events))
     {
-        win32_state.events[write_index % ArrayCount(win32_state.events)] = event;
+        win32_state.events[write_index % ArrayCount(win32_state.events)] = *event;
+
+        WRITE_BARRIER;
+
         win32_state.event_write_index = write_index + 1;
     }
 }
@@ -74,7 +77,7 @@ Win32_PushTickEvent(void)
 {
     PlatformEvent event = {};
     event.type = PlatformEvent_Tick;
-    Win32_PushEvent(event);
+    Win32_PushEvent(&event);
 }
 
 static void *
@@ -210,6 +213,7 @@ function String_utf16
 Win32_Utf8ToUtf16(Arena *arena, String utf8)
 {
     String_utf16 result = {};
+    if (!utf8.size) return result;
 
     result.size = (size_t)MultiByteToWideChar(CP_UTF8, 0, (char *)utf8.data, (int)utf8.size, nullptr, 0);
     result.data = PushArrayNoClear(arena, result.size + 1, wchar_t);
@@ -840,6 +844,8 @@ Win32_ResizeOffscreenBuffer(PlatformOffscreenBuffer *buffer, int32_t w, int32_t 
 
         DeleteObject(buffer->opaque[1]);
         buffer->opaque[1] = NULL;
+
+        bitmap->data = nullptr;
     }
 
     if (!bitmap->data &&
@@ -1900,7 +1906,7 @@ Win32_AppThread(LPVOID userdata)
         {
             PlatformEvent event = {};
             event.type = PlatformEvent_Redraw;
-            Win32_PushEvent(event);
+            Win32_PushEvent(&event);
         }
 
         platform->render_w = client_w;
@@ -1931,6 +1937,10 @@ Win32_AppThread(LPVOID userdata)
         }
 
         win32_state.working_write_index = win32_state.event_write_index;
+
+        app_code->UpdateAndRender(platform); // events are iterated here
+
+        win32_state.event_read_index = win32_state.working_write_index;
 
         if (app_code->valid)
         {
@@ -2095,7 +2105,7 @@ main(int, char **)
     platform->window_resize_snap_w = 1;
     platform->window_resize_snap_h = 1;
 
-    HWND window = Win32_CreateWindow(instance, 32, 32, 720, 480, L"Textit", g_use_d3d);
+    HWND window = Win32_CreateWindow(instance, 32, 32, 1280, 960, L"Textit", g_use_d3d);
     if (!window)
     {
         platform->ReportError(PlatformError_Fatal, "Could not create window");
@@ -2171,7 +2181,7 @@ main(int, char **)
                     event.ctrl_down = ctrl_down;
                     event.shift_down = shift_down;
                     event.input_code = (PlatformInputCode)vk_code; // I gave myself a 1:1 mapping of VK codes to platform input codes, so that's nice.
-                    Win32_PushEvent(event);
+                    Win32_PushEvent(&event);
 
                     TranslateMessage(&message);
                 }
@@ -2223,7 +2233,7 @@ main(int, char **)
                     } break;
                 }
 
-                Win32_PushEvent(event);
+                Win32_PushEvent(&event);
             } break;
 
             case WM_MOUSEMOVE:
@@ -2234,7 +2244,7 @@ main(int, char **)
                 event.shift_down = !!(message.wParam & MK_SHIFT);
                 event.pos_x = LOWORD(message.lParam);
                 event.pos_y = HIWORD(message.lParam);
-                Win32_PushEvent(event);
+                Win32_PushEvent(&event);
             } break;
 
             case WM_CHAR:
@@ -2271,7 +2281,7 @@ main(int, char **)
                 event.type = PlatformEvent_Text;
                 event.text = Win32_Utf16ToUtf8(platform->GetTempArena(), chars);
 
-                Win32_PushEvent(event);
+                Win32_PushEvent(&event);
             } break;
 
             case WM_IME_CHAR:

@@ -322,9 +322,8 @@ DrawCommandLine(CommandLine *cl)
     V2i text_p = p;
     if (cl->name.size)
     {
-        text_p = DrawLine(p, cl->name, color_name, text_background);
-        PushTile(Layer_OverlayText, text_p, MakeSprite(' ', text_foreground, text_background));
-        text_p.x += 1;
+        PushText(Layer_OverlayText, text_p, PushTempStringF("%.*s ", StringExpand(cl->name)), color_name, text_background);
+        text_p.x += cl->name.size + 1;
     }
 
     if (cl->prediction_count > 0)
@@ -344,15 +343,10 @@ DrawCommandLine(CommandLine *cl)
             if (i < 9 + 26)
             {
                 int c = (i < 9 ? '1' + i : 'A' + i - 9);
-                PushTile(Layer_OverlayText, p + MakeV2i(0, -prediction_offset), MakeSprite(c, color_numbers, overlay_background));
-                PushTile(Layer_OverlayText, p + MakeV2i(1, -prediction_offset), MakeSprite(' ', color, overlay_background));
+                PushText(Layer_OverlayText, p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
             }
 
-            for (size_t j = 0; j < text.size; j += 1)
-            {
-                Sprite sprite = MakeSprite(text.data[j], color, overlay_background);
-                PushTile(Layer_OverlayText, p + MakeV2i(2 + j, -prediction_offset), sprite);
-            }
+            PushText(Layer_OverlayText, p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
 
             total_width = Max(total_width, 2 + (int64_t)text.size);
 
@@ -370,6 +364,10 @@ DrawCommandLine(CommandLine *cl)
         cursor_at = (int)text.size;
     }
 
+    PushText(Layer_OverlayText, text_p, text, text_foreground, text_background);
+    PushTile(Layer_OverlayText, text_p + MakeV2i(cursor_at, 0), MakeSprite(' ', text_background, text_foreground));
+
+    /* 
     for (int i = 0; i < text.size + 1; i += 1)
     {
         Sprite sprite;
@@ -387,4 +385,5 @@ DrawCommandLine(CommandLine *cl)
         }
         PushTile(Layer_OverlayText, text_p + MakeV2i(i, 0), sprite);
     }
+    */
 }

@@ -59,6 +59,9 @@ PushCppLanguageSpec(void)
     AddKeyword(result, "public"_id, Token_Keyword);
     AddKeyword(result, "private"_id, Token_Keyword);
     AddKeyword(result, "thread_local"_id, Token_Keyword);
+    AddKeyword(result, "final"_id, Token_Keyword);
+    AddKeyword(result, "constexpr"_id, Token_Keyword);
+    AddKeyword(result, "consteval"_id, Token_Keyword);
 
     AddKeyword(result, "case"_id, Token_FlowControl);
     AddKeyword(result, "continue"_id, Token_FlowControl);

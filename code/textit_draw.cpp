@@ -429,7 +429,7 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
     bool visualize_newlines              = core_config->visualize_newlines;
     bool right_align_visualized_newlines = core_config->right_align_visualized_newlines; (void)right_align_visualized_newlines;
     bool visualize_whitespace            = core_config->visualize_whitespace;
-    // bool show_line_numbers               = core_config->show_line_numbers;
+    bool show_line_numbers               = core_config->show_line_numbers;
     int  indent_width                    = core_config->indent_width;
 
     Color text_comment                 = GetThemeColor("text_comment"_id);
@@ -457,13 +457,12 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
     min_line = Clamp(min_line, 0, buffer_line_count);
     max_line = Clamp(max_line, 0, buffer_line_count);
 
-    // int64_t max_line_digits = Log10(max_line) + 1;
+    int64_t max_line_digits = Log10(max_line) + 1;
     int64_t line_width      = GetWidth(bounds);
 
     int64_t actual_line_height = 0;
     int64_t row = 0;
 
-#if 0
     if (view->scroll_at < 0)
     {
         row += -view->scroll_at;
@@ -473,7 +472,6 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
                  text_background_unreachable);
         actual_line_height += -view->scroll_at;
     }
-#endif
 
     int64_t line = min_line;
 
@@ -487,9 +485,7 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
     int64_t pos = data->range.start;
     view->visible_range.start = pos;
 
-    V2i     metrics   = editor->platform_font_metrics;
-    V2i     draw_p    = top_left*metrics;
-    int64_t draw_left = draw_p.x;
+    V2i metrics = editor->font_metrics;
 
     int64_t prev_col = 0;
     Color prev_background = {};
@@ -522,10 +518,10 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
         actual_line_height += 1;
 
         bool empty_line = data->newline_pos == data->range.start;
+        int64_t indentation_end = FindFirstNonHorzWhitespace(buffer, data->range.start);
 
         Color base_background = text_background;
 
-#if 0
         if (draw_cursor)
         {
             for (Cursor *cursor = IterateCursors(view->id, buffer->id);
@@ -542,7 +538,6 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
                 }
             }
         }
-#endif
 
         Token *token     = &buffer->tokens[data->token_index];
         // Token *token_end = token + data->token_count;
@@ -550,15 +545,14 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
         // int64_t end   = data->range.end;
         int64_t col   = 0;
 
-        // int64_t line_number = line + 1;
+        int64_t line_number = line + 1;
 
-#if 0
         if (show_line_numbers)
         {
-            DrawLine(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, base_background);
+            PushText(Layer_Text, top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, base_background);
             col += Max(5, max_line_digits + 1);
+            prev_col = col;
         }
-#endif
 
         int64_t left_col = col;
 
@@ -682,8 +676,9 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
             }
             else if (b == ' ' && visualize_whitespace)
             {
-                if (ReadBufferByte(buffer, pos - 1) == ' ' ||
-                    ReadBufferByte(buffer, pos + 1) == ' ')
+                if (pos < indentation_end &&
+                    (ReadBufferByte(buffer, pos - 1) == ' ' ||
+                     ReadBufferByte(buffer, pos + 1) == ' '))
                 {
                     string = PushTempStringF(".");
                     foreground = text_foreground_dimmer;
@@ -756,13 +751,12 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
             if (b == '\t')
             {
                 // TODO: tab logic needs to be done properly everywhere!!
-                int64_t bagabooga = col;
+                int64_t unaligned_col = col;
                 col = left_col + RoundUpNextTabStop(real_col, indent_width);
+
                 // TODO: This looks a bit janktastic when the cursor is on a tab
-                for (int64_t i = bagabooga; i < col; i += 1)
-                {
-                    PushTile(Layer_Text, top_left + MakeV2i(i, row), MakeSprite(' ', foreground, background));
-                }
+                string = PushStringSpace(platform->GetTempArena(), col - unaligned_col);
+                for (size_t i = 0; i < string.size; i += 1) string.data[i] = ' ';
             }
 
             if (top_left.y + row >= bounds.max.y)
@@ -772,13 +766,14 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
 
             pos += advance;
 
-            if (encountered_newline ||
+            if (!draw_buffer.CanFitAppend(string) ||
+                encountered_newline ||
                 prev_background.u32 != background.u32 ||
                 prev_foreground.u32 != foreground.u32)
             {
                 if (draw_buffer.size > 0)
                 {
-                    draw_p = platform->DrawText(editor->platform_font, &platform->backbuffer, draw_buffer.AsString(), draw_p, prev_foreground, prev_background);
+                    PushText(Layer_Text, top_left + MakeV2i(prev_col, row), draw_buffer.AsString(), prev_foreground, prev_background);
                     draw_buffer.Clear();
                 }
 
@@ -793,8 +788,6 @@ DrawTextArea2(View *view, Rect2i bounds, bool is_active_window)
 
             if (encountered_newline)
             {
-                draw_p.x = draw_left;
-                draw_p.y += metrics.y;
                 prev_col = 0;
                 col = 0;
                 break;
@@ -850,7 +843,7 @@ DrawView(View *view, bool is_active_window)
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
 
     Rect2i text_bounds = MakeRect2iMinMax(bounds.min, MakeV2i(bounds.max.x, bounds.max.y - 1));
-    // PushRect(Layer_Text, bounds, text_background);
+    PushRect(Layer_Text, bounds, text_background);
 
     int64_t actual_line_height = DrawTextArea2(view, text_bounds, is_active_window);
 
@@ -863,12 +856,12 @@ DrawView(View *view, bool is_active_window)
 
     PushRect(Layer_Text, MakeRect2iMinMax(MakeV2i(bounds.min.x + 0, filebar_y), MakeV2i(bounds.max.x - 0, filebar_y + 1)), filebar_text_background);
 
-    DrawLine(MakeV2i(bounds.min.x, filebar_y),
+    PushText(Layer_Text, MakeV2i(bounds.min.x, filebar_y),
              PushTempStringF("%hd:%.*s", buffer->id.index, StringExpand(leaf)),
-             filebar_text_foreground, filebar_text_background, GetWidth(bounds) - 4);
+             filebar_text_foreground, filebar_text_background);
 
     String right_string = PushTempStringF("[%.*s] %lld:%lld", StringExpand(buffer->language->name), loc.line + 1, loc.col);
-    DrawLine(MakeV2i(bounds.max.x - right_string.size, filebar_y), right_string, filebar_text_foreground, filebar_text_background);
+    PushText(Layer_Text, MakeV2i(bounds.max.x - right_string.size, filebar_y), right_string, filebar_text_foreground, filebar_text_background);
 
     int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
 

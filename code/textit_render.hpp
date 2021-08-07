@@ -132,6 +132,7 @@ enum RenderCommandKind
 {
     RenderCommand_Sprite,
     RenderCommand_Rect,
+    RenderCommand_Text,
 };
 
 union RenderSortKey
@@ -150,9 +151,12 @@ struct RenderCommand
     Rect2i rect;
 
     V2i p;
-    Sprite sprite;
 
-    Color color;
+    Color foreground;
+    Color background;
+
+    String text;
+    Glyph glyph;
 };
 
 struct RenderState
@@ -162,7 +166,6 @@ struct RenderState
     Bitmap *target;
 
     RenderLayer current_layer;
-    Font *fonts[Layer_COUNT];
 
     uint64_t *prev_dirty_rects;
 

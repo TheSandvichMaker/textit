@@ -36,7 +36,7 @@ struct CommandLine
     int prediction_index;
     int prediction_selected_index;
     int prediction_count;
-    Prediction predictions[32];
+    Prediction predictions[35];
 
     void (*GatherPredictions)(CommandLine *cl);
     bool (*AcceptEntry)(CommandLine *cl);

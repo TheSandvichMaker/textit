@@ -499,7 +499,7 @@ struct Platform
     float dt;
 
     PlatformEventIterator (*IterateEvents)(PlatformEventFilter filter);
-    bool (*NextEvent)(PlatformEventIterator *it, PlatformEvent *out_event);
+    bool (*NextEvent)(PlatformEventIterator *it, PlatformEvent *volatile out_event);
     void (*PushTickEvent)(void);
 
     int32_t mouse_x, mouse_y, mouse_y_flipped;

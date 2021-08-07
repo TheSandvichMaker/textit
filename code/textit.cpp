@@ -612,7 +612,7 @@ MakeFont(Bitmap bitmap, int32_t glyph_w, int32_t glyph_h)
     return font;
 }
 
-static Font
+function Font
 LoadFontFromDisk(Arena *arena, String filename, int glyph_w, int glyph_h)
 {
     Font result = {};
@@ -868,6 +868,7 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
+#if 0
         if (!platform->MakeAsciiFont("Px437 OlivettiThin 8x14"_str,
                                      &editor->font,
                                      14,
@@ -876,14 +877,15 @@ AppUpdateAndRender(Platform *platform_)
             platform->ReportError(PlatformError_Nonfatal, "Failed to load ttf font. Trying fallback bmp font.");
             editor->font = LoadFontFromDisk(&editor->transient_arena, "font8x16_slim.bmp"_str, 8, 16);
         }
+#endif
 
-        editor->platform_font         = platform->CreateFont("Consolas"_str, 0, 18);
-        editor->platform_font_metrics = platform->GetFontMetrics(editor->platform_font);
+        editor->font         = platform->CreateFont("Consolas"_str, 0, 15);
+        editor->font_metrics = platform->GetFontMetrics(editor->font);
 
-        platform->window_resize_snap_w = editor->font.glyph_w;
-        platform->window_resize_snap_h = editor->font.glyph_h;
+        platform->window_resize_snap_w = (int32_t)editor->font_metrics.x;
+        platform->window_resize_snap_h = (int32_t)editor->font_metrics.y;
 
-        InitializeRenderState(&editor->transient_arena, &platform->backbuffer.bitmap, &editor->font);
+        InitializeRenderState(&editor->transient_arena, &platform->backbuffer.bitmap);
 
         LoadDefaultTheme();
         LoadDefaultBindings();
@@ -917,7 +919,7 @@ AppUpdateAndRender(Platform *platform_)
     }
 
     editor->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);
-    editor->text_mouse_p = editor->screen_mouse_p / GlyphDim(&editor->font);
+    editor->text_mouse_p   = editor->screen_mouse_p / editor->font_metrics;
 
     if (editor->active_window->split != WindowSplit_Leaf)
     {

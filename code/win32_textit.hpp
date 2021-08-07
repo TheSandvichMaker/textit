@@ -92,8 +92,8 @@ struct Win32State
     int log_line_first;
     PlatformLogLine log_lines[PLATFORM_MAX_LOG_LINES];
 
-    volatile uint32_t event_read_index;
-    volatile uint32_t event_write_index;
+    uint32_t event_read_index;
+    uint32_t event_write_index;
     uint32_t working_write_index;
     PlatformEvent null_event;
     PlatformEvent events[4096];
