@@ -825,30 +825,56 @@ Win32_ToggleFullscreen(HWND window)
     }
 }
 
+static HDC fuckity_dc;
+
 function void
-Win32_ResizeOffscreenBuffer(Bitmap *buffer, int32_t w, int32_t h)
+Win32_ResizeOffscreenBuffer(PlatformOffscreenBuffer *buffer, int32_t w, int32_t h)
 {
-    if (buffer->data &&
-        (w != buffer->w) ||
-        (h != buffer->h))
+    Bitmap *bitmap = &buffer->bitmap;
+    if (bitmap->data &&
+        (w != bitmap->w) ||
+        (h != bitmap->h))
     {
-        Win32_Deallocate(buffer->data);
-        ZeroStruct(buffer);
+        DeleteDC((HDC)buffer->opaque[0]);
+        buffer->opaque[0] = NULL;
+
+        DeleteObject(buffer->opaque[1]);
+        buffer->opaque[1] = NULL;
     }
 
-    if (!buffer->data &&
+    if (!bitmap->data &&
         (w > 0) &&
         (h > 0))
     {
-        buffer->data = (Color *)Win32_Allocate(Align16(sizeof(Color)*w*h), 0, LOCATION_STRING("Win32OffscreenBuffer"));
-        buffer->w = w;
-        buffer->h = h;
-        buffer->pitch = w;
+        bitmap->w = w;
+        bitmap->h = h;
+        bitmap->pitch = w;
+
+        BITMAPINFO font_bitmap_info = {};
+        BITMAPINFOHEADER *header = &font_bitmap_info.bmiHeader;
+        header->biSize        = sizeof(*header);
+        header->biWidth       = bitmap->w;
+        header->biHeight      = -bitmap->h;
+        header->biPlanes      = 1;
+        header->biBitCount    = 32;
+        header->biCompression = BI_RGB;
+
+        HDC window_dc = GetDC(win32_state.window);
+        defer { ReleaseDC(win32_state.window, window_dc); };
+
+        HDC     buffer_dc   = CreateCompatibleDC(window_dc);
+        HBITMAP dib_section = CreateDIBSection(fuckity_dc, &font_bitmap_info, DIB_RGB_COLORS, (void **)&bitmap->data, NULL, 0);
+        if (!SelectObject(buffer_dc, dib_section))
+        {
+            INVALID_CODE_PATH;
+        }
+        buffer->opaque[0] = buffer_dc;
+        buffer->opaque[1] = dib_section;
     }
 }
 
 function void
-Win32_DisplayOffscreenBuffer(HWND window, Bitmap *buffer)
+Win32_DisplayOffscreenBuffer(HWND window, PlatformOffscreenBuffer *buffer)
 {
     HDC dc = GetDC(window);
 
@@ -858,19 +884,21 @@ Win32_DisplayOffscreenBuffer(HWND window, Bitmap *buffer)
     int dst_w = client_rect.right;
     int dst_h = client_rect.bottom;
 
+    Bitmap *bitmap = &buffer->bitmap;
+
     BITMAPINFO bitmap_info = {};
     BITMAPINFOHEADER *bitmap_header = &bitmap_info.bmiHeader;
     bitmap_header->biSize = sizeof(*bitmap_header);
-    bitmap_header->biWidth = buffer->w;
-    bitmap_header->biHeight = -buffer->h;
+    bitmap_header->biWidth = bitmap->w;
+    bitmap_header->biHeight = -bitmap->h;
     bitmap_header->biPlanes = 1;
     bitmap_header->biBitCount = 32;
     bitmap_header->biCompression = BI_RGB;
 
     StretchDIBits(dc,
                   0, 0, dst_w, dst_h,
-                  0, 0, buffer->w, buffer->h,
-                  buffer->data,
+                  0, 0, bitmap->w, bitmap->h,
+                  bitmap->data,
                   &bitmap_info,
                   DIB_RGB_COLORS,
                   SRCCOPY);
@@ -1584,6 +1612,105 @@ Win32_RegisterFontFile(String file_name_utf8)
     return result;
 }
 
+function PlatformFontHandle
+Win32_CreateFont(String font_name_utf8, PlatformFontRasterFlags flags, int height)
+{
+    String_utf16 font_name = Win32_Utf8ToUtf16(platform->GetTempArena(), font_name_utf8);
+
+    bool raster_font = !!(flags & PlatformFontRasterFlag_RasterFont);
+
+    DWORD out_precision = raster_font ? OUT_RASTER_PRECIS : OUT_DEFAULT_PRECIS;
+    DWORD quality       = raster_font ? NONANTIALIASED_QUALITY : CLEARTYPE_QUALITY;
+
+    HFONT font = CreateFontW(height, 0, 0, 0,
+                             FW_NORMAL,
+                             FALSE,
+                             FALSE,
+                             FALSE,
+                             DEFAULT_CHARSET,
+                             out_precision,
+                             CLIP_DEFAULT_PRECIS,
+                             quality,
+                             DEFAULT_PITCH|FF_DONTCARE,
+                             font_name.data);
+
+    PlatformFontHandle handle;
+    handle.opaque = font;
+
+    return handle;
+}
+
+function void
+Win32_DestroyFont(PlatformFontHandle handle)
+{
+    HFONT font = (HFONT)handle.opaque;
+    DeleteObject(font);
+}
+
+function V2i
+Win32_GetFontMetrics(PlatformFontHandle handle)
+{
+    V2i result = { -1, -1 };
+
+    HDC dc = GetDC(win32_state.window);
+    defer { ReleaseDC(win32_state.window, dc); };
+
+    HFONT font = (HFONT)handle.opaque;
+    SelectObject(dc, font);
+
+    SIZE size;
+    if (GetTextExtentPoint32W(dc, L"M", 1, &size))
+    {
+        result.x = size.cx;
+        result.y = size.cy;
+    }
+
+    return result;
+}
+
+function V2i
+Win32_DrawText(PlatformFontHandle handle, PlatformOffscreenBuffer *target, String text, V2i p, Color foreground, Color background)
+{
+    HDC   dc   = (HDC)target->opaque[0];
+    HFONT font = (HFONT)handle.opaque;
+
+    String_utf16 wtext = Win32_Utf8ToUtf16(platform->GetTempArena(), text);
+
+    if (!SelectObject(dc, font))
+    {
+        INVALID_CODE_PATH;
+    }
+
+    if (SetTextAlign(dc, TA_TOP|TA_LEFT) == GDI_ERROR)
+    {
+        INVALID_CODE_PATH;
+    }
+
+    if (SetTextColor(dc, RGB(foreground.r, foreground.g, foreground.b)) == CLR_INVALID)
+    {
+        INVALID_CODE_PATH;
+    }
+
+    UNUSED_VARIABLE(background);
+    SetBkMode(dc, TRANSPARENT);
+//    if (SetBkColor(dc, RGB(background.r, background.g, background.b)) == CLR_INVALID)  
+//    {
+//        INVALID_CODE_PATH;
+//    }
+
+    if (!TextOutW(dc, (int)p.x, (int)p.y, wtext.data, (int)wtext.size))
+    {
+        INVALID_CODE_PATH;
+    }
+    
+    SIZE size;
+    GetTextExtentPoint32W(dc, wtext.data, (int)wtext.size, &size);
+
+    p.x += size.cx;
+
+    return p;
+}
+
 function bool
 Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, PlatformFontRasterFlags flags)
 {
@@ -1796,7 +1923,7 @@ Win32_AppThread(LPVOID userdata)
 
         if (g_use_d3d)
         {
-            platform->backbuffer = D3D_AcquireCpuBuffer(platform->render_w, platform->render_h);
+            platform->backbuffer.bitmap = D3D_AcquireCpuBuffer(platform->render_w, platform->render_h);
         }
         else
         {
@@ -1895,42 +2022,58 @@ main(int, char **)
     PlatformJobQueue high_priority_queue = {};
     PlatformJobQueue  low_priority_queue = {};
 
-    platform->page_size              = system_info.dwPageSize;
-    platform->allocation_granularity = system_info.dwAllocationGranularity;
     platform->IterateEvents          = Win32_IterateEvents;
     platform->NextEvent              = Win32_NextEvent;
     platform->PushTickEvent          = Win32_PushTickEvent;
-    platform->high_priority_queue    = &high_priority_queue;
-    platform->low_priority_queue     = &low_priority_queue;
+
     platform->DebugPrint             = Win32_DebugPrint;
     platform->LogPrint               = Win32_LogPrint;
     platform->GetFirstLogLine        = Win32_GetFirstLogLine;
     platform->GetLatestLogLine       = Win32_GetLatestLogLine;
     platform->GetNextLogLine         = Win32_GetNextLogLine;
     platform->GetPrevLogLine         = Win32_GetPrevLogLine;
+
+    platform->high_priority_queue    = &high_priority_queue;
+    platform->low_priority_queue     = &low_priority_queue;
+
+    platform->page_size              = system_info.dwPageSize;
+    platform->allocation_granularity = system_info.dwAllocationGranularity;
     platform->ReportError            = Win32_ReportError;
     platform->AllocateMemory         = Win32_Allocate;
     platform->ReserveMemory          = Win32_Reserve;
     platform->CommitMemory           = Win32_Commit;
     platform->DecommitMemory         = Win32_Decommit;
     platform->DeallocateMemory       = Win32_Deallocate;
+
+    platform->RegisterFontFile       = Win32_RegisterFontFile;
+    platform->MakeAsciiFont          = Win32_MakeAsciiFont;
+
+    platform->CreateFont             = Win32_CreateFont;
+    platform->DestroyFont            = Win32_DestroyFont;
+    platform->GetFontMetrics         = Win32_GetFontMetrics;
+    platform->DrawText               = Win32_DrawText;
+
     platform->GetThreadLocalContext  = Win32_GetThreadLocalContext;
     platform->GetTempArena           = Win32_GetTempArena;
+
     platform->AddJob                 = Win32_AddJob;
     platform->WaitForJobs            = Win32_WaitForJobs;
+
     platform->SetWorkingDirectory    = Win32_SetWorkingDirectory;
     platform->ReadFile               = Win32_ReadFile;
     platform->ReadFileInto           = Win32_ReadFileInto;
     platform->GetFileSize            = Win32_GetFileSize;
+
     platform->FindFiles              = Win32_FindFiles;
     platform->FileIteratorIsValid    = Win32_FileIteratorIsValid;
     platform->FileIteratorNext       = Win32_FileIteratorNext;
+
     platform->GetTime                = Win32_GetTime;
-    platform->RegisterFontFile       = Win32_RegisterFontFile;
-    platform->MakeAsciiFont          = Win32_MakeAsciiFont;
     platform->SecondsElapsed         = Win32_SecondsElapsed;
+
     platform->WriteClipboard         = Win32_WriteClipboard;
     platform->ReadClipboard          = Win32_ReadClipboard;
+
     platform->SleepThread            = Win32_SleepThread;
 
     //

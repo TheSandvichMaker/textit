@@ -465,7 +465,7 @@ function void
 RadixSort(uint32_t count, uint32_t *data, uint32_t *temp)
 {
     uint32_t *source = data;
-    uint32_t *dest = temp;
+    uint32_t *dest   = temp;
 
     for (int byte_index = 0; byte_index < 4; ++byte_index)
     {
@@ -579,9 +579,9 @@ RenderCommandsToBitmap(Bitmap *target)
         }
     }
 
-    render_state->prev_dirty_rects = dirty_rects;
-
     platform->WaitForJobs(platform->high_priority_queue);
+
+    render_state->prev_dirty_rects = dirty_rects;
 }
 
 static void

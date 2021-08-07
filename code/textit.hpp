@@ -163,6 +163,8 @@ struct EditorState
     BindingMap bindings[EditMode_COUNT];
 
     Font font;
+    PlatformFontHandle platform_font;
+    V2i platform_font_metrics;
 
     LanguageSpec null_language;
     LanguageSpec *first_language;

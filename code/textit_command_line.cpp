@@ -73,7 +73,6 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 
             for (size_t i = 0; i < text.size; i += 1)
             {
-                // TODO: I need to surpress text events from handled key presses so I don't have garbage like that != ':'. That's nonsense.
                 if (IsPrintableAscii(text.data[i]))
                 {
                     cl->cycling_predictions = false;

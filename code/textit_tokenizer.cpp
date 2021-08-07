@@ -387,6 +387,8 @@ parse_string:
 function void
 TokenizeBuffer(Buffer *buffer)
 {
+    PlatformHighResTime start = platform->GetTime();
+
     Tokenizer tok = {};
     tok.tokens    = &buffer->tokens;
     tok.line_data = &buffer->line_data;
@@ -394,6 +396,11 @@ TokenizeBuffer(Buffer *buffer)
     tok.start     = buffer->text;
     tok.end       = buffer->text + buffer->count;
     Tokenize(&tok);
+
+    PlatformHighResTime end = platform->GetTime();
+    double time = platform->SecondsElapsed(start, end);
+
+    platform->DebugPrint("Tokenized in %fms\n", 1000.0*time);
 }
 
 function void

@@ -868,20 +868,22 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-        if (!platform->MakeAsciiFont("Bm437 OlivettiThin 8x14"_str,
+        if (!platform->MakeAsciiFont("Px437 OlivettiThin 8x14"_str,
                                      &editor->font,
                                      14,
-                                     PlatformFontRasterFlag_RasterFont|
-                                     PlatformFontRasterFlag_DoNotMapUnicode))
+                                     PlatformFontRasterFlag_RasterFont))
         {
             platform->ReportError(PlatformError_Nonfatal, "Failed to load ttf font. Trying fallback bmp font.");
             editor->font = LoadFontFromDisk(&editor->transient_arena, "font8x16_slim.bmp"_str, 8, 16);
         }
 
+        editor->platform_font         = platform->CreateFont("Consolas"_str, 0, 18);
+        editor->platform_font_metrics = platform->GetFontMetrics(editor->platform_font);
+
         platform->window_resize_snap_w = editor->font.glyph_w;
         platform->window_resize_snap_h = editor->font.glyph_h;
 
-        InitializeRenderState(&editor->transient_arena, &platform->backbuffer, &editor->font);
+        InitializeRenderState(&editor->transient_arena, &platform->backbuffer.bitmap, &editor->font);
 
         LoadDefaultTheme();
         LoadDefaultBindings();

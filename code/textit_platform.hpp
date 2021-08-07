@@ -475,6 +475,17 @@ struct PlatformFileIterator
     PlatformFileInfo info;
 };
 
+struct PlatformFontHandle
+{
+    void *opaque;
+};
+
+struct PlatformOffscreenBuffer
+{
+    Bitmap bitmap;
+    void *opaque[2];
+};
+
 struct Platform
 {
     bool exit_requested;
@@ -498,7 +509,7 @@ struct Platform
     int32_t window_resize_snap_w, window_resize_snap_h;
 
     int32_t render_w, render_h;
-    Bitmap backbuffer;
+    PlatformOffscreenBuffer backbuffer;
 
     void (*DebugPrint)(char *fmt, ...);
     void (*LogPrint)(PlatformLogLevel level, char *fmt, ...);
@@ -522,6 +533,13 @@ struct Platform
 
     bool (*RegisterFontFile)(String file_name);
     bool (*MakeAsciiFont)(String font_name, Font *out_font, int font_size, PlatformFontRasterFlags flags);
+
+    bool (*CreateOffscreenBuffer)(int w, int h, PlatformOffscreenBuffer *result); 
+
+    PlatformFontHandle (*CreateFont)(String font_name, PlatformFontRasterFlags flags, int height);
+    void (*DestroyFont)(PlatformFontHandle font);
+    V2i (*GetFontMetrics)(PlatformFontHandle font);
+    V2i (*DrawText)(PlatformFontHandle font, PlatformOffscreenBuffer *target, String text, V2i p, Color foreground, Color background);
 
     ThreadLocalContext *(*GetThreadLocalContext)(void);
     Arena *(*GetTempArena)(void);
