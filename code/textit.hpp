@@ -72,7 +72,8 @@ function void DestroyWindow(Window *window);
     X(_, bool, incremental_parsing             = false) \
     X(_, bool, show_scrollbar                  = false) \
     X(_, bool, indent_with_tabs                = false) \
-    X(_, int,  indent_width                    = 4)
+    X(_, int,  indent_width                    = 4)     \
+    X(_, bool, syntax_highlighting             = true)
 DeclareIntrospectedStruct(CoreConfig);
 GLOBAL_STATE(CoreConfig, core_config);
 
@@ -156,7 +157,9 @@ struct EditorState
     InputMode input_mode;
     bool suppress_text_event;
     bool changed_command_line;
-    CommandLine *command_line;
+
+    int command_line_count;
+    CommandLine *command_lines[64];
 
     EditMode edit_mode;
     EditMode next_edit_mode;

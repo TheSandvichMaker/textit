@@ -583,21 +583,8 @@ PushUndoInternal(Buffer *buffer, int64_t pos, String forward, String backward)
 function void
 FlushBufferedUndo(Buffer *buffer)
 {
-    auto undo = &buffer->undo;
-    if (undo->run_pos != -1)
-    {
-        platform->DebugPrint("Flushing undo buffer.\nfwd: '%.*s'\nbck: '%.*s'\n",
-                             StringExpand(undo->fwd_buffer),
-                             StringExpand(undo->bck_buffer));
-        PushUndoInternal(buffer,
-                         undo->run_pos,
-                         undo->fwd_buffer.AsString(),
-                         undo->bck_buffer.AsString());
-        undo->fwd_buffer.Clear();
-        undo->bck_buffer.Clear();
-        undo->run_pos = -1;
-        undo->insert_pos = -1;
-    }
+    UNUSED_VARIABLE(buffer);
+    /* TODO: Reimplement */
 }
 
 function void

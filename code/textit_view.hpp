@@ -18,8 +18,11 @@ struct View
     int64_t actual_viewport_line_height;
     int64_t scroll_at;
     Range visible_range;
+
+    uint64_t *line_hashes;
+    uint64_t *prev_line_hashes;
 };
 
-static inline View *GetView(ViewID id);
+function View *GetView(ViewID id);
 
 #endif /* TEXTIT_VIEW_HPP */

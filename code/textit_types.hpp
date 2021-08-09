@@ -58,6 +58,29 @@ operator ""_str16(const wchar_t *data, size_t size)
     return result;
 }
 
+struct StringContainer
+{
+    size_t capacity;
+    union
+    {
+        struct
+        {
+            size_t size;
+            uint8_t *data;
+        };
+        String as_string;
+    };
+};
+
+function StringContainer
+MakeStringContainer(size_t capacity, uint8_t *storage)
+{
+    StringContainer result = {};
+    result.capacity = capacity;
+    result.data     = storage;
+    return result;
+}
+
 struct StringNode
 {
     StringNode *next;

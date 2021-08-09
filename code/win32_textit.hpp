@@ -78,6 +78,8 @@ struct Win32State
     WNDCLASSW window_class;
     HWND window;
 
+    HRGN current_text_clip_rect;
+
     wchar_t *exe_folder;
     wchar_t *dll_path;
     Win32AppCode app_code;

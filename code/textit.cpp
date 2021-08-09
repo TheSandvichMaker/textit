@@ -51,6 +51,8 @@
 //  - https://blog.atom.io/2015/06/16/optimizing-an-important-atom-primitive.html
 //  - https://github.com/neovim/neovim/issues/4816
 //
+// nakst how2uniscribe: https://gist.github.com/nakst/ab7ae09ed943100ea13707fa4f42b548
+//
 
 function Cursor *
 GetCursorInternal(ViewID view, BufferID buffer, bool make_if_missing)
@@ -149,6 +151,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->undo.insert_pos      = -1;
     result->undo.current_ordinal = 1;
     result->indent_rules         = &editor->default_indent_rules;
+    result->language             = &editor->null_language;
 
     result->tokens.SetCapacity(32'000'000);
     result->line_data.SetCapacity(8'000'000);
@@ -172,8 +175,6 @@ OpenBufferFromFile(String filename)
     }
     result->count = (int64_t)file_size;
     result->line_end = GuessLineEndKind(MakeString(result->count, (uint8_t *)result->text));
-
-    result->language = &editor->null_language;
 
     String ext;
     SplitExtension(filename, &ext);
@@ -266,8 +267,11 @@ OpenNewView(BufferID buffer)
     }
 
     View *result = BootstrapPushStruct(View, arena);
-    result->id =  id;
+    result->id     = id;
     result->buffer = buffer;
+
+    result->line_hashes      = PushArray(&result->arena, 2048, uint64_t);
+    result->prev_line_hashes = PushArray(&result->arena, 2048, uint64_t);
 
     editor->views[result->id.index] = result;
 
@@ -490,6 +494,18 @@ RecalculateViewBounds(Window *window, Rect2i rect)
     if (window->split == WindowSplit_Leaf)
     {
         View *view = GetView(window->view);
+        int64_t line_count = view->viewport.max.y - view->viewport.min.y;
+        if (AreEqual(view->viewport.min, rect.min) &&
+            AreEqual(view->viewport.max, rect.max))
+        {
+            Swap(view->prev_line_hashes, view->line_hashes);
+            ZeroArray(line_count, view->line_hashes);
+        }
+        else
+        {
+            ZeroArray(line_count, view->prev_line_hashes);
+            ZeroArray(line_count, view->line_hashes);
+        }
         view->viewport = rect;
     }
     else
@@ -568,6 +584,7 @@ DrawWindows(Window *window)
 
         bool is_active_window = (window == editor->active_window);
 
+        ScopedClipRect clip_rect(Scale(view->viewport, editor->font_metrics), view->id);
         view->actual_viewport_line_height = DrawView(view, is_active_window);
     }
     else
@@ -911,7 +928,6 @@ AppUpdateAndRender(Platform *platform_)
         View   *scratch_view   = OpenNewView(scratch_buffer->id);
 
         editor->root_window.view = scratch_view->id;
-        RecalculateViewBounds(&editor->root_window, render_state->viewport);
         editor->active_window = &editor->root_window;
 
         platform->PushTickEvent();
@@ -950,18 +966,19 @@ AppUpdateAndRender(Platform *platform_)
             continue;
         }
 
-        if (editor->command_line)
+        if (editor->command_line_count > 0)
         {
             editor->clutch = false;
-            handled_any_events = HandleCommandLineEvent(editor->command_line, event);
+            handled_any_events = HandleCommandLineEvent(editor->command_lines[editor->command_line_count - 1], event);
         }
         else
         {
             handled_any_events = HandleViewEvent(editor->active_window->view, event);
-            if (editor->command_line)
+            if (editor->command_line_count > 0)
             {
                 // if we began a command line, it needs to be warmed up to not show a frame of lag for the predictions
-                editor->command_line->GatherPredictions(editor->command_line);
+                CommandLine *cl = editor->command_lines[editor->command_line_count - 1];
+                cl->GatherPredictions(cl);
             }
         }
     }
@@ -983,19 +1000,32 @@ AppUpdateAndRender(Platform *platform_)
         }
         editor->edit_mode = editor->next_edit_mode;
 
-        if (handled_any_events)
-        {
-            RecalculateViewBounds(&editor->root_window, render_state->viewport);
-            DrawWindows(&editor->root_window);
+        RecalculateViewBounds(&editor->root_window, render_state->viewport);
+        DrawWindows(&editor->root_window);
 
-            if (editor->command_line)
-            {
-                DrawCommandLine(editor->command_line);
-            }
+        if (editor->command_line_count > 0)
+        {
+            DrawCommandLines();
         }
     }
 
     EndRender();
+
+#if 0
+    for (ViewIterator it = IterateViews(); IsValid(&it); Next(&it))
+    {
+        View *view = it.view;
+        int64_t line_height = GetHeight(view->viewport);
+        platform->SetTextClipRect(&platform->backbuffer, MakeRect2iMinDim(0, 0, platform->backbuffer.bitmap.w, platform->backbuffer.bitmap.h));
+        for (int64_t line = 0; line < line_height; line += 1)
+        {
+            V2i p = editor->font_metrics*MakeV2i(view->viewport.max.x - 39, view->viewport.min.y + line);
+            String text = PushTempStringF("0x%016llX (0x%016llX)", view->line_hashes[line], view->prev_line_hashes[line]);
+            BlitRect(&platform->backbuffer.bitmap, MakeRect2iMinDim(p.x, p.y, text.size*editor->font_metrics.x, editor->font_metrics.y), COLOR_BLACK);
+            platform->DrawText(editor->font, &platform->backbuffer, text, p, COLOR_WHITE, COLOR_BLACK);
+        }
+    }
+#endif
 
     {
         Buffer *active_buffer = GetBuffer(GetView(editor->active_window->view));

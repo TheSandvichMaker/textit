@@ -1196,6 +1196,10 @@ Win32_HandleSpecialKeys(HWND window, int vk_code, bool pressed, bool alt_is_down
             processed = true;
             switch (vk_code)
             {
+                case VK_F11:
+                {
+                    platform->late_latching = !platform->late_latching;
+                } break;
                 case VK_RETURN:
                 {
                     if (!g_use_d3d)
@@ -1674,6 +1678,22 @@ Win32_GetFontMetrics(PlatformFontHandle handle)
     return result;
 }
 
+function void
+Win32_SetTextClipRect(PlatformOffscreenBuffer *target, Rect2i rect)
+{
+    if (win32_state.current_text_clip_rect)
+    {
+        DeleteObject(win32_state.current_text_clip_rect);
+    }
+    win32_state.current_text_clip_rect = CreateRectRgn((int)rect.min.x, (int)rect.min.y,
+                                                       (int)rect.max.x, (int)rect.max.y);
+    HDC dc = (HDC)target->opaque[0];
+    if (!SelectClipRgn(dc, win32_state.current_text_clip_rect))
+    {
+        INVALID_CODE_PATH;
+    }
+}
+
 function V2i
 Win32_DrawText(PlatformFontHandle handle, PlatformOffscreenBuffer *target, String text, V2i p, Color foreground, Color background)
 {
@@ -1889,25 +1909,11 @@ Win32_AppThread(LPVOID userdata)
 
     while (g_running)
     {
-        {
-            ThreadLocalContext *context = &tls_context;
-            Swap(context->temp_arena, context->prev_temp_arena);
-            Clear(context->temp_arena);
-        }
-
         RECT client_rect;
         GetClientRect(window, &client_rect);
 
         int32_t client_w = client_rect.right;
         int32_t client_h = client_rect.bottom;
-
-        if (client_w != platform->render_w ||
-            client_h != platform->render_h)
-        {
-            PlatformEvent event = {};
-            event.type = PlatformEvent_Redraw;
-            Win32_PushEvent(&event);
-        }
 
         platform->render_w = client_w;
         platform->render_h = client_h;
@@ -1938,15 +1944,23 @@ Win32_AppThread(LPVOID userdata)
 
         win32_state.working_write_index = win32_state.event_write_index;
 
-        app_code->UpdateAndRender(platform); // events are iterated here
-
-        win32_state.event_read_index = win32_state.working_write_index;
-
-        if (app_code->valid)
+        if (app_code->valid && win32_state.event_read_index != win32_state.working_write_index)
         {
+            ThreadLocalContext *context = &tls_context;
+            Swap(context->temp_arena, context->prev_temp_arena);
+            Clear(context->temp_arena);
+
+            PlatformHighResTime start = platform->GetTime();
+
             app_code->UpdateAndRender(platform);
             platform->exe_reloaded = false;
+
+            PlatformHighResTime end = platform->GetTime();
+            double time = platform->SecondsElapsed(start, end);
+            platform->DebugPrint("update took %f milliseconds\n", 1000.0*time);
         }
+
+        win32_state.event_read_index = win32_state.working_write_index;
 
         if (g_use_d3d)
         {
@@ -1963,7 +1977,10 @@ Win32_AppThread(LPVOID userdata)
             }
         }
 
-        win32_state.event_read_index = win32_state.working_write_index;
+        if (platform->late_latching)
+        {
+            Sleep(12);
+        }
 
         PlatformHighResTime frame_end_time = Win32_GetTime();
         double seconds_elapsed = Win32_SecondsElapsed(frame_start_time, frame_end_time);
@@ -1974,10 +1991,11 @@ Win32_AppThread(LPVOID userdata)
         String_utf16 user_title = Win32_Utf8ToUtf16(platform->GetTempArena(), platform->window_title);
 
         wchar_t *title = FormatWString(platform->GetTempArena(),
-                                       L"%.*s - frame time: %fms, fps: %f\n",
+                                       L"%.*s - frame time: %fms, fps: %f\n - late latching: %s",
                                        StringExpand(user_title),
                                        1000.0*smooth_frametime,
-                                       1.0 / smooth_frametime);
+                                       1.0 / smooth_frametime,
+                                       platform->late_latching ? L"yes" : L"no");
         SetWindowTextW(window, title);
 
         platform->dt = (float)seconds_elapsed;
@@ -2061,6 +2079,7 @@ main(int, char **)
     platform->CreateFont             = Win32_CreateFont;
     platform->DestroyFont            = Win32_DestroyFont;
     platform->GetFontMetrics         = Win32_GetFontMetrics;
+    platform->SetTextClipRect        = Win32_SetTextClipRect;
     platform->DrawText               = Win32_DrawText;
 
     platform->GetThreadLocalContext  = Win32_GetThreadLocalContext;

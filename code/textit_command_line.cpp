@@ -1,22 +1,56 @@
 function void
 EndCommandLine()
 {
-    editor->command_line = nullptr;
-    Clear(&editor->command_arena);
+    if (editor->command_line_count > 0)
+    {
+        CommandLine *cl = editor->command_lines[--editor->command_line_count];
+        EndTemporaryMemory(cl->temporary_memory);
+
+        if (editor->command_line_count > 0)
+        {
+            CommandLine *next_cl = editor->command_lines[editor->command_line_count - 1];
+            next_cl->count  = 0;
+            next_cl->cursor = 0;
+        }
+    }
+    else
+    {
+        INVALID_CODE_PATH;
+    }
+}
+
+function void
+EndAllCommandLines()
+{
+    while (editor->command_line_count > 0)
+    {
+        EndCommandLine();
+    }
 }
 
 function CommandLine *
 BeginCommandLine()
 {
-    if (editor->command_line)
+    CommandLine *cl = nullptr; // TODO: Error handling
+
+    int index = editor->command_line_count++;
+    if (index < ArrayCount(editor->command_lines))
     {
-        editor->changed_command_line = true;
+        if (editor->command_line_count > 0)
+        {
+            editor->changed_command_line = true;
+        }
+
+        TemporaryMemory temp = BeginTemporaryMemory(&editor->command_arena);
+
+        cl = PushStruct(&editor->command_arena, CommandLine);
+        cl->arena                     = PushSubArena(&editor->command_arena, Kilobytes(512));
+        cl->temporary_memory          = temp;
+        cl->prediction_selected_index = -1;
+
+        editor->command_lines[index] = cl;
     }
 
-    CommandLine *cl = PushStruct(&editor->command_arena, CommandLine);
-    cl->arena = PushSubArena(&editor->command_arena, Kilobytes(512));
-    cl->prediction_selected_index = -1;
-    editor->command_line = cl;
     return cl;
 }
 
@@ -121,7 +155,7 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 
                 case PlatformInputCode_Escape:
                 {
-                    EndCommandLine();
+                    EndAllCommandLines();
                 } break;
 
                 case 'A': case 'B': case 'C': 
@@ -187,7 +221,7 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                     bool terminate = cl->AcceptEntry(cl);
                     if (terminate && !editor->changed_command_line)
                     {
-                        EndCommandLine();
+                        EndAllCommandLines();
                     }
                 } break;
 
@@ -226,15 +260,34 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 
                 case PlatformInputCode_Back:
                 {
-                    AcceptPrediction(cl);
-                    size_t left = ArrayCount(cl->text) - cl->cursor;
-                    if (cl->cursor > 0)
+                    if (event.ctrl_down)
                     {
-                        memmove(cl->text + cl->cursor - 1,
-                                cl->text + cl->cursor,
-                                left);
-                        cl->cursor -= 1;
-                        cl->count  -= 1;
+                        if (cl->count > 0)
+                        {
+                            cl->count = 0;
+                            cl->cursor = 0;
+                        }
+                        else
+                        {
+                            EndCommandLine();
+                        }
+                    }
+                    else
+                    {
+                        AcceptPrediction(cl);
+                        if (cl->cursor > 0)
+                        {
+                            size_t left = ArrayCount(cl->text) - cl->cursor;
+                            memmove(cl->text + cl->cursor - 1,
+                                    cl->text + cl->cursor,
+                                    left);
+                            cl->cursor -= 1;
+                            cl->count  -= 1;
+                        }
+                        else
+                        {
+                            EndCommandLine();
+                        }
                     }
                 } break;
 
@@ -297,9 +350,9 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 }
 
 function void
-DrawCommandLine(CommandLine *cl)
+DrawCommandLines()
 {
-    // View *view = GetActiveView();
+    PushLayer(Layer_OverlayForeground);
 
     Color text_foreground           = GetThemeColor("text_foreground"_id);
     Color text_background           = GetThemeColor("command_line_background"_id);
@@ -309,25 +362,39 @@ DrawCommandLine(CommandLine *cl)
     Color color_numbers_highlighted = GetThemeColor("command_line_option_numbers_highlighted"_id);
     Color overlay_background        = GetThemeColor("command_line_background"_id);
 
+    V2i p = MakeV2i(render_state->viewport.min.x, render_state->viewport.max.y - 1);
+
+    V2i text_p = p;
+
+    Arena *arena = platform->GetTempArena();
+
+    StringList name_list = {};
+    for (int i = 0; i < editor->command_line_count; i += 1)
+    {
+        CommandLine *cl = editor->command_lines[i];
+        PushString(&name_list, arena, cl->name);
+    }
+    String names = PushFlattenedString(&name_list, arena, " > "_str, StringSeparator_AfterLast);
+
+    PushText(text_p, names, color_name, text_background);
+    text_p.x += names.size; 
+
+    CommandLine *cl = editor->command_lines[editor->command_line_count - 1];
+
+    int64_t total_width  = 0;
+    int64_t total_height = cl->prediction_count;
+
     if (cl->highlight_numbers)
     {
         color_numbers = color_numbers_highlighted;
     }
 
-    int64_t total_width  = 0;
-    int64_t total_height = cl->prediction_count;
-
-    V2i p = MakeV2i(render_state->viewport.min.x, render_state->viewport.max.y - 1);
-
-    V2i text_p = p;
-    if (cl->name.size)
-    {
-        PushText(Layer_OverlayText, text_p, PushTempStringF("%.*s ", StringExpand(cl->name)), color_name, text_background);
-        text_p.x += cl->name.size + 1;
-    }
+    Prediction *active_prediction = nullptr;
 
     if (cl->prediction_count > 0)
     {
+        active_prediction = &cl->predictions[0];
+
         int prediction_offset = 1;
         for (int i = 0; i < cl->prediction_count; i += 1)
         {
@@ -337,16 +404,17 @@ DrawCommandLine(CommandLine *cl)
             Color color = GetThemeColor(prediction->color ? prediction->color : "command_line_option"_id);
             if (i == cl->prediction_selected_index)
             {
+                active_prediction = prediction;
                 color = color_selected;
             }
 
             if (i < 9 + 26)
             {
                 int c = (i < 9 ? '1' + i : 'A' + i - 9);
-                PushText(Layer_OverlayText, p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
+                PushText(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
             }
 
-            PushText(Layer_OverlayText, p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
+            PushText(p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
 
             total_width = Max(total_width, 2 + (int64_t)text.size);
 
@@ -354,36 +422,29 @@ DrawCommandLine(CommandLine *cl)
         }
     }
 
-    PushRect(Layer_Overlay, MakeRect2iMinDim(p + MakeV2i(0, -total_height), MakeV2i(total_width, total_height)), overlay_background);
+    PushLayer(Layer_OverlayBackground);
+
+    PushRect(MakeRect2iMinDim(p + MakeV2i(0, -total_height), MakeV2i(total_width, total_height)), overlay_background);
+
+    PushLayer(Layer_OverlayForeground);
 
     int cursor_at = cl->cursor;
-    String text = MakeString(cl->count, cl->text);
-    if (cl->prediction_selected_index != -1)
+    String text = MakeString(cl->count, cl->text); if (cl->prediction_selected_index != -1)
     {
         text = cl->predictions[cl->prediction_selected_index].text;
         cursor_at = (int)text.size;
     }
 
-    PushText(Layer_OverlayText, text_p, text, text_foreground, text_background);
-    PushTile(Layer_OverlayText, text_p + MakeV2i(cursor_at, 0), MakeSprite(' ', text_background, text_foreground));
+    PushText(text_p, text, text_foreground, text_background);
+    PushTile(text_p + MakeV2i(cursor_at, 0), MakeSprite(' ', text_background, text_foreground));
 
-    /* 
-    for (int i = 0; i < text.size + 1; i += 1)
+    if (active_prediction)
     {
-        Sprite sprite;
-        if (i < text.size)
+        Command *cmd = FindCommand(active_prediction->text, StringMatch_CaseInsensitive);
+        if (cmd != NullCommand())
         {
-            sprite = MakeSprite(text.data[i], text_foreground, text_background);
+            String desc = cmd->description;
+            PushText(MakeV2i(render_state->viewport.max.x - desc.size, text_p.y), desc, text_foreground, text_background);
         }
-        else
-        {
-            sprite = MakeSprite(0, text_foreground, text_background);
-        }
-        if (i == cursor_at)
-        {
-            Swap(sprite.foreground, sprite.background);
-        }
-        PushTile(Layer_OverlayText, text_p + MakeV2i(i, 0), sprite);
     }
-    */
 }

@@ -679,6 +679,68 @@ FormatHumanReadableBytes(size_t bytes)
 }
 
 function bool
+CanFitAppend(StringContainer *container, String string)
+{
+    size_t left = container->capacity - container->size;
+    return left >= string.size;
+}
+
+function void
+Append(StringContainer *container, String string)
+{
+    size_t left = container->capacity - container->size;
+    size_t to_copy = string.size;
+    if (to_copy > left) to_copy = left;
+
+    CopyArray(to_copy, string.data, container->data + container->size);
+    container->size += to_copy;
+}
+
+function void
+Append(StringContainer *container, uint8_t character)
+{
+    if (container->size < container->capacity)
+    {
+        container->data[container->size++] = character;
+    }
+}
+
+function void
+AppendFill(StringContainer *container, size_t count, uint8_t character)
+{
+    size_t left = container->capacity - container->size;
+    if (count > left) count = left;
+
+    uint8_t *at = container->data + container->size;
+    for (size_t i = 0; i < count; i += 1)
+    {
+        *at++ = character;
+    }
+    container->size += count;
+}
+
+function bool
+CanFit(StringContainer *container, String string)
+{
+    return string.size <= container->capacity;
+}
+
+function void
+Replace(StringContainer *container, String string)
+{
+    size_t size = string.size;
+    if (size > container->capacity) size = container->capacity;
+    CopyArray(size, string.data, container->data);
+    container->size = size;
+}
+
+function void
+Clear(StringContainer *container)
+{
+    container->size = 0;
+}
+
+function bool
 IsEmpty(StringList *list)
 {
     bool result = !list->first;

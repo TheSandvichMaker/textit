@@ -1006,6 +1006,17 @@ GetHeight(Rect2 a)
 //
 
 function Rect2i
+MakeRect2iMinMax(int64_t min_x, int64_t min_y, int64_t max_x, int64_t max_y)
+{
+    Rect2i result;
+    result.min.x = min_x;
+    result.min.y = min_y;
+    result.max.x = max_x;
+    result.max.y = max_y;
+    return result;
+}
+
+function Rect2i
 MakeRect2iMinMax(V2i min, V2i max)
 {
     Rect2i result;
@@ -1104,6 +1115,15 @@ Offset(Rect2i a, V2i offset)
     Rect2i result;
     result.min = a.min + offset;
     result.max = a.max + offset;
+    return result;
+}
+
+function Rect2i
+Scale(Rect2i a, V2i mul)
+{
+    Rect2i result;
+    result.min = a.min*mul;
+    result.max = a.max*mul;
     return result;
 }
 

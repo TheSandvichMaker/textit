@@ -145,7 +145,7 @@ HashData(HashResult seed, size_t len, const void *data_init)
     __m128i *at = (__m128i *)data;
     while (len16--)
     {
-        hash = _mm_aesdec_si128(hash, _mm_loadu_si128(at));
+        hash = _mm_aesdec_si128(_mm_loadu_si128(at), hash);
         hash = _mm_aesdec_si128(hash, seed.m128i);
         hash = _mm_aesdec_si128(hash, seed.m128i);
         ++at;
@@ -156,7 +156,7 @@ HashData(HashResult seed, size_t len, const void *data_init)
     {
         overhang[i] = ((char *)at)[i];
     }
-    hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i*)overhang));
+    hash = _mm_aesdec_si128(_mm_loadu_si128((__m128i*)overhang), hash);
     hash = _mm_aesdec_si128(hash, seed.m128i);
     hash = _mm_aesdec_si128(hash, seed.m128i);
 
@@ -174,6 +174,13 @@ HashData(uint64_t seed, size_t len, const void *data)
     HashResult full_result = HashData(full_seed, len, data);
 
     return ExtractU64(full_result.m128i, 0);
+}
+
+function HashResult
+HashString(HashResult seed, String string)
+{
+    HashResult result = HashData(seed, string.size, string.data);
+    return result;
 }
 
 function HashResult

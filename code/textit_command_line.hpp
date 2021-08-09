@@ -21,6 +21,8 @@ MakePrediction(String text, StringID color = "command_line_option"_id)
 struct CommandLine
 {
     Arena *arena;
+    TemporaryMemory temporary_memory;
+
     String name;
 
     bool no_quickselect;

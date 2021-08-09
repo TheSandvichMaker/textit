@@ -54,7 +54,7 @@ struct BufferLocation
 enum_flags(int, BufferFlags)
 {
     Buffer_Indestructible = 0x1,
-    Buffer_ReadOnly = 0x2,
+    Buffer_ReadOnly       = 0x2,
 };
 
 enum_flags(uint8_t, LineFlags)
@@ -76,7 +76,7 @@ struct LineData
     uint32_t          token_index;    // 32
 };
 
-#define TEXTIT_BUFFER_SIZE Megabytes(128)
+#define TEXTIT_BUFFER_SIZE Gigabytes(8)
 #define BUFFER_ASYNC_THRESHOLD Megabytes(4)
 struct Buffer : TextStorage
 {
@@ -100,8 +100,6 @@ struct Buffer : TextStorage
 
         int64_t run_pos;
         int64_t insert_pos;
-        FixedStringContainer<2048> fwd_buffer;
-        FixedStringContainer<2048> bck_buffer;
     } undo;
 
     struct LanguageSpec *language;

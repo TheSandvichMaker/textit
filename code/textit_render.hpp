@@ -121,14 +121,14 @@ enum WallSegment
 
 enum RenderLayer
 {
-    Layer_Background,
-    Layer_Text,
-    Layer_Overlay,
-    Layer_OverlayText,
+    Layer_ViewBackground,
+    Layer_ViewForeground,
+    Layer_OverlayBackground,
+    Layer_OverlayForeground,
     Layer_COUNT,
 };
 
-enum RenderCommandKind
+enum RenderCommandKind : uint16_t
 {
     RenderCommand_Sprite,
     RenderCommand_Rect,
@@ -147,7 +147,9 @@ union RenderSortKey
 
 struct RenderCommand
 {
+    uint16_t clip_rect;
     RenderCommandKind kind;
+
     Rect2i rect;
 
     V2i p;
@@ -159,15 +161,21 @@ struct RenderCommand
     Glyph glyph;
 };
 
+struct RenderClipRect
+{
+    ViewID view;
+    Rect2i rect;
+};
+
 struct RenderState
 {
+    int arena_index;
+    Arena arenas[2];
     Arena *arena;
 
     Bitmap *target;
 
     RenderLayer current_layer;
-
-    uint64_t *prev_dirty_rects;
 
     Rect2i viewport;
 
@@ -181,8 +189,28 @@ struct RenderState
     uint32_t cb_command_at;
     uint32_t cb_sort_key_at;
     char *command_buffer;
+
+    uint16_t current_clip_rect;
+    uint16_t clip_rect_count;
+    RenderClipRect *clip_rects[512];
 };
 GLOBAL_STATE(RenderState, render_state);
+
+function uint16_t PushClipRect(Rect2i rect, ViewID view = {});
+
+struct ScopedClipRect
+{
+    uint16_t old_index;
+    ScopedClipRect(Rect2i rect, ViewID view = {})
+    {
+        old_index = PushClipRect(rect, view);
+    }
+    ~ScopedClipRect()
+    {
+        render_state->current_clip_rect = old_index;
+    }
+};
+#define PushScopedClipRect(rect) ScopedClipRect Paste(scoped_clip_rect_, __LINE__)
 
 struct ScopedRenderLayer
 {

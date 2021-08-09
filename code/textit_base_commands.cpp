@@ -167,9 +167,7 @@ COMMAND_PROC(EnterCommandLineMode)
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        if (cl->count == 0) return;
-
-        String command_string = MakeString(cl->count, cl->text);
+        String command_string = TrimSpaces(MakeString(cl->count, cl->text));
         for (size_t i = 0; i < command_list->command_count; i += 1)
         {
             Command *command = &command_list->commands[i];
@@ -187,7 +185,7 @@ COMMAND_PROC(EnterCommandLineMode)
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String command_string = MakeString(cl->count, cl->text);
+        String command_string = TrimSpaces(MakeString(cl->count, cl->text));
         Command *command = FindCommand(command_string, StringMatch_CaseInsensitive);
         if (command &&
             (command->kind == Command_Basic) &&
@@ -209,7 +207,7 @@ COMMAND_PROC(OpenBuffer,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = MakeString(cl->count, cl->text);
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
 
         String leaf;
         String path = SplitPath(string, &leaf);
@@ -248,7 +246,7 @@ COMMAND_PROC(OpenBuffer,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = MakeString(cl->count, cl->text);
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
         for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
         {
             Buffer *buffer = it.buffer;
@@ -272,7 +270,7 @@ COMMAND_PROC(OpenFile,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = MakeString(cl->count, cl->text);
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
 
         String leaf;
         String path = SplitPath(string, &leaf);
@@ -327,7 +325,7 @@ COMMAND_PROC(OpenFile,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = MakeString(cl->count, cl->text);
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
         View *view = GetActiveView();
         view->next_buffer = OpenBufferFromFile(string)->id;
         return true;
@@ -344,7 +342,7 @@ COMMAND_PROC(ChangeWorkingDirectory,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = MakeString(cl->count, cl->text);
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
         String path   = SplitPath(string);
 
         char *separator = "/";
@@ -376,7 +374,7 @@ COMMAND_PROC(ChangeWorkingDirectory,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = MakeString(cl->count, cl->text);
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
         platform->SetWorkingDirectory(string);
         return true;
     };
@@ -390,7 +388,7 @@ COMMAND_PROC(Set,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = MakeString(cl->count, cl->text);
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
 
         for (size_t i = 0; i < Introspection<CoreConfig>::member_count; i += 1)
         {
@@ -414,13 +412,13 @@ COMMAND_PROC(Set,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = MakeString(cl->count, cl->text);
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
 
         cl = BeginCommandLine();
         cl->name = string;
         cl->AcceptEntry = [](CommandLine *cl)
         {
-            String string = MakeString(cl->count, cl->text);
+            String string = TrimSpaces(MakeString(cl->count, cl->text));
 
             for (size_t i = 0; i < Introspection<CoreConfig>::member_count; i += 1)
             {
