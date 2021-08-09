@@ -523,8 +523,6 @@ struct Platform
     PlatformJobQueue *high_priority_queue;
     PlatformJobQueue *low_priority_queue;
 
-    bool late_latching;
-
     size_t page_size;
     size_t allocation_granularity;
     void *(*AllocateMemory)(size_t size, PlatformMemFlags flags, const char *tag);

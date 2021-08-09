@@ -80,6 +80,10 @@ struct Win32State
 
     HRGN current_text_clip_rect;
 
+    bool late_latching;
+    uint64_t update_time_sample_count;
+    double   update_time_accumulator;
+
     wchar_t *exe_folder;
     wchar_t *dll_path;
     Win32AppCode app_code;

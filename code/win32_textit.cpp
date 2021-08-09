@@ -1198,7 +1198,7 @@ Win32_HandleSpecialKeys(HWND window, int vk_code, bool pressed, bool alt_is_down
             {
                 case VK_F11:
                 {
-                    platform->late_latching = !platform->late_latching;
+                    win32_state.late_latching = !win32_state.late_latching;
                 } break;
                 case VK_RETURN:
                 {
@@ -1944,8 +1944,11 @@ Win32_AppThread(LPVOID userdata)
 
         win32_state.working_write_index = win32_state.event_write_index;
 
+        bool updated = false;
         if (app_code->valid && win32_state.event_read_index != win32_state.working_write_index)
         {
+            updated = true;
+
             ThreadLocalContext *context = &tls_context;
             Swap(context->temp_arena, context->prev_temp_arena);
             Clear(context->temp_arena);
@@ -1957,7 +1960,12 @@ Win32_AppThread(LPVOID userdata)
 
             PlatformHighResTime end = platform->GetTime();
             double time = platform->SecondsElapsed(start, end);
-            platform->DebugPrint("update took %f milliseconds\n", 1000.0*time);
+
+            if (win32_state.update_time_sample_count < (1 << 16))
+            {
+                win32_state.update_time_sample_count += 1;
+                win32_state.update_time_accumulator  += time;
+            }
         }
 
         win32_state.event_read_index = win32_state.working_write_index;
@@ -1977,9 +1985,33 @@ Win32_AppThread(LPVOID userdata)
             }
         }
 
-        if (platform->late_latching)
+        if (win32_state.late_latching &&
+            win32_state.update_time_sample_count > 8)
         {
-            Sleep(12);
+            double refresh_rate = 1.0 / 60.0; // TODO: get actual refresh rate
+            double average_update_time = (double)win32_state.update_time_accumulator / (double)win32_state.update_time_sample_count;
+            double coarse_safety_ms = 3.0;
+            double slop_ms = 2.0;
+            double total_sleep = refresh_rate - average_update_time - slop_ms / 1000.0;
+
+            double coarse_sleep_ms = 1000.0*total_sleep - coarse_safety_ms;
+            if (updated && coarse_sleep_ms >= 1.0)
+            {
+                PlatformHighResTime start_time = Win32_GetTime();
+
+                platform->DebugPrint("Late latching, coarse: %ums, fine: %fms\n", (DWORD)coarse_sleep_ms, 1000.0*total_sleep);
+                Sleep((DWORD)coarse_sleep_ms);
+
+                for (;;)
+                {
+                    PlatformHighResTime end_time = Win32_GetTime();
+                    if (Win32_SecondsElapsed(start_time, end_time) >= total_sleep)
+                    {
+                        break;
+                    }
+                    _mm_pause();
+                }
+            }
         }
 
         PlatformHighResTime frame_end_time = Win32_GetTime();
@@ -1995,7 +2027,7 @@ Win32_AppThread(LPVOID userdata)
                                        StringExpand(user_title),
                                        1000.0*smooth_frametime,
                                        1.0 / smooth_frametime,
-                                       platform->late_latching ? L"yes" : L"no");
+                                       win32_state.late_latching ? L"yes" : L"no");
         SetWindowTextW(window, title);
 
         platform->dt = (float)seconds_elapsed;
@@ -2049,6 +2081,8 @@ main(int, char **)
 
     PlatformJobQueue high_priority_queue = {};
     PlatformJobQueue  low_priority_queue = {};
+
+    win32_state.late_latching = true;
 
     platform->IterateEvents          = Win32_IterateEvents;
     platform->NextEvent              = Win32_NextEvent;
@@ -2157,6 +2191,8 @@ main(int, char **)
     CloseHandle(app_thread_handle);
 
     wchar_t last_char = 0;
+
+    Win32_PushTickEvent();
 
     MSG message;
     while (g_running && GetMessageW(&message, 0, 0, 0))
