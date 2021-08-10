@@ -2009,7 +2009,6 @@ Win32_AppThread(LPVOID userdata)
                     {
                         break;
                     }
-                    _mm_pause();
                 }
             }
         }

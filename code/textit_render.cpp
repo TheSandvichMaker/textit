@@ -240,25 +240,48 @@ PushRenderCommand(RenderCommandKind kind)
 }
 
 function void
+HashRenderCommandInternal(RenderCommand *command, View *view)
+{
+    RenderCommand to_hash = *command;
+    to_hash.text.data = nullptr;
+
+    int64_t line_count = GetHeight(view->viewport);
+
+    int64_t min_line = command->rect.min.y - view->viewport.min.y;
+    int64_t max_line = command->rect.max.y - view->viewport.min.y;
+
+    min_line = Clamp(min_line, 0, line_count);
+    max_line = Clamp(max_line, 0, line_count);
+
+    for (int64_t line = min_line; line < max_line; line += 1)
+    {
+        HashResult hash = {};
+        hash.u64[0] = view->line_hashes[line];
+        hash = HashData(hash, sizeof(to_hash), &to_hash);
+        hash = HashString(hash, command->text);
+        view->line_hashes[line] = hash.u64[0];
+    }
+}
+
+function void
 HashRenderCommand(RenderCommand *command)
 {
     RenderClipRect *clip_rect = render_state->clip_rects[render_state->current_clip_rect];
     if (clip_rect->view)
     {
         View *view = GetView(clip_rect->view);
-
-        RenderCommand to_hash = *command;
-        to_hash.text.data = nullptr;
-
-        int64_t min_line = command->rect.min.y;
-        int64_t max_line = command->rect.max.y;
-        for (int64_t line = min_line; line < max_line; line += 1)
+        HashRenderCommandInternal(command, view);
+    }
+    else if (render_state->current_layer == Layer_OverlayBackground ||
+             render_state->current_layer == Layer_OverlayForeground)
+    {
+        for (ViewIterator it = IterateViews(); IsValid(&it); Next(&it))
         {
-            HashResult hash = {};
-            hash.u64[0] = view->line_hashes[line];
-            hash = HashData(hash, sizeof(to_hash), &to_hash);
-            hash = HashString(hash, command->text);
-            view->line_hashes[line] = hash.u64[0];
+            View *view = it.view;
+            if (RectanglesOverlap(command->rect, view->viewport))
+            {
+                HashRenderCommandInternal(command, view);
+            }
         }
     }
 }
@@ -520,25 +543,28 @@ RenderCommandsToBitmap(void)
             target = MakeBitmapView(render_state->target, clip_rect->rect);
         }
 
-        int64_t min_line = command->rect.min.y - viewport.min.y;
-        int64_t max_line = command->rect.max.y - viewport.min.y;
-
-        min_line = Clamp(min_line, 0, line_count);
-        max_line = Clamp(max_line, 0, line_count);
-
-        bool all_hashes_match = true;
-        for (int64_t line = min_line; line < max_line; line += 1)
+        if (clip_rect->view)
         {
-            if (line_hashes[line] != prev_line_hashes[line])
+            int64_t min_line = command->rect.min.y - viewport.min.y;
+            int64_t max_line = command->rect.max.y - viewport.min.y;
+
+            min_line = Clamp(min_line, 0, line_count);
+            max_line = Clamp(max_line, 0, line_count);
+
+            bool all_hashes_match = true;
+            for (int64_t line = min_line; line < max_line; line += 1)
             {
-                all_hashes_match = false;
-                break;
+                if (line_hashes[line] != prev_line_hashes[line])
+                {
+                    all_hashes_match = false;
+                    break;
+                }
             }
-        }
 
-        if (all_hashes_match)
-        {
-            continue;
+            if (all_hashes_match)
+            {
+                continue;
+            }
         }
 
         switch (command->kind)
