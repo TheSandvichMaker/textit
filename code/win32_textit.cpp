@@ -23,6 +23,25 @@ static Platform platform_;
 
 static bool g_use_d3d = false;
 
+static PlatformHighResTime
+Win32_GetTime(void)
+{
+    LARGE_INTEGER time;
+    QueryPerformanceCounter(&time);
+
+    PlatformHighResTime result;
+    result.opaque = (uint64_t &)time.QuadPart;
+
+    return result;
+}
+
+static double
+Win32_SecondsElapsed(PlatformHighResTime start, PlatformHighResTime end)
+{
+    double result = (double)(end.opaque - start.opaque) / (double)g_perf_freq.QuadPart;
+    return result;
+}
+
 function PlatformEventIterator
 Win32_IterateEvents(PlatformEventFilter filter)
 {
@@ -47,6 +66,13 @@ Win32_NextEvent(PlatformEventIterator *it, PlatformEvent *out_event)
             result           = true;
             event->consumed_ = true;
             *out_event       = *event;
+
+            PlatformHighResTime time = Win32_GetTime();
+            double latency = Win32_SecondsElapsed(event->timestamp, time);
+
+            platform->event_latency_sample_count += 1;
+            platform->event_latency_accumulator  += latency;
+
             break;
         }
         it->index += 1;
@@ -64,6 +90,7 @@ Win32_PushEvent(PlatformEvent *event)
 
     if (size < ArrayCount(win32_state.events))
     {
+        event->timestamp = Win32_GetTime();
         win32_state.events[write_index % ArrayCount(win32_state.events)] = *event;
 
         WRITE_BARRIER;
@@ -461,16 +488,14 @@ Win32_ReportError(PlatformErrorType type, char *error, ...)
     Arena *arena = platform->GetTempArena();
     ScopedMemory temp(arena);
 
+    char formatted_error[4096];
+
     va_list args;
     va_start(args, error);
-    char *formatted_error = (char *)FormatStringV(arena, error, args).data;
+    vsnprintf(formatted_error, sizeof(formatted_error), error, args);
     va_end(args);
 
-    wchar_t *error_wide = Win32_Utf8ToUtf16(arena, formatted_error);
-    if (error_wide)
-    {
-        MessageBoxW(0, error_wide, L"Error", MB_OK);
-    }
+    MessageBoxA(0, formatted_error, "Error", MB_OK);
 
     if (type == PlatformError_Fatal)
     {
@@ -829,7 +854,43 @@ Win32_ToggleFullscreen(HWND window)
     }
 }
 
-static HDC fuckity_dc;
+function void
+Win32_CreateOffscreenBuffer(int32_t w, int32_t h, PlatformOffscreenBuffer *result)
+{
+    Bitmap *bitmap = &result->bitmap;
+    bitmap->w = w;
+    bitmap->h = h;
+    bitmap->pitch = w;
+    BITMAPINFO bitmap_info = {};
+
+    BITMAPINFOHEADER *header = &bitmap_info.bmiHeader;
+    header->biSize        = sizeof(*header);
+    header->biWidth       =  bitmap->w;
+    header->biHeight      = -bitmap->h;
+    header->biPlanes      = 1;
+    header->biBitCount    = 32;
+    header->biCompression = BI_RGB;
+
+    HDC window_dc = GetDC(win32_state.window);
+    defer { ReleaseDC(win32_state.window, window_dc); };
+
+    HDC     buffer_dc   = CreateCompatibleDC(window_dc);
+    HBITMAP dib_section = CreateDIBSection(buffer_dc, &bitmap_info, DIB_RGB_COLORS, (void **)&bitmap->data, NULL, 0);
+    if (!SelectObject(buffer_dc, dib_section))
+    {
+        INVALID_CODE_PATH;
+    }
+    result->opaque[0] = buffer_dc;
+    result->opaque[1] = dib_section;
+}
+
+function void
+Win32_DestroyOffscreenBuffer(PlatformOffscreenBuffer *buffer)
+{
+    DeleteDC((HDC)buffer->opaque[0]);
+    DeleteObject(buffer->opaque[1]);
+    ZeroStruct(buffer);
+}
 
 function void
 Win32_ResizeOffscreenBuffer(PlatformOffscreenBuffer *buffer, int32_t w, int32_t h)
@@ -869,7 +930,7 @@ Win32_ResizeOffscreenBuffer(PlatformOffscreenBuffer *buffer, int32_t w, int32_t 
         defer { ReleaseDC(win32_state.window, window_dc); };
 
         HDC     buffer_dc   = CreateCompatibleDC(window_dc);
-        HBITMAP dib_section = CreateDIBSection(fuckity_dc, &font_bitmap_info, DIB_RGB_COLORS, (void **)&bitmap->data, NULL, 0);
+        HBITMAP dib_section = CreateDIBSection(buffer_dc, &font_bitmap_info, DIB_RGB_COLORS, (void **)&bitmap->data, NULL, 0);
         if (!SelectObject(buffer_dc, dib_section))
         {
             INVALID_CODE_PATH;
@@ -1199,6 +1260,10 @@ Win32_HandleSpecialKeys(HWND window, int vk_code, bool pressed, bool alt_is_down
                 case VK_F11:
                 {
                     win32_state.late_latching = !win32_state.late_latching;
+                    win32_state.update_time_sample_count = 0;
+                    win32_state.update_time_accumulator  = 0.0;
+                    platform->event_latency_sample_count = 0;
+                    platform->event_latency_accumulator  = 0.0;
                 } break;
                 case VK_RETURN:
                 {
@@ -1222,25 +1287,6 @@ Win32_HandleSpecialKeys(HWND window, int vk_code, bool pressed, bool alt_is_down
     }
 
     return processed;
-}
-
-static PlatformHighResTime
-Win32_GetTime(void)
-{
-    LARGE_INTEGER time;
-    QueryPerformanceCounter(&time);
-
-    PlatformHighResTime result;
-    result.opaque = (uint64_t &)time.QuadPart;
-
-    return result;
-}
-
-static double
-Win32_SecondsElapsed(PlatformHighResTime start, PlatformHighResTime end)
-{
-    double result = (double)(end.opaque - start.opaque) / (double)g_perf_freq.QuadPart;
-    return result;
 }
 
 static wchar_t *
@@ -1695,6 +1741,26 @@ Win32_SetTextClipRect(PlatformOffscreenBuffer *target, Rect2i rect)
 }
 
 function V2i
+Win32_GetTextExtent(PlatformFontHandle handle, PlatformOffscreenBuffer *target, String text)
+{
+    HDC   dc   = (HDC)target->opaque[0];
+    HFONT font = (HFONT)handle.opaque;
+
+    if (!SelectObject(dc, font))
+    {
+        INVALID_CODE_PATH;
+    }
+
+    String_utf16 wtext = Win32_Utf8ToUtf16(platform->GetTempArena(), text);
+
+    SIZE size;
+    GetTextExtentPoint32W(dc, wtext.data, (int)wtext.size, &size);
+
+    V2i result = MakeV2i(size.cx, size.cy);
+    return result;
+}
+
+function V2i
 Win32_DrawText(PlatformFontHandle handle, PlatformOffscreenBuffer *target, String text, V2i p, Color foreground, Color background)
 {
     HDC   dc   = (HDC)target->opaque[0];
@@ -1717,12 +1783,10 @@ Win32_DrawText(PlatformFontHandle handle, PlatformOffscreenBuffer *target, Strin
         INVALID_CODE_PATH;
     }
 
-    UNUSED_VARIABLE(background);
-    SetBkMode(dc, TRANSPARENT);
-//    if (SetBkColor(dc, RGB(background.r, background.g, background.b)) == CLR_INVALID)  
-//    {
-//        INVALID_CODE_PATH;
-//    }
+    if (SetBkColor(dc, RGB(background.r, background.g, background.b)) == CLR_INVALID)
+    {
+        INVALID_CODE_PATH;
+    }
 
     if (!TextOutW(dc, (int)p.x, (int)p.y, wtext.data, (int)wtext.size))
     {
@@ -1732,9 +1796,8 @@ Win32_DrawText(PlatformFontHandle handle, PlatformOffscreenBuffer *target, Strin
     SIZE size;
     GetTextExtentPoint32W(dc, wtext.data, (int)wtext.size, &size);
 
-    p.x += size.cx;
-
-    return p;
+    V2i result = MakeV2i(size.cx, size.cy);
+    return result;
 }
 
 function bool
@@ -1903,12 +1966,23 @@ Win32_AppThread(LPVOID userdata)
     }
 
     double smooth_frametime = 1.0f / 60.0f;
-    PlatformHighResTime frame_start_time = Win32_GetTime();
+
+    double smooth_vsync_wait = 0.0;
+
+    int vsync_wait_sample_index = 0;
+    double vsync_wait_samples[64];
+
+    double refresh_rate = 1.0 / 60.0; // TODO: get actual refresh rate
 
     platform->dt = 1.0f / 60.0f;
 
+    PlatformHighResTime frame_start_time = Win32_GetTime();
     while (g_running)
     {
+        ThreadLocalContext *context = &tls_context;
+        Swap(context->temp_arena, context->prev_temp_arena);
+        Clear(context->temp_arena);
+
         RECT client_rect;
         GetClientRect(window, &client_rect);
 
@@ -1933,6 +2007,15 @@ Win32_AppThread(LPVOID userdata)
             SetCursor(arrow_cursor);
         }
 
+        bool should_resize = false;
+        if (platform->backbuffer.bitmap.w != platform->render_w ||
+            platform->backbuffer.bitmap.h != platform->render_h)
+        {
+            should_resize = true;
+        }
+
+        win32_state.working_write_index = win32_state.event_write_index;
+
         if (g_use_d3d)
         {
             platform->backbuffer.bitmap = D3D_AcquireCpuBuffer(platform->render_w, platform->render_h);
@@ -1942,16 +2025,10 @@ Win32_AppThread(LPVOID userdata)
             Win32_ResizeOffscreenBuffer(&platform->backbuffer, platform->render_w, platform->render_h);
         }
 
-        win32_state.working_write_index = win32_state.event_write_index;
-
         bool updated = false;
-        if (app_code->valid && win32_state.event_read_index != win32_state.working_write_index)
+        if (app_code->valid)
         {
             updated = true;
-
-            ThreadLocalContext *context = &tls_context;
-            Swap(context->temp_arena, context->prev_temp_arena);
-            Clear(context->temp_arena);
 
             PlatformHighResTime start = platform->GetTime();
 
@@ -1963,44 +2040,50 @@ Win32_AppThread(LPVOID userdata)
 
             if (win32_state.update_time_sample_count < (1 << 16))
             {
+                if (time > 4.0*refresh_rate) time = 4.0*refresh_rate;
                 win32_state.update_time_sample_count += 1;
                 win32_state.update_time_accumulator  += time;
             }
         }
 
-        win32_state.event_read_index = win32_state.working_write_index;
+        PlatformHighResTime pre_vsync_time;
 
         if (g_use_d3d)
         {
             D3D_ReleaseCpuBuffer();
+            pre_vsync_time = Win32_GetTime();
             D3D_Present();
         }
         else
         {
             Win32_DisplayOffscreenBuffer(window, &platform->backbuffer);
 
+            pre_vsync_time = Win32_GetTime();
             if (composition_enabled)
             {
                 DwmFlush();
             }
         }
+        PlatformHighResTime post_vsync_time = Win32_GetTime();
+        double vsync_wait = Win32_SecondsElapsed(pre_vsync_time, post_vsync_time);
 
         if (win32_state.late_latching &&
             win32_state.update_time_sample_count > 8)
         {
-            double refresh_rate = 1.0 / 60.0; // TODO: get actual refresh rate
             double average_update_time = (double)win32_state.update_time_accumulator / (double)win32_state.update_time_sample_count;
-            double coarse_safety_ms = 3.0;
-            double slop_ms = 2.0;
+            double coarse_safety_ms = 4.0;
+            double slop_ms = 5.0;
             double total_sleep = refresh_rate - average_update_time - slop_ms / 1000.0;
 
             double coarse_sleep_ms = 1000.0*total_sleep - coarse_safety_ms;
-            if (updated && coarse_sleep_ms >= 1.0)
+            if (updated && 
+                total_sleep     >  0.0 && 
+                coarse_sleep_ms >= 1.0)
             {
                 PlatformHighResTime start_time = Win32_GetTime();
 
-                platform->DebugPrint("Late latching, coarse: %ums, fine: %fms\n", (DWORD)coarse_sleep_ms, 1000.0*total_sleep);
                 Sleep((DWORD)coarse_sleep_ms);
+                PlatformHighResTime coarse_end = Win32_GetTime();
 
                 for (;;)
                 {
@@ -2010,6 +2093,12 @@ Win32_AppThread(LPVOID userdata)
                         break;
                     }
                 }
+
+                PlatformHighResTime fine_end = Win32_GetTime();
+                double coarse = Win32_SecondsElapsed(start_time, coarse_end);
+                double fine   = Win32_SecondsElapsed(start_time, fine_end);
+
+                platform->DebugPrint("Late latching, coarse: %fms, fine: %fms\n", 1000.0*coarse, 1000.0*fine);
             }
         }
 
@@ -2017,23 +2106,41 @@ Win32_AppThread(LPVOID userdata)
         double seconds_elapsed = Win32_SecondsElapsed(frame_start_time, frame_end_time);
         Swap(frame_start_time, frame_end_time);
 
-        smooth_frametime = 0.9f*smooth_frametime + 0.1f*seconds_elapsed;
+        smooth_frametime = 0.9*smooth_frametime + 0.1*seconds_elapsed;
+        smooth_vsync_wait = 0.9*smooth_vsync_wait + 0.1*vsync_wait;
+
+        vsync_wait_samples[vsync_wait_sample_index++] = vsync_wait;
+        vsync_wait_sample_index %= ArrayCount(vsync_wait_samples);
+
+        double min_vsync_wait = 9999.0;
+        for (int i = 0; i < ArrayCount(vsync_wait_samples); i += 1)
+        {
+            if (min_vsync_wait > vsync_wait_samples[i])
+            {
+                min_vsync_wait = vsync_wait_samples[i];
+            }
+        }
 
         String_utf16 user_title = Win32_Utf8ToUtf16(platform->GetTempArena(), platform->window_title);
 
         wchar_t *title = FormatWString(platform->GetTempArena(),
-                                       L"%.*s - frame time: %fms, fps: %f\n - late latching: %s",
+                                       L"%.*s - frame time: %fms, vsync time: %fms (min/64: %fms), fps: %f\n - late latching: %s",
                                        StringExpand(user_title),
                                        1000.0*smooth_frametime,
+                                       1000.0*smooth_vsync_wait,
+                                       1000.0*min_vsync_wait,
                                        1.0 / smooth_frametime,
                                        win32_state.late_latching ? L"yes" : L"no");
         SetWindowTextW(window, title);
 
-        platform->dt = (float)seconds_elapsed;
+        platform->dt = (float)refresh_rate;
         if (platform->dt > 1.0f / 15.0f)
         {
             platform->dt = 1.0f / 15.0f;
         }
+
+        win32_state.event_read_index = win32_state.working_write_index;
+
 
         uint64_t last_write_time = Win32_GetLastWriteTime(win32_state.dll_path);
         if (app_code->last_write_time != last_write_time)
@@ -2081,7 +2188,7 @@ main(int, char **)
     PlatformJobQueue high_priority_queue = {};
     PlatformJobQueue  low_priority_queue = {};
 
-    win32_state.late_latching = true;
+    win32_state.late_latching = false;
 
     platform->IterateEvents          = Win32_IterateEvents;
     platform->NextEvent              = Win32_NextEvent;
@@ -2109,9 +2216,13 @@ main(int, char **)
     platform->RegisterFontFile       = Win32_RegisterFontFile;
     platform->MakeAsciiFont          = Win32_MakeAsciiFont;
 
+    platform->CreateOffscreenBuffer  = Win32_CreateOffscreenBuffer;
+    platform->DestroyOffscreenBuffer = Win32_DestroyOffscreenBuffer;
+
     platform->CreateFont             = Win32_CreateFont;
     platform->DestroyFont            = Win32_DestroyFont;
     platform->GetFontMetrics         = Win32_GetFontMetrics;
+    platform->GetTextExtent          = Win32_GetTextExtent;
     platform->SetTextClipRect        = Win32_SetTextClipRect;
     platform->DrawText               = Win32_DrawText;
 

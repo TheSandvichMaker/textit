@@ -11,6 +11,7 @@
 #include "textit_shared.hpp"
 #include "textit_introspection_macros.hpp"
 #include "textit_memory.hpp"
+#include "textit_sort.hpp"
 #include "textit_string.hpp"
 #include "textit_global_state.hpp"
 #include "textit_math.hpp"
@@ -19,6 +20,7 @@
 #include "textit_image.hpp"
 #include "textit_command.hpp"
 #include "textit_theme.hpp"
+#include "textit_glyph_cache.hpp"
 #include "textit_render.hpp"
 #include "textit_tokens.hpp"
 #include "textit_language.hpp"
@@ -73,7 +75,8 @@ function void DestroyWindow(Window *window);
     X(_, bool, show_scrollbar                  = false) \
     X(_, bool, indent_with_tabs                = false) \
     X(_, int,  indent_width                    = 4)     \
-    X(_, bool, syntax_highlighting             = true)
+    X(_, bool, syntax_highlighting             = true)  \
+    X(_, bool, debug_show_glyph_cache          = false)
 DeclareIntrospectedStruct(CoreConfig);
 GLOBAL_STATE(CoreConfig, core_config);
 
@@ -165,7 +168,6 @@ struct EditorState
     EditMode next_edit_mode;
     BindingMap bindings[EditMode_COUNT];
 
-    // Font font;
     PlatformFontHandle font;
     V2i font_metrics;
 
@@ -217,7 +219,6 @@ struct EditorState
         int delay_frame_count;
         int allocated_window_count;
     } debug;
-
 };
 static EditorState *editor;
 

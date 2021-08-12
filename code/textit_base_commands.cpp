@@ -24,6 +24,14 @@ COMMAND_PROC(ReportMetrics,
                          (double)token_bytes / (double)text_bytes);
 }
 
+COMMAND_PROC(ResetGlyphCache,
+             "Reset the glyph cache"_str)
+{
+    ClearBitmap(&render_state->glyph_texture.bitmap);
+    uint32_t size = render_state->glyph_cache.size;
+    ResizeGlyphCache(&render_state->glyph_cache, size);
+}
+
 COMMAND_PROC(TestLineSearches,
              "Test optimized pos -> line functions against reference implementation"_str)
 {
@@ -436,6 +444,78 @@ COMMAND_PROC(Set,
 
         return true;
     };
+}
+
+COMMAND_PROC(SetLanguage,
+             "Set the language for the active buffer"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Set"_str;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+
+        for (LanguageSpec *language = editor->first_language;
+             language;
+             language = language->next)
+        {
+            if (FindSubstring(language->name, string, StringMatch_CaseInsensitive) != language->name.size)
+            {
+                Prediction prediction = {};
+                prediction.text = language->name;
+                if (!AddPrediction(cl, prediction))
+                {
+                    break;
+                }
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+
+        for (LanguageSpec *language = editor->first_language;
+             language;
+             language = language->next)
+        {
+            if (AreEqual(language->name, string, StringMatch_CaseInsensitive))
+            {
+                Buffer *buffer = GetActiveBuffer();
+                buffer->language = language;
+                return true;
+            }
+        };
+
+        return true;
+    };
+}
+
+COMMAND_PROC(GoToFileUnderCursor,
+             "Go to the file under the cursor, if there is one"_str)
+{
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    Token *token = GetTokenAt(buffer, cursor->pos);
+    if (token->kind == Token_String)
+    {
+        ScopedMemory temp;
+        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token->pos + 1, token->length - 2));
+
+        for (PlatformFileIterator *it = platform->FindFiles(temp, string);
+             platform->FileIteratorIsValid(it);
+             platform->FileIteratorNext(it))
+        {
+            if (AreEqual(it->info.name, string, StringMatch_CaseInsensitive))
+            {
+                view->next_buffer = OpenBufferFromFile(string)->id;
+                break;
+            }
+        }
+    }
 }
 
 COMMAND_PROC(ResetSelection)
@@ -1276,7 +1356,7 @@ CHANGE_PROC(ChangeOuterSelection)
 CHANGE_PROC(ToUppercase)
 {
     Buffer *buffer = GetActiveBuffer();
-    String string = BufferPushRange(platform->GetTempArena(), buffer, selection.inner);
+    String string = PushBufferRange(platform->GetTempArena(), buffer, selection.inner);
     for (size_t i = 0; i < string.size; i += 1)
     {
         string.data[i] = ToUpperAscii(string.data[i]);
@@ -1335,7 +1415,7 @@ CHANGE_PROC(PasteReplaceSelection)
     Arena *arena = platform->GetTempArena();
     ScopedMemory temp_memory(arena);
 
-    String replaced_string = BufferPushRange(arena, buffer, selection.outer);
+    String replaced_string = PushBufferRange(arena, buffer, selection.outer);
     String string = platform->ReadClipboard(arena);
 
     int64_t pos = BufferReplaceRange(buffer, selection.outer, string);

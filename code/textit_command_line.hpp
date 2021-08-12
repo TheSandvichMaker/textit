@@ -39,6 +39,7 @@ struct CommandLine
     int prediction_selected_index;
     int prediction_count;
     Prediction predictions[35];
+    SortKey sort_keys[35];
 
     void (*GatherPredictions)(CommandLine *cl);
     bool (*AcceptEntry)(CommandLine *cl);

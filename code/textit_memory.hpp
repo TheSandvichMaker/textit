@@ -41,8 +41,12 @@ Clear(Arena *arena)
 function void
 Release(Arena *arena)
 {
-    Assert(arena->temp_count == 0);
-    platform->DeallocateMemory(arena->base);
+    if (arena->capacity)
+    {
+        Assert(arena->temp_count == 0);
+        platform->DeallocateMemory(arena->base);
+        ZeroStruct(arena);
+    }
 }
 
 function void
@@ -234,6 +238,7 @@ CommitTemporaryMemory(TemporaryMemory *Temp)
 struct ScopedMemory
 {
     TemporaryMemory temp;
+    ScopedMemory() { temp = BeginTemporaryMemory(platform->GetTempArena()); }
     ScopedMemory(Arena *arena) { temp = BeginTemporaryMemory(arena); }
     ScopedMemory(TemporaryMemory temp) : temp(temp) {}
     ~ScopedMemory() { EndTemporaryMemory(temp); }

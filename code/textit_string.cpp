@@ -528,8 +528,9 @@ FindSubstring(String text, String pattern, StringMatchFlags flags = 0)
 }
 
 function int
-LevenshteinDistance(String s, String t)
+CalculateEditDistance(String s, String t)
 {
+    // Levenshtein distance
     int n = (int)s.size;
     int m = (int)t.size;
     int stride = n + 1;

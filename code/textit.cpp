@@ -1,9 +1,11 @@
 #include "textit.hpp"
 
+#include "textit_sort.cpp"
 #include "textit_string.cpp"
 #include "textit_global_state.cpp"
 #include "textit_config.cpp"
 #include "textit_image.cpp"
+#include "textit_glyph_cache.cpp"
 #include "textit_render.cpp"
 #include "textit_text_storage.cpp"
 #include "textit_language.cpp"
@@ -60,7 +62,7 @@ GetCursorInternal(ViewID view, BufferID buffer, bool make_if_missing)
     CursorHashKey key;
     key.view   = view;
     key.buffer = buffer;
-    uint64_t hash = HashIntegers(key.value);
+    uint64_t hash = HashIntegers(key.value).u64[0];
     uint64_t slot = hash % ArrayCount(editor->cursor_hash);
 
     CursorHashEntry *entry = editor->cursor_hash[slot];
@@ -116,7 +118,7 @@ DestroyCursor(ViewID view, BufferID buffer)
     CursorHashKey key;
     key.view   = view;
     key.buffer = buffer;
-    uint64_t hash = HashIntegers(key.value);
+    uint64_t hash = HashIntegers(key.value).u64[0];
     uint64_t slot = hash % ArrayCount(editor->cursor_hash);
 
     CursorHashEntry *entry = editor->cursor_hash[slot];
@@ -503,8 +505,11 @@ RecalculateViewBounds(Window *window, Rect2i rect)
         }
         else
         {
-            ZeroArray(line_count, view->prev_line_hashes);
             ZeroArray(line_count, view->line_hashes);
+            for (int64_t i = 0; i < line_count; i += 1)
+            {
+                view->prev_line_hashes[i] = 0xBEEF;
+            }
         }
         view->viewport = rect;
     }
@@ -885,17 +890,6 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-#if 0
-        if (!platform->MakeAsciiFont("Px437 OlivettiThin 8x14"_str,
-                                     &editor->font,
-                                     14,
-                                     PlatformFontRasterFlag_RasterFont))
-        {
-            platform->ReportError(PlatformError_Nonfatal, "Failed to load ttf font. Trying fallback bmp font.");
-            editor->font = LoadFontFromDisk(&editor->transient_arena, "font8x16_slim.bmp"_str, 8, 16);
-        }
-#endif
-
         editor->font         = platform->CreateFont("Consolas"_str, 0, 15);
         editor->font_metrics = platform->GetFontMetrics(editor->font);
 
@@ -919,6 +913,8 @@ AppUpdateAndRender(Platform *platform_)
         }
 
         editor->null_language.name = "none"_str;
+        SllStackPush(editor->first_language, &editor->null_language);
+
         PushCppLanguageSpec();
 
         editor->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
@@ -1009,6 +1005,13 @@ AppUpdateAndRender(Platform *platform_)
         }
     }
 
+    if (core_config->debug_show_glyph_cache)
+    {
+        int backbuffer_w = platform->backbuffer.bitmap.w;
+        int glyph_tex_w = render_state->glyph_texture.bitmap.w;
+        PushBitmap(&render_state->glyph_texture.bitmap, MakeV2i(backbuffer_w - glyph_tex_w, 0));
+    }
+
     EndRender();
 
 #if 0
@@ -1028,10 +1031,20 @@ AppUpdateAndRender(Platform *platform_)
 #endif
 
     {
+        uint32_t filled_glyph_count = GetEntryCount(&render_state->glyph_cache, GlyphState_Filled);
+
+        double average_latency = 1000.0*platform->event_latency_accumulator / (double)platform->event_latency_sample_count;
+
         Buffer *active_buffer = GetBuffer(GetView(editor->active_window->view));
+
         String leaf;
         SplitPath(active_buffer->name, &leaf);
-        platform->window_title = PushTempStringF("%.*s - TextIt", StringExpand(leaf));
+
+        platform->window_title = PushTempStringF("%.*s - TextIt (avg latency: %fms) (glyph cache: %u/%u)",
+                                                 StringExpand(leaf),
+                                                 average_latency,
+                                                 filled_glyph_count, 
+                                                 render_state->glyph_cache.size);
     }
                                              
     if (editor->debug.delay_frame_count > 0)

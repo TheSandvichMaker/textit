@@ -82,9 +82,10 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     if (view->scroll_at < 0)
     {
         row += -view->scroll_at;
-        PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, bounds.min.y),
-                                  MakeV2i(bounds.max.x, top_left.y + row)),
-                 text_background_unreachable);
+        for (int64_t y = bounds.min.y; y < top_left.y + row; y += 1)
+        {
+            PushTile(MakeV2i(top_left.x, y), MakeSprite('~', text_foreground_dimmer, text_background));
+        }
         actual_line_height += -view->scroll_at;
     }
 
@@ -102,12 +103,12 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     V2i metrics = editor->font_metrics;
 
-    int64_t prev_col = 0;
-    Color prev_background = {};
-    Color prev_foreground = {};
+    // int64_t prev_col = 0;
+    // Color prev_background = {};
+    // Color prev_foreground = {};
 
-    uint8_t draw_buffer_storage[1024];
-    StringContainer draw_buffer = MakeStringContainer(ArrayCount(draw_buffer_storage), draw_buffer_storage);
+    // uint8_t draw_buffer_storage[1024];
+    // StringContainer draw_buffer = MakeStringContainer(ArrayCount(draw_buffer_storage), draw_buffer_storage);
 
     while (IsInBufferRange(buffer, pos))
     {
@@ -160,9 +161,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         if (show_line_numbers)
         {
-            PushText(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, base_background);
+            DrawLine(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, base_background);
             col += Max(5, max_line_digits + 1);
-            prev_col = col;
+            // prev_col = col;
         }
 
         int64_t left_col = col;
@@ -239,14 +240,13 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             String string = {};
             if (empty_line)
             {
-                Clear(&draw_buffer);
-                Append(&draw_buffer, ' ');
+                string = " "_str;
             }
 
-            int64_t advance          = 1;
-            bool right_align         = false;
-            bool encountered_newline = false;
-            int64_t real_col         = col - left_col;
+            int64_t advance             = 1;
+            bool    right_align         = false;
+            bool    encountered_newline = false;
+            int64_t real_col            = col - left_col;
 
             int64_t newline_length = PeekNewline(buffer, pos);
             if (newline_length)
@@ -381,29 +381,26 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             pos += advance;
 
-            if (!CanFitAppend(&draw_buffer, string) ||
-                encountered_newline ||
-                prev_background.u32 != background.u32 ||
-                prev_foreground.u32 != foreground.u32)
+            for (size_t i = 0; i < string.size; i += 1)
             {
-                if (draw_buffer.size > 0)
+                if (IsHeadUtf8Byte(b))
                 {
-                    PushText(top_left + MakeV2i(prev_col, row), draw_buffer.as_string, prev_foreground, prev_background);
-                    Clear(&draw_buffer);
+                    ParseUtf8Result unicode = ParseUtf8Codepoint(&string.data[i]);
+                    i += unicode.advance - 1;
                 }
-
-                prev_col = col;
-
-                prev_background = background;
-                prev_foreground = foreground;
+                PushUnicode(top_left + MakeV2i(col, row), string, foreground, background);
+                col += 1;
+                if (col + 1 >= line_width)
+                {
+                    PushTile(top_left + MakeV2i(col, row), MakeSprite('\\', text_foreground_dimmer, background));
+                    col = 0;
+                    row += 1;
+                }
             }
-
-            Append(&draw_buffer, string);
-            col += string.size;
 
             if (encountered_newline)
             {
-                prev_col = 0;
+                // prev_col = 0;
                 col = 0;
                 break;
             }
@@ -415,9 +412,10 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     if (top_left.y + row < bounds.max.y)
     {
-        PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, top_left.y + Max(0, row)),
-                                  MakeV2i(bounds.max.x, bounds.max.y)),
-                 text_background_unreachable);
+        for (int64_t y = top_left.y + row; y < bounds.max.y; y += 1)
+        {
+            PushTile(MakeV2i(top_left.x, y), MakeSprite('~', text_foreground_dimmer, text_background));
+        }
     }
 
     return actual_line_height;
@@ -468,12 +466,12 @@ DrawView(View *view, bool is_active_window)
     int64_t filebar_y = bounds.max.y - 1;
 
     PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x + 0, filebar_y), MakeV2i(bounds.max.x - 0, filebar_y + 1)), filebar_text_background);
-    PushText(MakeV2i(bounds.min.x, filebar_y),
+    DrawLine(MakeV2i(bounds.min.x, filebar_y),
              PushTempStringF("%hd:%.*s", buffer->id.index, StringExpand(leaf)),
              filebar_text_foreground, filebar_text_background);
 
     String right_string = PushTempStringF("[%.*s] %lld:%lld ", StringExpand(buffer->language->name), loc.line + 1, loc.col);
-    PushText(MakeV2i(bounds.max.x - right_string.size, filebar_y), right_string, filebar_text_foreground, filebar_text_background);
+    DrawLine(MakeV2i(bounds.max.x - right_string.size, filebar_y), right_string, filebar_text_foreground, filebar_text_background);
 
     int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
 

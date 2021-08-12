@@ -179,6 +179,11 @@ EndTicketMutex(TicketMutex *mutex)
     AtomicAdd(&mutex->serving, 1);
 }
 
+struct PlatformHighResTime
+{
+    uint64_t opaque;
+};
+
 enum PlatformEventType
 {
     PlatformEvent_None,
@@ -403,6 +408,8 @@ struct PlatformEvent
     bool repeat;
     PlatformInputCode input_code;
 
+    PlatformHighResTime timestamp;
+
     int pos_x, pos_y;
 
     String text;
@@ -419,11 +426,6 @@ enum PlatformErrorType
 enum_flags(uint32_t, PlatformMemFlags)
 {
     PlatformMemFlag_NoLeakCheck = 0x1,
-};
-
-struct PlatformHighResTime
-{
-    uint64_t opaque;
 };
 
 struct PlatformThreadHandle;
@@ -502,6 +504,9 @@ struct Platform
     bool (*NextEvent)(PlatformEventIterator *it, PlatformEvent *volatile out_event);
     void (*PushTickEvent)(void);
 
+    uint64_t event_latency_sample_count;
+    double event_latency_accumulator;
+
     int32_t mouse_x, mouse_y, mouse_y_flipped;
     int32_t mouse_dx, mouse_dy;
     int32_t mouse_in_window;
@@ -534,11 +539,13 @@ struct Platform
     bool (*RegisterFontFile)(String file_name);
     bool (*MakeAsciiFont)(String font_name, Font *out_font, int font_size, PlatformFontRasterFlags flags);
 
-    bool (*CreateOffscreenBuffer)(int w, int h, PlatformOffscreenBuffer *result); 
+    void (*CreateOffscreenBuffer)(int32_t w, int32_t h, PlatformOffscreenBuffer *result); 
+    void (*DestroyOffscreenBuffer)(PlatformOffscreenBuffer *buffer); 
 
     PlatformFontHandle (*CreateFont)(String font_name, PlatformFontRasterFlags flags, int height);
     void (*DestroyFont)(PlatformFontHandle font);
     V2i (*GetFontMetrics)(PlatformFontHandle font);
+    V2i (*GetTextExtent)(PlatformFontHandle font, PlatformOffscreenBuffer *target, String text);
     void (*SetTextClipRect)(PlatformOffscreenBuffer *target, Rect2i rect);
     V2i (*DrawText)(PlatformFontHandle font, PlatformOffscreenBuffer *target, String text, V2i p, Color foreground, Color background);
 

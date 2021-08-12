@@ -12,6 +12,7 @@
 #include "textit_shared.hpp"
 #include "textit_memory.hpp"
 #include "textit_string.hpp"
+#include "textit_math.hpp"
 
 struct Win32AllocationHeader
 {

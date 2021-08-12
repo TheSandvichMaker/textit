@@ -57,5 +57,6 @@ del *.lib
 del *.obj
 del *.ilk
 del *.exp
+del temp_textit_*.dll
 
 misc\ctime.exe -end ctm\textit.ctm

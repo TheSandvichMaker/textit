@@ -3,6 +3,12 @@
 
 #define MAX_VIEW_COUNT 128
 
+struct Jump
+{
+    BufferID buffer;
+    int64_t  pos;
+};
+
 struct View
 {
     ViewID id;
@@ -21,6 +27,10 @@ struct View
 
     uint64_t *line_hashes;
     uint64_t *prev_line_hashes;
+
+    int jump_stack_at;
+    int jump_stack_watermark;
+    Jump jump_stack[128];
 };
 
 function View *GetView(ViewID id);

@@ -132,7 +132,8 @@ enum RenderCommandKind : uint16_t
 {
     RenderCommand_Sprite,
     RenderCommand_Rect,
-    RenderCommand_Text,
+    RenderCommand_Unicode,
+    RenderCommand_Bitmap,
 };
 
 union RenderSortKey
@@ -157,8 +158,9 @@ struct RenderCommand
     Color foreground;
     Color background;
 
-    String text;
+    String utf8;
     Glyph glyph;
+    Bitmap *bitmap;
 };
 
 struct RenderClipRect
@@ -175,6 +177,10 @@ struct RenderState
 
     Bitmap *target;
 
+    GlyphCache glyph_cache;
+    uint32_t glyphs_per_row, glyphs_per_col;
+    PlatformOffscreenBuffer glyph_texture;
+
     RenderLayer current_layer;
 
     Rect2i viewport;
@@ -185,6 +191,7 @@ struct RenderState
     uint64_t prev_command_buffer_hash;
 
     RenderCommand null_command;
+    bool there_is_an_unhashed_render_command;
     uint32_t cb_size;
     uint32_t cb_command_at;
     uint32_t cb_sort_key_at;

@@ -125,6 +125,11 @@ struct HashResult
         uint16_t u16[8];
         uint8_t u8[16];
     };
+
+    operator bool(void)
+    {
+        return u64[0] != 0 || u64[1] != 0;
+    }
 };
 
 function bool
@@ -191,7 +196,7 @@ HashString(String string)
     return result;
 }
 
-function uint64_t
+function HashResult
 HashIntegers(uint64_t a, uint64_t b = 0)
 {
     unsigned char seed[16] =
@@ -204,13 +209,37 @@ HashIntegers(uint64_t a, uint64_t b = 0)
     __m128i hash = _mm_set_epi64x(b, a);
     hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i *)seed));
     hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i *)seed));
-    return *(uint64_t *)&hash;
+
+    HashResult result;
+    result.m128i = hash;
+
+    return result;
+}
+
+function HashResult
+HashIntegers(uint32_t a, uint32_t b = 0, uint32_t c = 0, uint32_t d = 0)
+{
+    unsigned char seed[16] =
+    {
+        8,   45,  125, 36,
+        205, 22,  36,  155,
+        10,  127, 212, 213,
+        197, 48,  36,  148,
+    };
+    __m128i hash = _mm_set_epi32(d, c, b, a);
+    hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i *)seed));
+    hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i *)seed));
+
+    HashResult result;
+    result.m128i = hash;
+
+    return result;
 }
 
 function uint64_t
 HashCoordinate(V2i p)
 {
-    return HashIntegers(p.x, p.y);
+    return HashIntegers((uint64_t)p.x, (uint64_t)p.y).u64[0];
 }
 
 template <typename T>

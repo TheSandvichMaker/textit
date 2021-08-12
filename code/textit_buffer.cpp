@@ -686,7 +686,7 @@ BufferSubstring(Buffer *buffer, Range range)
 }
 
 function String
-BufferPushRange(Arena *arena, Buffer *buffer, Range range)
+PushBufferRange(Arena *arena, Buffer *buffer, Range range)
 {
     int64_t range_size = range.end - range.start;
     String string = MakeString(range_size, buffer->text + range.start);
@@ -714,10 +714,10 @@ ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
 function void
 OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
 {
-    for (size_t i = 0; i < editor->view_count; i += 1)
+    for (ViewIterator it = IterateViews(); IsValid(&it); Next(&it))
     {
-        ViewID view_id = editor->used_view_ids[i];
-        for (Cursor *cursor = IterateCursors(view_id, buffer->id);
+        View *view = it.view;
+        for (Cursor *cursor = IterateCursors(view->id, buffer->id);
              cursor;
              cursor = cursor->next)
         {
@@ -727,8 +727,16 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
             cursor->selection.outer.start = ApplyPositionDelta(cursor->selection.outer.start, pos, delta);
             cursor->selection.outer.end   = ApplyPositionDelta(cursor->selection.outer.end,   pos, delta);
         }
-    }
 
+        for (int jump_index = 0; jump_index < view->jump_stack_watermark; jump_index += 1)
+        {
+            Jump *jump = &view->jump_stack[jump_index];
+            if (jump->buffer = buffer->id)
+            {
+                jump->pos = ApplyPositionDelta(jump->pos, pos, delta);
+            }
+        }
+    }
 }
 
 function void
@@ -784,7 +792,7 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
     String backward = {};
     if (RangeSize(range) > 0)
     {
-        backward = BufferPushRange(&buffer->arena, buffer, range);
+        backward = PushBufferRange(&buffer->arena, buffer, range);
     }
 
     String forward = {};

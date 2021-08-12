@@ -48,6 +48,11 @@ BeginCommandLine()
         cl->temporary_memory          = temp;
         cl->prediction_selected_index = -1;
 
+        for (int i = 0; i < ArrayCount(cl->sort_keys); i += 1)
+        {
+            cl->sort_keys[i].index = i;
+        }
+
         editor->command_lines[index] = cl;
     }
 
@@ -81,7 +86,7 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
         if (cl->prediction_selected_index == -1) return;
         if (!cl->prediction_count) return;
 
-        const Prediction &prediction = cl->predictions[cl->prediction_selected_index];
+        const Prediction &prediction = cl->predictions[cl->sort_keys[cl->prediction_selected_index].index];
 
         cl->count = (int)prediction.text.size;
         CopyArray(cl->count, prediction.text.data, cl->text);
@@ -335,6 +340,22 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
 
             Clear(cl->arena);
             cl->GatherPredictions(cl);
+
+            String cl_string = TrimSpaces(MakeString(cl->count, cl->text));
+
+            SortKey *sort_keys = cl->sort_keys;
+            SortKey temp_sort_keys[35];
+            for (int i = 0; i < cl->prediction_count; i += 1)
+            {
+                Prediction *prediction = &cl->predictions[i];
+                sort_keys[i].key   = !AreEqual(cl_string, prediction->preview_text, StringMatch_CaseInsensitive); // epic sort key bro
+                sort_keys[i].index = i;
+            }
+            if (cl_string.size > 0)
+            {
+                RadixSort(cl->prediction_count, sort_keys, temp_sort_keys);
+            }
+
             if (cl->prediction_index > cl->prediction_count)
             {
                 cl->prediction_index = cl->prediction_count;
@@ -376,8 +397,7 @@ DrawCommandLines()
     }
     String names = PushFlattenedString(&name_list, arena, " > "_str, StringSeparator_AfterLast);
 
-    PushText(text_p, names, color_name, text_background);
-    text_p.x += names.size; 
+    text_p = DrawLine(text_p, names, color_name, text_background);
 
     CommandLine *cl = editor->command_lines[editor->command_line_count - 1];
 
@@ -398,7 +418,7 @@ DrawCommandLines()
         int prediction_offset = 1;
         for (int i = 0; i < cl->prediction_count; i += 1)
         {
-            Prediction *prediction = &cl->predictions[i];
+            Prediction *prediction = &cl->predictions[cl->sort_keys[i].index];
             String text = prediction->preview_text;
 
             Color color = GetThemeColor(prediction->color ? prediction->color : "command_line_option"_id);
@@ -411,10 +431,10 @@ DrawCommandLines()
             if (i < 9 + 26)
             {
                 int c = (i < 9 ? '1' + i : 'A' + i - 9);
-                PushText(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
+                DrawLine(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
             }
 
-            PushText(p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
+            DrawLine(p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
 
             total_width = Max(total_width, 2 + (int64_t)text.size);
 
@@ -435,7 +455,7 @@ DrawCommandLines()
         cursor_at = (int)text.size;
     }
 
-    PushText(text_p, text, text_foreground, text_background);
+    DrawLine(text_p, text, text_foreground, text_background);
     PushTile(text_p + MakeV2i(cursor_at, 0), MakeSprite(' ', text_background, text_foreground));
 
     if (active_prediction)
@@ -444,7 +464,7 @@ DrawCommandLines()
         if (cmd != NullCommand())
         {
             String desc = cmd->description;
-            PushText(MakeV2i(render_state->viewport.max.x - desc.size, text_p.y), desc, text_foreground, text_background);
+            DrawLine(MakeV2i(render_state->viewport.max.x - desc.size, text_p.y), desc, text_foreground, text_background);
         }
     }
 }

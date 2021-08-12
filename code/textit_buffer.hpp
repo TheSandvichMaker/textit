@@ -158,6 +158,8 @@ MakeTokenIterator(Buffer *buffer, int index, int count = 0)
 function uint32_t
 FindTokenIndexForPos(Buffer *buffer, int64_t pos)
 {
+    Assert(IsInBufferRange(buffer, pos));
+
     uint32_t result = 0;
 
     int64_t token_count = buffer->tokens.count;
@@ -188,6 +190,14 @@ FindTokenIndexForPos(Buffer *buffer, int64_t pos)
     }
 
     return result;
+}
+
+function Token *
+GetTokenAt(Buffer *buffer, int64_t pos)
+{
+    uint32_t index = FindTokenIndexForPos(buffer, pos);
+    Token *token = &buffer->tokens[index];
+    return token;
 }
 
 function TokenIterator
