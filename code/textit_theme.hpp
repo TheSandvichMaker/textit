@@ -3,8 +3,9 @@
 
 struct ThemeColor
 {
-    StringID key;
-    Color color;
+    StringID       key;
+    Color          color;
+    TextStyleFlags style;
 };
 
 #define MAX_THEME_COLORS 256
@@ -14,7 +15,8 @@ struct Theme
 };
 
 function void LoadDefaultTheme();
-function void SetThemeColor(StringID key, Color color);
+function void SetThemeColor(StringID key, Color color, TextStyleFlags style = 0);
 function Color GetThemeColor(StringID key);
+function TextStyleFlags GetThemeStyle(StringID key);
 
 #endif /* TEXTIT_THEME_HPP */

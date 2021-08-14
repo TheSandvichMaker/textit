@@ -577,6 +577,17 @@ CalculateEditDistance(String s, String t)
     return GetCell(n, m);
 }
 
+function size_t
+CountNullTerminatedString(char *string, size_t max = 0)
+{
+    size_t result = 0;
+    while (*string++ && (max == 0 || result < max))
+    {
+        result += 1;
+    }
+    return result;
+}
+
 function String
 PushString(Arena *arena, String string)
 {
@@ -731,7 +742,10 @@ Replace(StringContainer *container, String string)
 {
     size_t size = string.size;
     if (size > container->capacity) size = container->capacity;
-    CopyArray(size, string.data, container->data);
+    if (string.data != container->data)
+    {
+        CopyArray(size, string.data, container->data);
+    }
     container->size = size;
 }
 

@@ -1,5 +1,5 @@
 function void
-SetThemeColor(StringID key, Color color)
+SetThemeColor(StringID key, Color color, TextStyleFlags style)
 {
     Theme *theme = &editor->theme;
 
@@ -12,15 +12,16 @@ SetThemeColor(StringID key, Color color)
         {
             slot->key   = key;
             slot->color = color;
+            slot->style = style;
             break;
         }
     }
 }
 
-function Color
-GetThemeColor(StringID key)
+function ThemeColor *
+GetThemeColorInternal(StringID key)
 {
-    Color result = MakeColor(255, 0, 255);
+    ThemeColor *result = nullptr;
 
     Theme *theme = &editor->theme;
     for (size_t i = 0; i < MAX_THEME_COLORS; i += 1)
@@ -29,9 +30,37 @@ GetThemeColor(StringID key)
         ThemeColor *slot = &theme->map[slot_index];
         if (slot->key == key)
         {
-            result = slot->color;
+            result = slot;
             break;
         }
+    }
+
+    return result;
+}
+
+function Color
+GetThemeColor(StringID key)
+{
+    Color result = MakeColor(255, 0, 255);
+
+    ThemeColor *slot = GetThemeColorInternal(key);
+    if (slot)
+    {
+        result = slot->color;
+    }
+
+    return result;
+}
+
+function TextStyleFlags
+GetThemeStyle(StringID key)
+{
+    TextStyleFlags result = 0;
+
+    ThemeColor *slot = GetThemeColorInternal(key);
+    if (slot)
+    {
+        result = slot->style;
     }
 
     return result;
@@ -42,15 +71,16 @@ LoadDefaultTheme()
 {
     SetThemeColor("text_identifier"_id, MakeColor(255, 255, 255));
     SetThemeColor("text_keyword"_id, MakeColor(255, 192, 0));
-    SetThemeColor("text_flowcontrol"_id, MakeColor(255, 128, 0));
+    SetThemeColor("text_flowcontrol"_id, MakeColor(255, 128, 0), TextStyle_Bold);
+    SetThemeColor("text_label"_id, MakeColor(255, 128, 0), TextStyle_Underline|TextStyle_Italic);
     SetThemeColor("text_preprocessor"_id, MakeColor(255, 192, 255));
     SetThemeColor("text_string"_id, MakeColor(255, 192, 64));
     SetThemeColor("text_number"_id, MakeColor(64, 192, 255));
     SetThemeColor("text_literal"_id, MakeColor(64, 128, 255));
     SetThemeColor("text_function"_id, MakeColor(128, 196, 255));
-    SetThemeColor("text_line_comment"_id, MakeColor(0, 192, 0));
+    SetThemeColor("text_line_comment"_id, MakeColor(0, 192, 0), TextStyle_Italic);
+    SetThemeColor("text_comment"_id,      MakeColor(0, 192, 0), TextStyle_Italic);
     SetThemeColor("text_type"_id, MakeColor(64, 255, 192));
-    SetThemeColor("text_comment"_id, MakeColor(0, 192, 0));
     SetThemeColor("text_foreground"_id, MakeColor(235, 235, 225));
     SetThemeColor("text_foreground_dim"_id, MakeColor(192, 192, 192));
     SetThemeColor("text_foreground_dimmer"_id, MakeColor(128, 128, 128));

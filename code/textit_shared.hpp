@@ -197,6 +197,19 @@ HashString(String string)
 }
 
 function HashResult
+HashIntegers(HashResult seed, uint64_t a, uint64_t b = 0)
+{
+    __m128i hash = _mm_set_epi64x(b, a);
+    hash = _mm_aesdec_si128(hash, _mm_loadu_si128(&seed.m128i));
+    hash = _mm_aesdec_si128(hash, _mm_loadu_si128(&seed.m128i));
+
+    HashResult result;
+    result.m128i = hash;
+
+    return result;
+}
+
+function HashResult
 HashIntegers(uint64_t a, uint64_t b = 0)
 {
     unsigned char seed[16] =
@@ -209,6 +222,19 @@ HashIntegers(uint64_t a, uint64_t b = 0)
     __m128i hash = _mm_set_epi64x(b, a);
     hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i *)seed));
     hash = _mm_aesdec_si128(hash, _mm_loadu_si128((__m128i *)seed));
+
+    HashResult result;
+    result.m128i = hash;
+
+    return result;
+}
+
+function HashResult
+HashIntegers(HashResult seed, uint32_t a, uint32_t b = 0, uint32_t c = 0, uint32_t d = 0)
+{
+    __m128i hash = _mm_set_epi32(d, c, b, a);
+    hash = _mm_aesdec_si128(hash, _mm_loadu_si128(&seed.m128i));
+    hash = _mm_aesdec_si128(hash, _mm_loadu_si128(&seed.m128i));
 
     HashResult result;
     result.m128i = hash;

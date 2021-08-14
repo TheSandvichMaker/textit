@@ -27,6 +27,7 @@ struct CommandLine
 
     bool no_quickselect;
     bool no_autoaccept;
+    bool sort_by_edit_distance;
 
     int cursor;
     int count;
@@ -38,6 +39,7 @@ struct CommandLine
     int prediction_index;
     int prediction_selected_index;
     int prediction_count;
+    bool prediction_overflow;
     Prediction predictions[35];
     SortKey sort_keys[35];
 
@@ -47,6 +49,6 @@ struct CommandLine
 
 function CommandLine *BeginCommandLine();
 function void EndCommandLine();
-function bool AddPrediction(CommandLine *cl, const Prediction &prediction);
+function bool AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key = 0);
 
 #endif /* TEXTIT_COMMAND_LINE_HPP */

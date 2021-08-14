@@ -412,6 +412,7 @@ struct PlatformEvent
 
     int pos_x, pos_y;
 
+    uint8_t text_storage[4];
     String text;
 
     bool consumed_;
@@ -453,11 +454,21 @@ struct PlatformLogLine
     uint8_t data_[PLATFORM_LOG_LINE_SIZE];
 };
 
-typedef uint32_t PlatformFontRasterFlags;
-enum PlatformFontRasterFlags_ENUM : PlatformFontRasterFlags
+typedef uint32_t TextStyleFlags;
+enum TextStyleFlags_ENUM : TextStyleFlags
 {
-    PlatformFontRasterFlag_RasterFont = 0x1,
-    PlatformFontRasterFlag_DoNotMapUnicode = 0x2, // screw you, windows
+    TextStyle_Bold      = 0x1,
+    TextStyle_Italic    = 0x2,
+    TextStyle_Underline = 0x4,
+    TextStyle_Strikeout = 0x8,
+    TextStyle_Count     = 0x10,
+};
+
+enum PlatformFontQuality
+{
+    PlatformFontQuality_Raster,
+    PlatformFontQuality_GreyscaleAA,
+    PlatformFontQuality_SubpixelAA,
 };
 
 struct PlatformEventIterator
@@ -477,10 +488,7 @@ struct PlatformFileIterator
     PlatformFileInfo info;
 };
 
-struct PlatformFontHandle
-{
-    void *opaque;
-};
+typedef void *PlatformFontHandle;
 
 struct PlatformOffscreenBuffer
 {
@@ -537,12 +545,13 @@ struct Platform
     void (*DeallocateMemory)(void *memory);
 
     bool (*RegisterFontFile)(String file_name);
-    bool (*MakeAsciiFont)(String font_name, Font *out_font, int font_size, PlatformFontRasterFlags flags);
+    bool (*MakeAsciiFont)(String font_name, Font *out_font, int font_size, PlatformFontQuality quality);
 
     void (*CreateOffscreenBuffer)(int32_t w, int32_t h, PlatformOffscreenBuffer *result); 
     void (*DestroyOffscreenBuffer)(PlatformOffscreenBuffer *buffer); 
 
-    PlatformFontHandle (*CreateFont)(String font_name, PlatformFontRasterFlags flags, int height);
+    String *(*EnumerateFonts)(Arena *arena, uint32_t max, String filter, uint32_t *out_count);
+    PlatformFontHandle (*CreateFont)(String font_name, TextStyleFlags flags, PlatformFontQuality quality, int height);
     void (*DestroyFont)(PlatformFontHandle font);
     V2i (*GetFontMetrics)(PlatformFontHandle font);
     V2i (*GetTextExtent)(PlatformFontHandle font, PlatformOffscreenBuffer *target, String text);

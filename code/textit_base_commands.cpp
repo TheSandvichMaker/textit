@@ -317,7 +317,7 @@ COMMAND_PROC(OpenFile,
             {
                 Prediction prediction = {};
                 prediction.text         = PushTempStringF("%.*s%.*s%s", StringExpand(path), StringExpand(it->info.name), it->info.directory ? separator : "");
-                prediction.preview_text = it->info.name;
+                prediction.preview_text = PushTempStringF("%.*s%s", StringExpand(it->info.name), it->info.directory ? separator : "");
                 if (it->info.directory)
                 {
                     prediction.incomplete = true;
@@ -334,7 +334,18 @@ COMMAND_PROC(OpenFile,
     cl->AcceptEntry = [](CommandLine *cl)
     {
         String string = TrimSpaces(MakeString(cl->count, cl->text));
+
         View *view = GetActiveView();
+        for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+        {
+            Buffer *buffer = it.buffer;
+            if (AreEqual(buffer->name, string))
+            {
+                view->next_buffer = buffer->id;
+                return true;
+            }
+        }
+
         view->next_buffer = OpenBufferFromFile(string)->id;
         return true;
     };
@@ -489,6 +500,99 @@ COMMAND_PROC(SetLanguage,
         };
 
         return true;
+    };
+}
+
+COMMAND_PROC(SetFont,
+             "Set the font for the editor"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "SetFont"_str;
+    cl->no_quickselect = true;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+
+        uint32_t font_count;
+        String *filtered_fonts = platform->EnumerateFonts(platform->GetTempArena(), ArrayCount(cl->predictions) + 1, string, &font_count);
+        for (size_t i = 0; i < font_count; i += 1)
+        {
+            Prediction prediction = {};
+            prediction.text = filtered_fonts[i];
+            if (!AddPrediction(cl, prediction))
+            {
+                break;
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        SetEditorFont(string, editor->font_size, editor->font_quality);
+        return true;
+    };
+}
+
+COMMAND_PROC(SetFontQuality,
+             "Set the quality of the font for the editor"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Font Quality"_str;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String options[] =
+        {
+            "Subpixel"_str,
+            "Greyscale"_str,
+            "Raster"_str,
+        };
+        for (size_t i = 0; i < ArrayCount(options); i += 1)
+        {
+            if (FindSubstring(options[i], string, StringMatch_CaseInsensitive) != options[i].size)
+            {
+                AddPrediction(cl, MakePrediction(options[i]));
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        PlatformFontQuality quality = PlatformFontQuality_SubpixelAA;
+        if      (AreEqual(string, "Subpixel"_str))  quality = PlatformFontQuality_SubpixelAA;
+        else if (AreEqual(string, "Greyscale"_str)) quality = PlatformFontQuality_GreyscaleAA;
+        else if (AreEqual(string, "Raster"_str))    quality = PlatformFontQuality_Raster;
+        else
+        {
+            return false;
+        }
+
+        SetEditorFont(editor->font_name.as_string, editor->font_size, quality);
+        return true;
+    };
+}
+
+COMMAND_PROC(SetFontSize,
+             "Set the size of the font for the editor"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Font Size"_str;
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        int64_t size;
+        if (ParseInt(string, nullptr, &size))
+        {
+            size = Clamp(size, 4, 128);
+            SetEditorFont(editor->font_name.as_string, (int)size, editor->font_quality);
+            return true;
+        }
+        return false;
     };
 }
 
@@ -1464,7 +1568,8 @@ TEXT_COMMAND_PROC(WriteText)
         
         if (c == '\n' ||
             c == '}'  ||
-            c == ')')
+            c == ')'  ||
+            c == ':')
         {
             should_auto_indent = true;
         }

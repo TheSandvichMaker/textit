@@ -345,6 +345,15 @@ parse_string:
                 }
             } break;
 
+            case ':':
+            {
+                if (prev_token && prev_token->flags & TokenFlag_FirstInLine)
+                {
+                    prev_token->kind = Token_Label;
+                }
+                goto parse_default;
+            } break;
+
             case '\\':
             {
                 t.kind = (TokenKind)c;

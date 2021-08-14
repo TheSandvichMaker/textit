@@ -871,6 +871,44 @@ HandleViewEvent(ViewID view_id, const PlatformEvent &event)
     return result;
 }
 
+function void
+DestroyFont(PlatformFontHandle *handle)
+{
+    if (*handle) { platform->DestroyFont(*handle); *handle = NULL; }
+}
+
+function void
+SetEditorFont(String name, int size, PlatformFontQuality quality)
+{
+    V2i max_metrics = MakeV2i(0, 0);
+    V2i min_metrics = MakeV2i(INT_MAX, INT_MAX);
+    editor->font_metrics = {};
+    for (int i = 0; i < TextStyle_Count; i += 1)
+    {
+        DestroyFont(&editor->fonts[i]);
+        editor->fonts[i] = platform->CreateFont(name, i, quality, size);
+
+        V2i metrics = platform->GetFontMetrics(editor->fonts[i]);
+        if (min_metrics.x > metrics.x) min_metrics.x = metrics.x;
+        if (min_metrics.y > metrics.y) min_metrics.y = metrics.y;
+        if (max_metrics.x < metrics.x) max_metrics.x = metrics.x;
+        if (max_metrics.y < metrics.y) max_metrics.y = metrics.y;
+    }
+
+    if (!editor->font_name.capacity)
+    {
+        editor->font_name = MakeStringContainer(ArrayCount(editor->font_name_storage), editor->font_name_storage);
+    }
+
+    editor->font_metrics = min_metrics;
+    editor->font_max_glyph_size = MakeV2i(max_metrics.x + 2, max_metrics.y); // why are these metrics insufficient??
+
+    Replace(&editor->font_name, name);
+    editor->font_size    = size;
+    editor->font_quality = quality;
+    RebuildGlyphCache();
+}
+
 void
 AppUpdateAndRender(Platform *platform_)
 {
@@ -890,8 +928,7 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-        editor->font         = platform->CreateFont("Consolas"_str, 0, 15);
-        editor->font_metrics = platform->GetFontMetrics(editor->font);
+        SetEditorFont("Consolas"_str, 15, PlatformFontQuality_SubpixelAA);
 
         platform->window_resize_snap_w = (int32_t)editor->font_metrics.x;
         platform->window_resize_snap_h = (int32_t)editor->font_metrics.y;

@@ -10,6 +10,7 @@ enum_flags(uint8_t, TokenKind)
     Token_Identifier = 128,
     Token_Keyword,
     Token_FlowControl,
+    Token_Label,
     Token_Preprocessor,
     Token_String,
     Token_Number,
@@ -33,7 +34,7 @@ enum_flags(uint8_t, TokenKind)
 };
 
 function uint64_t
-TokenThemeIndex(TokenKind kind)
+TokenThemeID(TokenKind kind)
 {
     switch (kind)
     {
@@ -42,6 +43,7 @@ TokenThemeIndex(TokenKind kind)
         case Token_Identifier:        return "text_identifier"_id;
         case Token_Keyword:           return "text_keyword"_id;
         case Token_FlowControl:       return "text_flowcontrol"_id;
+        case Token_Label:             return "text_label"_id;
         case Token_Preprocessor:      return "text_preprocessor"_id;
         case Token_String:            return "text_string"_id;
         case Token_Number:            return "text_number"_id;

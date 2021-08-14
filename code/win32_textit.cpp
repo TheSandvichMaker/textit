@@ -196,6 +196,7 @@ Win32_DisplayLastError(void)
     wchar_t *message = Win32_FormatError(error);
     MessageBoxW(0, message, L"Error", MB_OK);
     LocalFree(message);
+    __debugbreak();
 }
 
 function void
@@ -243,7 +244,7 @@ Win32_Utf8ToUtf16(Arena *arena, String utf8)
     if (!utf8.size) return result;
 
     result.size = (size_t)MultiByteToWideChar(CP_UTF8, 0, (char *)utf8.data, (int)utf8.size, nullptr, 0);
-    result.data = PushArrayNoClear(arena, result.size + 1, wchar_t);
+    result.data = PushArrayNoClear(arena, result.size, wchar_t);
     if (result.data)
     {
         if (!MultiByteToWideChar(CP_UTF8, 0, (char *)utf8.data, (int)utf8.size, result.data, (int)result.size))
@@ -267,7 +268,7 @@ Win32_Utf16ToUtf8(Arena *arena, wchar_t *string, int size = -1)
     String result = {};
 
     result.size = (size_t)WideCharToMultiByte(CP_UTF8, 0, string, size, nullptr, 0, nullptr, nullptr);
-    result.data = PushArrayNoClear(arena, result.size + 1, uint8_t);
+    result.data = PushArrayNoClear(arena, result.size, uint8_t);
     if (result.data)
     {
         if (!WideCharToMultiByte(CP_UTF8, 0, string, size, (char *)result.data, (int)result.size, nullptr, nullptr))
@@ -669,7 +670,7 @@ static bool
 Win32_SetWorkingDirectory(String path)
 {
     wchar_t *wpath = Win32_Utf8ToUtf16(platform->GetTempArena(), (char *)path.data, (int)path.size);
-    bool result = SetCurrentDirectory(wpath);
+    bool result = SetCurrentDirectoryW(wpath);
     return result;
 }
 
@@ -887,8 +888,8 @@ Win32_CreateOffscreenBuffer(int32_t w, int32_t h, PlatformOffscreenBuffer *resul
 function void
 Win32_DestroyOffscreenBuffer(PlatformOffscreenBuffer *buffer)
 {
-    DeleteDC((HDC)buffer->opaque[0]);
-    DeleteObject(buffer->opaque[1]);
+    if (buffer->opaque[0]) DeleteDC((HDC)buffer->opaque[0]);
+    if (buffer->opaque[1]) DeleteObject(buffer->opaque[1]);
     ZeroStruct(buffer);
 }
 
@@ -1668,57 +1669,142 @@ Win32_RegisterFontFile(String file_name_utf8)
     return result;
 }
 
+struct Win32EnumerateFontsParam
+{
+    Arena *arena;
+    String filter;
+    uint32_t size;
+    uint32_t count;
+    String *buffer;
+};
+
+function int 
+Win32_EnumerateFontsProc(const LOGFONTA *logfont, const TEXTMETRICA *, DWORD, LPARAM lparam)
+{
+    const ENUMLOGFONTEXA *logfontex = (const ENUMLOGFONTEXA *)logfont;
+    Win32EnumerateFontsParam *param = (Win32EnumerateFontsParam *)lparam;
+    if (param->count < param->size)
+    {
+        // if (font_type == TRUETYPE_FONTTYPE)
+        {
+            String string = MakeString(CountNullTerminatedString((char *)logfontex->elfFullName, sizeof(logfontex->elfFullName)), (uint8_t *)logfontex->elfFullName);
+            if (param->count == 0 || !AreEqual(param->buffer[param->count - 1], string))
+            {
+                if (FindSubstring(string, param->filter, StringMatch_CaseInsensitive) != string.size)
+                {
+                    param->buffer[param->count++] = PushStringF(param->arena, "%s", logfontex->elfFullName);
+                }
+            }
+        }
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+function String *
+Win32_EnumerateFonts(Arena *arena, uint32_t max, String filter, uint32_t *out_count)
+{
+    HDC dc = GetDC(win32_state.window);
+    defer { ReleaseDC(win32_state.window, dc); };
+
+    Win32EnumerateFontsParam param = {};
+    param.arena  = arena;
+    param.filter = filter;
+    param.size   = max;
+    param.buffer = PushArray(arena, param.size, String);
+
+    LOGFONTA logfont = {};
+    logfont.lfCharSet = DEFAULT_CHARSET;
+    EnumFontFamiliesExA(dc, &logfont, Win32_EnumerateFontsProc, (LPARAM)&param, 0);
+
+    *out_count = param.count;
+    return param.buffer;
+}
+
 function PlatformFontHandle
-Win32_CreateFont(String font_name_utf8, PlatformFontRasterFlags flags, int height)
+Win32_CreateFont(String font_name_utf8, TextStyleFlags flags, PlatformFontQuality quality, int height)
 {
     String_utf16 font_name = Win32_Utf8ToUtf16(platform->GetTempArena(), font_name_utf8);
 
-    bool raster_font = !!(flags & PlatformFontRasterFlag_RasterFont);
+    bool bold      = !!(flags & TextStyle_Bold);
+    bool italic    = !!(flags & TextStyle_Italic);
+    bool underline = !!(flags & TextStyle_Underline);
+    bool strikeout = !!(flags & TextStyle_Strikeout);
 
-    DWORD out_precision = raster_font ? OUT_RASTER_PRECIS : OUT_DEFAULT_PRECIS;
-    DWORD quality       = raster_font ? NONANTIALIASED_QUALITY : CLEARTYPE_QUALITY;
+    DWORD out_precision = OUT_DEFAULT_PRECIS;
+    DWORD win32_quality = PROOF_QUALITY;
+    switch (quality)
+    {
+        case PlatformFontQuality_Raster:
+        {
+            out_precision = OUT_RASTER_PRECIS;
+            win32_quality = NONANTIALIASED_QUALITY;
+        } break;
+
+        case PlatformFontQuality_GreyscaleAA:
+        {
+            out_precision = OUT_DEFAULT_PRECIS;
+            win32_quality = ANTIALIASED_QUALITY;
+        } break;
+
+        case PlatformFontQuality_SubpixelAA:
+        {
+            out_precision = OUT_DEFAULT_PRECIS;
+            win32_quality = CLEARTYPE_QUALITY;
+        } break;
+    }
 
     HFONT font = CreateFontW(height, 0, 0, 0,
-                             FW_NORMAL,
-                             FALSE,
-                             FALSE,
-                             FALSE,
+                             bold ? FW_BOLD : FW_NORMAL,
+                             italic,
+                             underline,
+                             strikeout,
                              DEFAULT_CHARSET,
                              out_precision,
                              CLIP_DEFAULT_PRECIS,
-                             quality,
+                             win32_quality,
                              DEFAULT_PITCH|FF_DONTCARE,
                              font_name.data);
 
-    PlatformFontHandle handle;
-    handle.opaque = font;
-
+    PlatformFontHandle handle = font;
     return handle;
 }
 
 function void
 Win32_DestroyFont(PlatformFontHandle handle)
 {
-    HFONT font = (HFONT)handle.opaque;
+    HFONT font = (HFONT)handle;
     DeleteObject(font);
 }
 
 function V2i
 Win32_GetFontMetrics(PlatformFontHandle handle)
 {
-    V2i result = { -1, -1 };
+    V2i result = { 0, 0 };
 
     HDC dc = GetDC(win32_state.window);
     defer { ReleaseDC(win32_state.window, dc); };
 
-    HFONT font = (HFONT)handle.opaque;
+    HFONT font = (HFONT)handle;
     SelectObject(dc, font);
 
     SIZE size;
-    if (GetTextExtentPoint32W(dc, L"M", 1, &size))
+    for (int i = 0; i < 26; i += 1)
     {
-        result.x = size.cx;
-        result.y = size.cy;
+        char ch;
+
+        ch = 'a' + (char)i;
+        GetTextExtentPoint32A(dc, &ch, 1, &size);
+        if (result.x < size.cx) result.x = size.cx;
+        if (result.y < size.cy) result.y = size.cy;
+
+        ch = 'A' + (char)i;
+        GetTextExtentPoint32A(dc, &ch, 1, &size);
+        if (result.x < size.cx) result.x = size.cx;
+        if (result.y < size.cy) result.y = size.cy;
     }
 
     return result;
@@ -1744,7 +1830,7 @@ function V2i
 Win32_GetTextExtent(PlatformFontHandle handle, PlatformOffscreenBuffer *target, String text)
 {
     HDC   dc   = (HDC)target->opaque[0];
-    HFONT font = (HFONT)handle.opaque;
+    HFONT font = (HFONT)handle;
 
     if (!SelectObject(dc, font))
     {
@@ -1764,7 +1850,7 @@ function V2i
 Win32_DrawText(PlatformFontHandle handle, PlatformOffscreenBuffer *target, String text, V2i p, Color foreground, Color background)
 {
     HDC   dc   = (HDC)target->opaque[0];
-    HFONT font = (HFONT)handle.opaque;
+    HFONT font = (HFONT)handle;
 
     String_utf16 wtext = Win32_Utf8ToUtf16(platform->GetTempArena(), text);
 
@@ -1801,12 +1887,11 @@ Win32_DrawText(PlatformFontHandle handle, PlatformOffscreenBuffer *target, Strin
 }
 
 function bool
-Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, PlatformFontRasterFlags flags)
+Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, PlatformFontQuality quality)
 {
     bool result = false;
 
-    bool raster_font = !!(flags & PlatformFontRasterFlag_RasterFont);
-    bool dont_map_unicode = !!(flags & PlatformFontRasterFlag_DoNotMapUnicode);
+    bool raster_font = quality == PlatformFontQuality_Raster;
 
     ZeroStruct(out_font);
 
@@ -1823,7 +1908,7 @@ Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, Platfo
     int height = font_size;
 
     DWORD out_precision = raster_font ? OUT_RASTER_PRECIS : OUT_DEFAULT_PRECIS;
-    DWORD quality       = raster_font ? NONANTIALIASED_QUALITY : PROOF_QUALITY;
+    DWORD win32_quality = raster_font ? NONANTIALIASED_QUALITY : PROOF_QUALITY;
 
     HFONT font = CreateFontW(height, 0, 0, 0,
                              FW_NORMAL,
@@ -1833,11 +1918,11 @@ Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, Platfo
                              DEFAULT_CHARSET,
                              out_precision,
                              CLIP_DEFAULT_PRECIS,
-                             quality,
+                             win32_quality,
                              DEFAULT_PITCH|FF_DONTCARE,
                              font_name.data);
 
-    wchar_t *charset = (dont_map_unicode ? codepage_437_ascii : codepage_437_utf16);
+    wchar_t *charset = codepage_437_utf16;
 
     if (font)
     {
@@ -2219,6 +2304,7 @@ main(int, char **)
     platform->CreateOffscreenBuffer  = Win32_CreateOffscreenBuffer;
     platform->DestroyOffscreenBuffer = Win32_DestroyOffscreenBuffer;
 
+    platform->EnumerateFonts         = Win32_EnumerateFonts;
     platform->CreateFont             = Win32_CreateFont;
     platform->DestroyFont            = Win32_DestroyFont;
     platform->GetFontMetrics         = Win32_GetFontMetrics;
@@ -2444,7 +2530,8 @@ main(int, char **)
                     }
                 }
                 event.type = PlatformEvent_Text;
-                event.text = Win32_Utf16ToUtf8(platform->GetTempArena(), chars);
+                event.text.size = WideCharToMultiByte(CP_UTF8, 0, chars, -1, (char *)event.text_storage, ArrayCount(event.text_storage), NULL, NULL) - 1;
+                event.text.data = event.text_storage;
 
                 Win32_PushEvent(&event);
             } break;

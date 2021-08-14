@@ -116,7 +116,7 @@ enum WallSegment
     Wall_TopThick    = 0x20,
     Wall_Bottom      = 0x40,
     Wall_BottomThick = 0x80,
-    Wall_MAXVALUE = Wall_LeftThick|Wall_RightThick|Wall_TopThick|Wall_BottomThick,
+    Wall_MAXVALUE = Wall_Left|Wall_LeftThick|Wall_Right|Wall_RightThick|Wall_Top|Wall_TopThick|Wall_Bottom|Wall_BottomThick,
 };
 
 enum RenderLayer
@@ -157,6 +157,8 @@ struct RenderCommand
 
     Color foreground;
     Color background;
+
+    PlatformFontHandle font;
 
     String utf8;
     Glyph glyph;

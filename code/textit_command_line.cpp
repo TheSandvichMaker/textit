@@ -60,17 +60,20 @@ BeginCommandLine()
 }
 
 function bool
-AddPrediction(CommandLine *cl, const Prediction &prediction)
+AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key)
 {
     if (cl->prediction_count < ArrayCount(cl->predictions))
     {
-        Prediction *dest = &cl->predictions[cl->prediction_count++];
+        int index = cl->prediction_count++;
+        Prediction *dest = &cl->predictions[index];
         dest->text         = PushString(cl->arena, prediction.text);
         dest->preview_text = (prediction.preview_text.size ? PushString(cl->arena, prediction.preview_text) : dest->text);
         dest->color        = prediction.color;
         dest->incomplete   = prediction.incomplete;
+        cl->sort_keys[index].key = sort_key;
         return true;
     }
+    cl->prediction_overflow = true;
     return false;
 }
 
@@ -334,9 +337,11 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
             !cl->cycling_predictions &&
             cl->GatherPredictions)
         {
+            cl->prediction_overflow = false;
             cl->prediction_count = 0;
             cl->prediction_index = 0;
             cl->prediction_selected_index = -1;
+            ZeroArray(ArrayCount(cl->sort_keys), cl->sort_keys);
 
             Clear(cl->arena);
             cl->GatherPredictions(cl);
@@ -348,7 +353,14 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
             for (int i = 0; i < cl->prediction_count; i += 1)
             {
                 Prediction *prediction = &cl->predictions[i];
-                sort_keys[i].key   = !AreEqual(cl_string, prediction->preview_text, StringMatch_CaseInsensitive); // epic sort key bro
+                if (cl->sort_by_edit_distance)
+                {
+                    sort_keys[i].key = CalculateEditDistance(cl_string, prediction->preview_text);
+                }
+                if (!AreEqual(cl_string, prediction->preview_text, StringMatch_CaseInsensitive))
+                {
+                    sort_keys[i].key += 100;
+                }
                 sort_keys[i].index = i;
             }
             if (cl_string.size > 0)
@@ -378,6 +390,7 @@ DrawCommandLines()
     Color text_foreground           = GetThemeColor("text_foreground"_id);
     Color text_background           = GetThemeColor("command_line_background"_id);
     Color color_name                = GetThemeColor("command_line_name"_id);
+    Color color_option              = GetThemeColor("command_line_option"_id);
     Color color_selected            = GetThemeColor("command_line_option_selected"_id);
     Color color_numbers             = GetThemeColor("command_line_option_numbers"_id);
     Color color_numbers_highlighted = GetThemeColor("command_line_option_numbers_highlighted"_id);
@@ -402,7 +415,7 @@ DrawCommandLines()
     CommandLine *cl = editor->command_lines[editor->command_line_count - 1];
 
     int64_t total_width  = 0;
-    int64_t total_height = cl->prediction_count;
+    int64_t total_height = cl->prediction_count + cl->prediction_overflow;
 
     if (cl->highlight_numbers)
     {
@@ -439,6 +452,11 @@ DrawCommandLines()
             total_width = Max(total_width, 2 + (int64_t)text.size);
 
             prediction_offset += 1;
+        }
+        
+        if (cl->prediction_overflow)
+        {
+            DrawLine(p + MakeV2i(2, -prediction_offset), "... and more"_str, color_option, overlay_background);
         }
     }
 

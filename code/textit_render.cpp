@@ -1,4 +1,21 @@
 function void
+RebuildGlyphCache()
+{
+    uint32_t glyph_cache_size = 2048; 
+    uint32_t glyphs_per_row   = 32; // just so I can visualize easier I am putting this as a set width
+    uint32_t glyphs_per_col   = (glyph_cache_size + glyphs_per_row - 1) / glyphs_per_row;
+
+    platform->DestroyOffscreenBuffer(&render_state->glyph_texture);
+    platform->CreateOffscreenBuffer((int)(glyphs_per_row*editor->font_max_glyph_size.x),
+                                    (int)(glyphs_per_col*editor->font_max_glyph_size.y),
+                                    &render_state->glyph_texture);
+    ResizeGlyphCache(&render_state->glyph_cache, glyph_cache_size);
+
+    render_state->glyphs_per_row = glyphs_per_row;
+    render_state->glyphs_per_col = glyphs_per_col;
+}
+
+function void
 InitializeRenderState(Arena *arena, Bitmap *target)
 {
     render_state->target = target;
@@ -50,18 +67,6 @@ InitializeRenderState(Arena *arena, Bitmap *target)
     render_state->wall_segment_lookup[Wall_LeftThick|Wall_Top|Wall_Bottom|Wall_RightThick]           = 216;
     render_state->wall_segment_lookup[Wall_Left|Wall_Top]                                            = 217;
     render_state->wall_segment_lookup[Wall_Right|Wall_Bottom]                                        = 218;
-
-    uint32_t glyph_cache_size = 1024; 
-    uint32_t glyphs_per_row   = 16; // just so I can visualize easier I am putting this as a set width
-    uint32_t glyphs_per_col   = (glyph_cache_size + glyphs_per_row - 1) / glyphs_per_row;
-
-    platform->CreateOffscreenBuffer((int)(glyphs_per_row*editor->font_metrics.x),
-                                    (int)(glyphs_per_col*editor->font_metrics.y),
-                                    &render_state->glyph_texture);
-    ResizeGlyphCache(&render_state->glyph_cache, glyph_cache_size);
-
-    render_state->glyphs_per_row = glyphs_per_row;
-    render_state->glyphs_per_col = glyphs_per_col;
 }
 
 function V2i
@@ -136,6 +141,9 @@ BlitBitmap(Bitmap *dest, Bitmap *source, V2i p)
 
     p = Clamp(p, MakeV2i(0, 0), MakeV2i(dest->w, dest->h));
 
+    Color transparent;
+    transparent.u32 = 0;
+
     Color *source_row = source->data + source_min_y*source->pitch + source_min_x;
     Color *dest_row = dest->data + p.y*dest->pitch + p.x;
     for (int64_t y = 0; y < source_adjusted_h; ++y)
@@ -148,6 +156,41 @@ BlitBitmap(Bitmap *dest, Bitmap *source, V2i p)
         }
         source_row += source->pitch;
         dest_row += dest->pitch;
+    }
+}
+
+function void
+BlitBitmapAlpha(Bitmap *dest, Bitmap *source, V2i p)
+{
+    int64_t source_min_x = Max(0, -p.x);
+    int64_t source_min_y = Max(0, -p.y);
+    int64_t source_max_x = Min(source->w, dest->w - p.x);
+    int64_t source_max_y = Min(source->h, dest->h - p.y);
+    int64_t source_adjusted_w = source_max_x - source_min_x;
+    int64_t source_adjusted_h = source_max_y - source_min_y;
+
+    p = Clamp(p, MakeV2i(0, 0), MakeV2i(dest->w, dest->h));
+
+    Color *source_row = source->data + source_min_y*source->pitch + source_min_x;
+    Color *dest_row   = dest->data + p.y*dest->pitch + p.x;
+    for (int64_t y = 0; y < source_adjusted_h; ++y)
+    {
+        Color *source_pixel = source_row;
+        Color *dest_pixel   = dest_row;
+        for (int64_t x = 0; x < source_adjusted_w; ++x)
+        {
+            Color source_color = *source_pixel++;
+            if (source_color.a)
+            {
+                *dest_pixel++ = source_color;
+            }
+            else
+            {
+                dest_pixel++;
+            }
+        }
+        source_row += source->pitch;
+        dest_row   += dest->pitch;
     }
 }
 
@@ -309,40 +352,40 @@ HashRenderCommand(RenderCommand *command, Rect2i overlapping_rect)
 }
 
 function void
-PushTile(V2i tile_p, Sprite sprite)
-{
-    RenderCommand *command = PushRenderCommand(RenderCommand_Sprite);
-    command->p = tile_p;
-    command->glyph = sprite.glyph;
-    command->foreground = sprite.foreground;
-    command->background = sprite.background;
-
-    command->rect.min = tile_p;
-    command->rect.max = tile_p + MakeV2i(1, 1);
-
-    HashRenderCommand(command, command->rect);
-}
-
-function void
-PushUnicode(V2i tile_p, String utf8, Color foreground, Color background)
-{
-    RenderCommand *command = PushRenderCommand(RenderCommand_Unicode);
-    command->p          = tile_p;
-    command->utf8       = utf8;
-    command->foreground = foreground;
-    command->background = background;
-    command->rect.min   = tile_p;
-    command->rect.max   = tile_p + MakeV2i(1, 1);
-    HashRenderCommand(command, command->rect);
-}
-
-function void
 PushRect(const Rect2i &rect, Color color)
 {
     RenderCommand *command = PushRenderCommand(RenderCommand_Rect);
     command->rect       = rect;
     command->foreground = color;
 
+    HashRenderCommand(command, command->rect);
+}
+
+function void
+PushTile(V2i tile_p, Sprite sprite)
+{
+    RenderCommand *command = PushRenderCommand(RenderCommand_Sprite);
+    command->p          = tile_p;
+    command->font       = editor->fonts[0];
+    command->glyph      = sprite.glyph;
+    command->foreground = sprite.foreground;
+    command->background = sprite.background;
+    command->rect.min   = tile_p;
+    command->rect.max   = tile_p + MakeV2i(1, 1);
+    HashRenderCommand(command, command->rect);
+}
+
+function void
+PushUnicode(V2i tile_p, String utf8, Color foreground, Color background, TextStyleFlags flags = 0)
+{
+    RenderCommand *command = PushRenderCommand(RenderCommand_Unicode);
+    command->p          = tile_p;
+    command->font       = editor->fonts[flags];
+    command->utf8       = utf8;
+    command->foreground = foreground;
+    command->background = background;
+    command->rect.min   = tile_p;
+    command->rect.max   = tile_p + MakeV2i(1, 1);
     HashRenderCommand(command, command->rect);
 }
 
@@ -492,8 +535,6 @@ RenderCommandsToBitmap(void)
 
     V2i metrics = editor->font_metrics;
     int32_t glyphs_per_row = render_state->glyphs_per_row;
-    // int32_t glyphs_per_col = render_state->glyphs_per_col;
-    PlatformFontHandle font = editor->font;
 
     Color text_background = GetThemeColor("text_background"_id);
 
@@ -580,30 +621,57 @@ RenderCommandsToBitmap(void)
                     uint8_t glyph = (uint8_t)command->glyph;
                     String text = (command->kind == RenderCommand_Unicode ? command->utf8 : MakeString(1, &glyph));
 
+                    PlatformFontHandle font = command->font;
+
                     glyph_rect.min -= clip_rect->rect.min;
                     glyph_rect.max -= clip_rect->rect.min;
 
                     if (text.size == 1 && text.data[0] == ' ')
                     {
-                        BlitRect(&target, glyph_rect, command->background);
+                        // nothing lol
                     }
                     else
                     {
                         HashResult hash = HashIntegers(command->foreground.u32, command->background.u32);
+                        hash = HashIntegers(hash, (uint64_t)font);
                         hash = HashString(hash, text);
 
                         GlyphEntry *entry = GetGlyphEntry(&render_state->glyph_cache, hash);
-                        V2i glyph_p = MakeV2i(metrics.x*(entry->index % glyphs_per_row),
-                                              metrics.y*(entry->index / glyphs_per_row));
+                        V2i glyph_p = MakeV2i(editor->font_max_glyph_size.x*(entry->index % glyphs_per_row),
+                                              editor->font_max_glyph_size.y*(entry->index / glyphs_per_row));
+                        Bitmap glyph_bitmap = MakeBitmapView(&render_state->glyph_texture.bitmap, MakeRect2iMinDim(glyph_p, editor->font_max_glyph_size));
                         if (entry->state == GlyphState_Empty)
                         {
-                            platform->SetTextClipRect(&render_state->glyph_texture, MakeRect2iMinDim(glyph_p, metrics));
+                            platform->SetTextClipRect(&render_state->glyph_texture, MakeRect2iMinDim(glyph_p, editor->font_max_glyph_size));
                             platform->DrawText(font, &render_state->glyph_texture, text, glyph_p, command->foreground, command->background);
+
+                            Color *row = glyph_bitmap.data;
+                            for (int y = 0; y < glyph_bitmap.h; y += 1)
+                            {
+                                Color *pixel = row;
+                                for (int x = 0; x < glyph_bitmap.w; x += 1)
+                                {
+                                    Color color = *pixel;
+                                    if (!color.u32 ||
+                                        (color.r == command->background.r &&
+                                         color.g == command->background.g &&
+                                         color.b == command->background.b))
+                                    {
+                                        color.u32 = 0;
+                                    }
+                                    else
+                                    {
+                                        color.a = 255;
+                                    }
+                                    *pixel++ = color;
+                                }
+                                row += glyph_bitmap.pitch;
+                            }
+
                             entry->state = GlyphState_Filled;
                             glyph_fills += 1;
                         }
-                        Bitmap glyph_bitmap = MakeBitmapView(&render_state->glyph_texture.bitmap, MakeRect2iMinDim(glyph_p, metrics));
-                        BlitBitmap(&target, &glyph_bitmap, glyph_rect.min);
+                        BlitBitmapAlpha(&target, &glyph_bitmap, glyph_rect.min);
                     }
                 }
             } break;
@@ -612,8 +680,8 @@ RenderCommandsToBitmap(void)
             {
                 Rect2i rect = command->rect;
 
+                rect.max  = metrics*rect.min + (rect.max - rect.min)*editor->font_max_glyph_size;
                 rect.min *= metrics;
-                rect.max *= metrics;
 
                 if (RectanglesOverlap(clip_rect->rect, rect))
                 {
@@ -648,12 +716,5 @@ RenderCommandsToBitmap(void)
 static void
 EndRender(void)
 {
-    PlatformHighResTime start = platform->GetTime();
     RenderCommandsToBitmap();
-    PlatformHighResTime end = platform->GetTime();
-    if (render_state->cb_command_at > 0)
-    {
-        double time = platform->SecondsElapsed(start, end);
-        platform->DebugPrint("Rendered in %fms\n", 1000.0*time);
-    }
 }

@@ -299,10 +299,11 @@ LoadDefaultIndentRules(IndentRules *rules)
     ZeroStruct(rules);
     rules->unfinished_statement      = IndentRule_PushIndent;
     rules->table[Token_LeftParen]    = IndentRule_PushIndent|IndentRule_Hanging;
-    rules->table[Token_RightParen]   = IndentRule_PopIndent|IndentRule_Hanging;
+    rules->table[Token_RightParen]   = IndentRule_PopIndent;
     rules->table[Token_LeftScope]    = IndentRule_PushIndent;
     rules->table[Token_RightScope]   = IndentRule_PopIndent;
     rules->table[Token_Preprocessor] = IndentRule_ForceLeft;
+    rules->table[Token_Label]        = IndentRule_ForceLeft;
     rules->table[(TokenKind)';']     = IndentRule_StatementEnd;
     rules->table[(TokenKind)',']     = IndentRule_StatementEnd;
 }
@@ -317,6 +318,7 @@ LoadOtherIndentRules(IndentRules *rules)
     rules->table[Token_LeftScope]    = IndentRule_PushIndent;
     rules->table[Token_RightScope]   = IndentRule_PopIndent;
     rules->table[Token_Preprocessor] = IndentRule_ForceLeft;
+    rules->table[Token_Label]        = IndentRule_ForceLeft;
     rules->table[(TokenKind)';']     = IndentRule_StatementEnd;
     rules->table[(TokenKind)',']     = IndentRule_StatementEnd;
 }

@@ -174,6 +174,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             Color foreground = text_foreground;
             Color background = base_background;
+            TextStyleFlags text_style = 0;
 
             //
             // Colorize Tokens
@@ -199,19 +200,20 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             if (token)
             {
+                StringID foreground_id = "text_foreground"_id;
                 if (core_config->syntax_highlighting)
                 {
-                    foreground = GetThemeColor(TokenThemeIndex(token->kind));
+                    foreground_id = TokenThemeID(token->kind);
                     if (HasFlag(token->flags, TokenFlag_IsComment))
                     {
-                        foreground = text_comment;
+                        foreground_id = "text_comment"_id;
                     }
                     else if (token->kind == Token_Identifier ||
                              token->kind == Token_Function)
                     {
                         if (HasFlag(token->flags, TokenFlag_IsPreprocessor))
                         {
-                            foreground = text_preprocessor;
+                            foreground_id = "text_preprocessor"_id;
                         }
                         else if (buffer->language)
                         {
@@ -220,7 +222,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                             TokenKind kind = GetTokenKindFromStringID(buffer->language, id);
                             if (kind)
                             {
-                                foreground = GetThemeColor(TokenThemeIndex(kind));
+                                foreground_id = TokenThemeID(token->kind);
                                 token->kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
                                                     // but maybe it should be moved outside of the actual drawing function
                             }
@@ -235,6 +237,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     editor->token_at_mouse = token;
                     background = text_background_highlighted;
                 }
+                foreground = GetThemeColor(foreground_id);
+                text_style = GetThemeStyle(foreground_id);
             }
 
             String string = {};
@@ -261,6 +265,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 {
                     string = ">"_str; // NOTE: gets overwritten down the line
                     foreground = text_foreground_dimmer;
+                    text_style = 0;
                 }
             }
             else if (b == '\r' || b == '\n')
@@ -286,6 +291,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     }
                     foreground = text_foreground_dimmest;
                     right_align = right_align_visualized_newlines;
+                    text_style = 0;
                 }
             }
             else if (b == ' ' && visualize_whitespace)
@@ -296,6 +302,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 {
                     string = PushTempStringF(".");
                     foreground = text_foreground_dimmer;
+                    text_style = 0;
                 }
                 else
                 {
@@ -383,12 +390,18 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             for (size_t i = 0; i < string.size; i += 1)
             {
+                uint32_t glyph_size = 1;
                 if (IsHeadUtf8Byte(b))
                 {
                     ParseUtf8Result unicode = ParseUtf8Codepoint(&string.data[i]);
+                    glyph_size = unicode.advance;
                     i += unicode.advance - 1;
                 }
-                PushUnicode(top_left + MakeV2i(col, row), string, foreground, background);
+                String glyph = MakeString(glyph_size, &string.data[i]);
+                render_state->current_layer = Layer_ViewBackground;
+                PushRect(MakeRect2iMinDim(top_left + MakeV2i(col, row), MakeV2i(1, 1)), background);
+                render_state->current_layer = Layer_ViewForeground;
+                PushUnicode(top_left + MakeV2i(col, row), glyph, foreground, background, text_style);
                 col += 1;
                 if (col + 1 >= line_width)
                 {
@@ -400,7 +413,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             if (encountered_newline)
             {
-                // prev_col = 0;
                 col = 0;
                 break;
             }
@@ -459,6 +471,9 @@ DrawView(View *view, bool is_active_window)
     Rect2i text_bounds = MakeRect2iMinMax(bounds.min, MakeV2i(bounds.max.x, bounds.max.y - 1));
 
     int64_t actual_line_height = DrawTextArea(view, text_bounds, is_active_window);
+    int64_t line = loc.line + 1;
+    int64_t line_count = Max(1, (int64_t)buffer->line_data.count);
+    int64_t line_percentage = 100*line / line_count;
 
     String leaf;
     SplitPath(buffer->name, &leaf);
@@ -470,14 +485,12 @@ DrawView(View *view, bool is_active_window)
              PushTempStringF("%hd:%.*s", buffer->id.index, StringExpand(leaf)),
              filebar_text_foreground, filebar_text_background);
 
-    String right_string = PushTempStringF("[%.*s] %lld:%lld ", StringExpand(buffer->language->name), loc.line + 1, loc.col);
+    String right_string = PushTempStringF("[%.*s] %lld%% %lld:%lld ", StringExpand(buffer->language->name), line_percentage, loc.line + 1, loc.col);
     DrawLine(MakeV2i(bounds.max.x - right_string.size, filebar_y), right_string, filebar_text_foreground, filebar_text_background);
-
-    int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
 
     if (core_config->show_scrollbar)
     {
-        int64_t line_count = Max(1, (int64_t)buffer->line_data.count);
+        int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
         int64_t bounds_height = GetHeight(bounds) - 1;
         int64_t scrollbar_size = Max(1, bounds_height*bounds_height / line_count);
         int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*bounds_height / line_count);
