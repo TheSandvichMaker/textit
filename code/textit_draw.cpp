@@ -56,6 +56,7 @@ function int64_t
 DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 {
     Buffer *buffer = GetBuffer(view);
+    Project *project = buffer->project;
 
     bool draw_cursor    = is_active_window;
     bool draw_selection = (editor->edit_mode != EditMode_Text);
@@ -259,7 +260,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 }
 
                 String token_name = MakeString(token->length, &buffer->text[token->pos]);
-                if (Tag *tag = FindTag(token_name))
+                if (Tag *tag = FindTag(project, token_name))
                 {
                     foreground_id = "text_type"_id;
                 }

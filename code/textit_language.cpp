@@ -1,3 +1,21 @@
+function LanguageSpec *
+GetLanguageFromExtension(String ext)
+{
+    LanguageSpec *result = nullptr;
+    for (LanguageSpec *lang = editor->first_language; lang; lang = lang->next)
+    {
+        for (int ext_index = 0; ext_index < lang->associated_extension_count; ext_index += 1)
+        {
+            if (AreEqual(lang->associated_extensions[ext_index], ext, StringMatch_CaseInsensitive))
+            {
+                result = lang;
+                break;
+            }
+        }
+    }
+    return result;
+}
+
 function void
 AddKeyword(LanguageSpec *spec, StringID id, TokenKind kind)
 {

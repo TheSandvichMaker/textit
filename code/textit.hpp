@@ -28,6 +28,7 @@
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
 #include "textit_parser.hpp"
+#include "textit_project.hpp"
 #include "textit_view.hpp"
 #include "textit_command_line.hpp"
 #include "textit_auto_indent.hpp"
@@ -149,14 +150,6 @@ struct CursorHashEntry
     Cursor cursor;
 };
 
-struct Project
-{
-    Project *next;
-
-    String base_directory;
-    Tags *tag_table[4096];
-};
-
 struct EditorState
 {
     GlobalState global_state;
@@ -195,6 +188,8 @@ struct EditorState
 
     TextStorage default_register;
     TextStorage registers[26];
+
+    Project *first_project;
 
     Tag *tag_table[4096];
 

@@ -658,13 +658,37 @@ COMMAND_PROC(Tags,
     cl->AcceptEntry = [](CommandLine *cl)
     {
         String string = TrimSpaces(MakeString(cl->count, cl->text));
-        if (Tag *tag = FindTag(string))
+        View *view = GetActiveView();
+        Buffer *buffer = GetBuffer(view);
+        if (Tag *tag = FindTag(buffer->project, string))
         {
-            platform->DebugPrint("It do be da tag\n");
+            JumpToLocation(view, { tag->buffer, tag->pos });
+            view->center_view_next_time_we_calculate_scroll = true; // this is terrible
         }
 
         return true;
     };
+}
+
+COMMAND_PROC(JumpToTagUnderCursor,
+             "Jump to the tag below the cursor"_str)
+{
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    Token *token = GetTokenAt(buffer, cursor->pos);
+    if (token->kind == Token_Identifier)
+    {
+        ScopedMemory temp;
+        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token->pos, token->length));
+
+        if (Tag *tag = FindTag(buffer->project, string))
+        {
+            JumpToLocation(view, { tag->buffer, tag->pos });
+            view->center_view_next_time_we_calculate_scroll = true; // this is terrible
+        }
+    }
 }
 
 COMMAND_PROC(ResetSelection)

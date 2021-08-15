@@ -88,7 +88,7 @@ struct Buffer : TextStorage
 
     Arena arena;
     String name;
-    String full_name;
+    String full_path;
 
     LineEndKind line_end;
 
@@ -103,9 +103,10 @@ struct Buffer : TextStorage
         int64_t insert_pos;
     } undo;
 
+    struct Project      *project;
     struct LanguageSpec *language;
     struct IndentRules  *indent_rules;
-    struct Tags *tags;
+    struct Tags         *tags;
 
     LineData null_line_data;
 

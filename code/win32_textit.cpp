@@ -683,12 +683,10 @@ Win32_PushFullPath(Arena *arena, String filename_utf8)
     DWORD size = GetFullPathNameW(filename, 0, NULL, NULL);
     wchar_t *buffer = PushArrayNoClear(temp, size, wchar_t);
 
-    if (GetFullPathNameW(filename, size, buffer, NULL) != size - 1)
-    {
-        INVALID_CODE_PATH;
-    }
+    DWORD real_size = GetFullPathNameW(filename, size, buffer, NULL);
+    Assert(real_size + 1 <= size);
 
-    String result = Win32_Utf16ToUtf8(arena, buffer, size);
+    String result = Win32_Utf16ToUtf8(arena, buffer, real_size);
     return result;
 }
 

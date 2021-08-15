@@ -20,6 +20,8 @@ struct View
     int64_t sticky_col;
     int64_t repeat_value;
 
+    bool center_view_next_time_we_calculate_scroll; // terrible
+
     Rect2i viewport;
     int64_t actual_viewport_line_height;
     int64_t scroll_at;

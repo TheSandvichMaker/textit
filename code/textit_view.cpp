@@ -91,3 +91,11 @@ RedoOnce(View *view)
 
     return result;
 }
+
+function void
+JumpToLocation(View *view, Jump jump)
+{
+    view->next_buffer = jump.buffer;
+    Cursor *cursor = GetCursor(view->id, jump.buffer);
+    SetCursor(cursor, jump.pos);
+}

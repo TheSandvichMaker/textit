@@ -12,6 +12,7 @@
 #include "textit_buffer.cpp"
 #include "textit_tokenizer.cpp"
 #include "textit_parser.cpp"
+#include "textit_project.cpp"
 #include "textit_view.cpp"
 #include "textit_command.cpp"
 #include "textit_theme.cpp"
@@ -156,6 +157,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->indent_rules         = &editor->default_indent_rules;
     result->language             = &editor->null_language;
     result->tags                 = PushStruct(&result->arena, Tags);
+    DllInit(&result->tags->sentinel);
 
     result->tokens.SetCapacity(32'000'000);
     result->line_data.SetCapacity(8'000'000);
@@ -170,8 +172,10 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
 function Buffer *
 OpenBufferFromFile(String filename)
 {
+    platform->DebugPrint("Opening: %.*s\n", StringExpand(filename));
+
     Buffer *result = OpenNewBuffer(filename);
-    result->full_name = platform->PushFullPath(&result->arena, result->name);
+    result->full_path = platform->PushFullPath(&result->arena, result->name);
     size_t file_size = platform->GetFileSize(filename);
     EnsureSpace(result, file_size);
     if (platform->ReadFileInto(TEXTIT_BUFFER_SIZE, result->text, filename) != file_size)
@@ -196,15 +200,17 @@ OpenBufferFromFile(String filename)
         }
     }
 
-    TokenizeBuffer(result);
-    ParseCppTags(result);
-
     if (editor->buffer_count == 2)
     {
         // if there's exactly one buffer (plus the null buffer), I guess we'll use this to set the working directory
         String path = SplitPath(filename);
         platform->SetWorkingDirectory(path);
     }
+
+    AssociateProject(result);
+
+    TokenizeBuffer(result);
+    ParseCppTags(result);
 
     return result;
 }
@@ -588,6 +594,12 @@ DrawWindows(Window *window)
             if (loc.line > bot)
             {
                 view->scroll_at += loc.line - bot;
+            }
+
+            if (view->center_view_next_time_we_calculate_scroll)
+            {
+                view->center_view_next_time_we_calculate_scroll = false;
+                view->scroll_at = loc.line;
             }
         }
 

@@ -1,14 +1,16 @@
 function Tag *
 AddTag(Tags *tags, Buffer *buffer, String name)
 {
+    Project *project = buffer->project;
+
     Tag *result = PushStruct(&editor->transient_arena, Tag);
 
     HashResult hash = HashString(name);
     result->hash = hash;
 
-    uint32_t slot = hash.u32[0] % ArrayCount(editor->tag_table);
-    result->next_in_hash = editor->tag_table[slot];
-    editor->tag_table[slot] = result;
+    uint32_t slot = hash.u32[0] % ArrayCount(project->tag_table);
+    result->next_in_hash = project->tag_table[slot];
+    project->tag_table[slot] = result;
 
     DllInsertBack(&tags->sentinel, result);
 
@@ -21,10 +23,6 @@ function void
 ParseCppTags(Buffer *buffer)
 {
     Tags *tags = buffer->tags;
-    if (!tags->sentinel.next)
-    {
-        DllInit(&tags->sentinel);
-    }
 
     TokenIterator it = IterateTokens(buffer);
     while (IsValid(&it))
@@ -35,7 +33,10 @@ ParseCppTags(Buffer *buffer)
         ScopedMemory temp(platform->GetTempArena());
         String text = PushBufferRange(temp, buffer, MakeRangeStartLength(t->pos, t->length));
 
-        if (AreEqual(text, "struct"_str))
+        if (AreEqual(text, "struct"_str) ||
+            AreEqual(text, "enum"_str)   ||
+            AreEqual(text, "class"_str)  ||
+            AreEqual(text, "union"_str))
         {
             t = Next(&it);
 
@@ -68,11 +69,11 @@ ParseCppTags(Buffer *buffer)
 }
 
 function Tag *
-FindTag(String name)
+FindTag(Project *project, String name)
 {
     HashResult hash = HashString(name);
 
-    Tag *result = editor->tag_table[hash.u32[0] % ArrayCount(editor->tag_table)];
+    Tag *result = project->tag_table[hash.u32[0] % ArrayCount(project->tag_table)];
     while (result)
     {
         if (result->hash == hash)
