@@ -158,6 +158,7 @@ struct RenderCommand
     Color foreground;
     Color background;
 
+    bool cached_cleartype;
     PlatformFontHandle font;
 
     String utf8;

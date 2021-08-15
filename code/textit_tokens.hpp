@@ -77,7 +77,8 @@ struct Token
 {
     TokenKind kind;   // 2
     TokenFlags flags; // 4
-    int32_t length;   // 8
+    int16_t length;   // 6
+    int16_t pad0;     // 8
     int64_t pos;      // 16
 };
 

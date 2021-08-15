@@ -62,7 +62,7 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
     int64_t line_end             = line_data->range.end;
     int64_t first_non_whitespace = FindFirstNonHorzWhitespace(buffer, line_start);
 
-    TokenIterator it = SeekTokenIterator(buffer, first_non_whitespace);
+    TokenIterator it = IterateTokens(buffer, first_non_whitespace);
 
     bool force_left = false;
 

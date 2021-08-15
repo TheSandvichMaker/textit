@@ -78,6 +78,8 @@ struct Win32State
     bool window_class_registered;
     WNDCLASSW window_class;
     HWND window;
+    POINT window_to_client_tl_delta;
+    POINT window_to_client_br_delta;
 
     HRGN current_text_clip_rect;
 

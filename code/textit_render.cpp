@@ -23,8 +23,8 @@ InitializeRenderState(Arena *arena, Bitmap *target)
     render_state->cb_size = Megabytes(4); // random choice
     render_state->command_buffer = PushArrayNoClear(arena, render_state->cb_size, char);
 
-    int64_t viewport_w = (target->w + editor->font_metrics.x - 1) / editor->font_metrics.x;
-    int64_t viewport_h = (target->h + editor->font_metrics.y - 1) / editor->font_metrics.y;
+    int64_t viewport_w = target->w / editor->font_metrics.x;
+    int64_t viewport_h = target->h / editor->font_metrics.y;
     render_state->viewport = MakeRect2iMinDim(0, 0, viewport_w, viewport_h);
 
     render_state->wall_segment_lookup[Wall_Top|Wall_Bottom]                                          = 179;
@@ -141,9 +141,6 @@ BlitBitmap(Bitmap *dest, Bitmap *source, V2i p)
 
     p = Clamp(p, MakeV2i(0, 0), MakeV2i(dest->w, dest->h));
 
-    Color transparent;
-    transparent.u32 = 0;
-
     Color *source_row = source->data + source_min_y*source->pitch + source_min_x;
     Color *dest_row = dest->data + p.y*dest->pitch + p.x;
     for (int64_t y = 0; y < source_adjusted_h; ++y)
@@ -160,7 +157,7 @@ BlitBitmap(Bitmap *dest, Bitmap *source, V2i p)
 }
 
 function void
-BlitBitmapAlpha(Bitmap *dest, Bitmap *source, V2i p)
+BlitBitmapAlphaMasked(Bitmap *dest, Bitmap *source, V2i p)
 {
     int64_t source_min_x = Max(0, -p.x);
     int64_t source_min_y = Max(0, -p.y);
@@ -188,6 +185,53 @@ BlitBitmapAlpha(Bitmap *dest, Bitmap *source, V2i p)
             {
                 dest_pixel++;
             }
+        }
+        source_row += source->pitch;
+        dest_row   += dest->pitch;
+    }
+}
+
+function void
+BlitBitmapSubpixelBlend(Bitmap *dest, Bitmap *source, V2i p, Color blend_color)
+{
+    int64_t source_min_x = Max(0, -p.x);
+    int64_t source_min_y = Max(0, -p.y);
+    int64_t source_max_x = Min(source->w, dest->w - p.x);
+    int64_t source_max_y = Min(source->h, dest->h - p.y);
+    int64_t source_adjusted_w = source_max_x - source_min_x;
+    int64_t source_adjusted_h = source_max_y - source_min_y;
+
+    p = Clamp(p, MakeV2i(0, 0), MakeV2i(dest->w, dest->h));
+
+    float blend_r = (1.0f / 255.0f)*blend_color.r;
+    float blend_g = (1.0f / 255.0f)*blend_color.g;
+    float blend_b = (1.0f / 255.0f)*blend_color.b;
+
+    Color *source_row = source->data + source_min_y*source->pitch + source_min_x;
+    Color *dest_row   = dest->data + p.y*dest->pitch + p.x;
+    for (int64_t y = 0; y < source_adjusted_h; ++y)
+    {
+        Color *source_pixel = source_row;
+        Color *dest_pixel   = dest_row;
+        for (int64_t x = 0; x < source_adjusted_w; ++x)
+        {
+            Color source_color = *source_pixel++;
+            Color dest_color   = *dest_pixel;
+
+            float source_r = 1.0f - (1.0f / 255.0f)*source_color.r;
+            float source_g = 1.0f - (1.0f / 255.0f)*source_color.g;
+            float source_b = 1.0f - (1.0f / 255.0f)*source_color.b;
+
+            float dest_r   = (1.0f / 255.0f)*dest_color.r;
+            float dest_g   = (1.0f / 255.0f)*dest_color.g;
+            float dest_b   = (1.0f / 255.0f)*dest_color.b;
+
+            Color blend;
+            blend.r = (uint8_t)(255.0f*((1.0f - source_r)*dest_r + source_r*blend_r));
+            blend.g = (uint8_t)(255.0f*((1.0f - source_g)*dest_g + source_g*blend_g));
+            blend.b = (uint8_t)(255.0f*((1.0f - source_b)*dest_b + source_b*blend_b));
+
+            *dest_pixel++ = blend;
         }
         source_row += source->pitch;
         dest_row   += dest->pitch;
@@ -286,6 +330,7 @@ PushRenderCommand(RenderCommandKind kind)
 
         command->clip_rect = render_state->current_clip_rect;
         command->kind = kind;
+        command->cached_cleartype = core_config->use_cached_cleartype_blend;
 
         sort_key->offset = offset;
         sort_key->layer  = render_state->current_layer;
@@ -462,15 +507,18 @@ BeginRender(void)
     Clear(render_state->arena);
 
     Bitmap *target = render_state->target;
-    int64_t viewport_w = (target->w) / editor->font_metrics.x;
-    int64_t viewport_h = (target->h) / editor->font_metrics.y;
+    int64_t viewport_w = target->w / editor->font_metrics.x;
+    int64_t viewport_h = target->h / editor->font_metrics.y;
     render_state->viewport = MakeRect2iMinDim(0, 0, viewport_w, viewport_h);
 
     render_state->cb_command_at = 0;
     render_state->cb_sort_key_at = render_state->cb_size;
 
     render_state->clip_rect_count = 0;
-    PushClipRect(Scale(render_state->viewport, editor->font_metrics));
+    Rect2i clip_rect = render_state->viewport;
+    clip_rect.max.x += 1;
+    clip_rect.max.y += 1;
+    PushClipRect(Scale(clip_rect, editor->font_metrics));
 }
 
 function void
@@ -518,6 +566,42 @@ MergeSort(uint32_t count, uint32_t *a, uint32_t *b)
 }
 
 function void
+RasterizeText(PlatformOffscreenBuffer *buffer, Rect2i rect, PlatformFontHandle font, String text, Color foreground, Color background)
+{
+    platform->SetTextClipRect(buffer, rect);
+    platform->DrawText(font, buffer, text, rect.min, foreground, background);
+}
+
+function void
+RasterizeTextCachedCleartypeBlend(PlatformOffscreenBuffer *buffer, Rect2i rect, PlatformFontHandle font, String text, Color foreground, Color background)
+{
+    BlitRect(&buffer->bitmap, rect, background);
+
+    platform->SetTextClipRect(buffer, rect);
+    platform->DrawText(font, buffer, text, rect.min, foreground, background);
+
+    Color *row = buffer->bitmap.data + rect.min.y*buffer->bitmap.pitch + rect.min.x;
+    for (int64_t y = rect.min.y; y < rect.max.y; y += 1)
+    {
+        Color *pixel = row;
+        for (int64_t x = rect.min.x; x < rect.max.x; x += 1)
+        {
+            Color color = *pixel;
+            if ((color.u32 & 0x00FFFFFF) == (background.u32 & 0x00FFFFFF))
+            {
+                color.u32 = 0;
+            }
+            else
+            {
+                color.a = 255;
+            }
+            *pixel++ = color;
+        }
+        row += buffer->bitmap.pitch;
+    }
+}
+
+function void
 RenderCommandsToBitmap(void)
 {
     uint32_t sort_key_count = (render_state->cb_size - render_state->cb_sort_key_at) / sizeof(RenderSortKey);
@@ -534,26 +618,6 @@ RenderCommandsToBitmap(void)
 
     V2i metrics = editor->font_metrics;
     int32_t glyphs_per_row = render_state->glyphs_per_row;
-
-    Color text_background = GetThemeColor("text_background"_id);
-
-#if 0
-    for (ViewIterator it = IterateViews(); IsValid(&it); Next(&it))
-    {
-        View *view = it.view;
-        uint64_t *line_hashes      = view->line_hashes;
-        uint64_t *prev_line_hashes = view->prev_line_hashes;
-        int64_t line_count  = GetHeight(view->viewport);
-        for (int64_t i = 0; i < line_count; i += 1)
-        {
-            if (line_hashes[i] != prev_line_hashes[i])
-            {
-                Rect2i rect = Scale(MakeRect2iMinMax(view->viewport.min.x, view->viewport.min.y + i, view->viewport.max.x, view->viewport.min.y + i + 1), metrics);
-                BlitRect(render_state->target, rect, text_background);
-            }
-        }
-    }
-#endif
 
     int glyph_fills = 0;
 
@@ -633,46 +697,43 @@ RenderCommandsToBitmap(void)
                     }
                     else
                     {
-                        HashResult hash = HashIntegers(command->foreground.u32, command->background.u32);
+                        HashResult hash = {};
+                        if (core_config->use_cached_cleartype_blend)
+                        {
+                            hash = HashIntegers(command->foreground.u32, command->background.u32);
+                        }
                         hash = HashIntegers(hash, (uint64_t)font);
                         hash = HashString(hash, text);
 
                         GlyphEntry *entry = GetGlyphEntry(&render_state->glyph_cache, hash);
+
                         V2i glyph_p = MakeV2i(editor->font_max_glyph_size.x*(entry->index % glyphs_per_row),
                                               editor->font_max_glyph_size.y*(entry->index / glyphs_per_row));
-                        Bitmap glyph_bitmap = MakeBitmapView(&render_state->glyph_texture.bitmap, MakeRect2iMinDim(glyph_p, editor->font_max_glyph_size));
+
+                        Rect2i rasterize_rect = MakeRect2iMinDim(glyph_p, editor->font_max_glyph_size);
+                        Bitmap glyph_bitmap = MakeBitmapView(&render_state->glyph_texture.bitmap, rasterize_rect);
                         if (entry->state == GlyphState_Empty)
                         {
-                            platform->SetTextClipRect(&render_state->glyph_texture, MakeRect2iMinDim(glyph_p, editor->font_max_glyph_size));
-                            BlitRect(&glyph_bitmap, MakeRect2iMinDim(MakeV2i(0, 0), editor->font_max_glyph_size), command->background);
-                            platform->DrawText(font, &render_state->glyph_texture, text, glyph_p, command->foreground, command->background);
-
-                            Color *row = glyph_bitmap.data;
-                            for (int y = 0; y < glyph_bitmap.h; y += 1)
+                            if (core_config->use_cached_cleartype_blend)
                             {
-                                Color *pixel = row;
-                                for (int x = 0; x < glyph_bitmap.w; x += 1)
-                                {
-                                    Color color = *pixel;
-                                    if (color.r == command->background.r &&
-                                        color.g == command->background.g &&
-                                        color.b == command->background.b)
-                                    {
-                                        color.u32 = 0;
-                                    }
-                                    else
-                                    {
-                                        color.a = 255;
-                                    }
-                                    *pixel++ = color;
-                                }
-                                row += glyph_bitmap.pitch;
+                                RasterizeTextCachedCleartypeBlend(&render_state->glyph_texture, rasterize_rect, font, text, command->foreground, command->background);
                             }
-
+                            else
+                            {
+                                BlitRect(&render_state->glyph_texture.bitmap, rasterize_rect, COLOR_WHITE);
+                                RasterizeText(&render_state->glyph_texture, rasterize_rect, font, text, COLOR_BLACK, COLOR_WHITE);
+                            }
                             entry->state = GlyphState_Filled;
                             glyph_fills += 1;
                         }
-                        BlitBitmapAlpha(&target, &glyph_bitmap, glyph_rect.min);
+                        if (core_config->use_cached_cleartype_blend)
+                        {
+                            BlitBitmapAlphaMasked(&target, &glyph_bitmap, glyph_rect.min);
+                        }
+                        else
+                        {
+                            BlitBitmapSubpixelBlend(&target, &glyph_bitmap, glyph_rect.min, command->foreground);
+                        }
                     }
                 }
             } break;

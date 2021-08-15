@@ -27,6 +27,7 @@
 #include "textit_text_storage.hpp"
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
+#include "textit_parser.hpp"
 #include "textit_view.hpp"
 #include "textit_command_line.hpp"
 #include "textit_auto_indent.hpp"
@@ -66,19 +67,20 @@ struct Window
 
 function void DestroyWindow(Window *window);
 
-#define CoreConfig(_, X)                                \
-    X(_, bool,   visualize_newlines              = false) \
-    X(_, bool,   right_align_visualized_newlines = false) \
-    X(_, bool,   visualize_whitespace            = true)  \
-    X(_, bool,   show_line_numbers               = false) \
-    X(_, bool,   incremental_parsing             = false) \
-    X(_, bool,   show_scrollbar                  = false) \
-    X(_, bool,   indent_with_tabs                = true)  \
-    X(_, int,    indent_width                    = 4)     \
-    X(_, bool,   syntax_highlighting             = true)  \
-    X(_, bool,   debug_show_glyph_cache          = false) \
+#define CoreConfig(_, X)                                           \
+    X(_, bool,   visualize_newlines              = false)          \
+    X(_, bool,   right_align_visualized_newlines = false)          \
+    X(_, bool,   visualize_whitespace            = true)           \
+    X(_, bool,   show_line_numbers               = false)          \
+    X(_, bool,   incremental_parsing             = false)          \
+    X(_, bool,   show_scrollbar                  = false)          \
+    X(_, bool,   indent_with_tabs                = true)           \
+    X(_, int,    indent_width                    = 4)              \
+    X(_, bool,   syntax_highlighting             = true)           \
+    X(_, bool,   debug_show_glyph_cache          = false)          \
     X(_, String, font_name                       = "Consolas"_str) \
-    X(_, int,    font_size                       = 15)
+    X(_, int,    font_size                       = 15)             \
+    X(_, bool,   use_cached_cleartype_blend      = true)
 DeclareIntrospectedStruct(CoreConfig);
 GLOBAL_STATE(CoreConfig, core_config);
 
@@ -147,6 +149,14 @@ struct CursorHashEntry
     Cursor cursor;
 };
 
+struct Project
+{
+    Project *next;
+
+    String base_directory;
+    Tags *tag_table[4096];
+};
+
 struct EditorState
 {
     GlobalState global_state;
@@ -185,6 +195,8 @@ struct EditorState
 
     TextStorage default_register;
     TextStorage registers[26];
+
+    Tag *tag_table[4096];
 
     uint32_t buffer_count;
     Buffer *buffers[MAX_BUFFER_COUNT];

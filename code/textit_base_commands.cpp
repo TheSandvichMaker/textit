@@ -622,6 +622,51 @@ COMMAND_PROC(GoToFileUnderCursor,
     }
 }
 
+COMMAND_PROC(Tags,
+             "Browse tags for all buffers"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Tags"_str;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+
+        for (BufferIterator it = IterateBuffers();
+             IsValid(&it);
+             Next(&it))
+        {
+            Buffer *buffer = it.buffer;
+            Tags *tags = buffer->tags;
+            for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
+            {
+                ScopedMemory temp(platform->GetTempArena());
+                String name = PushBufferRange(temp, buffer, MakeRangeStartLength(tag->pos, tag->length));
+                if (FindSubstring(name, string, StringMatch_CaseInsensitive) != name.size)
+                {
+                    Prediction prediction = {};
+                    prediction.text = name;
+                    if (!AddPrediction(cl, prediction))
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        if (Tag *tag = FindTag(string))
+        {
+            platform->DebugPrint("It do be da tag\n");
+        }
+
+        return true;
+    };
+}
+
 COMMAND_PROC(ResetSelection)
 {
     View *view = GetActiveView();
@@ -845,7 +890,7 @@ MOVEMENT_PROC(EncloseNextScope)
     int64_t pos = cursor->pos;
     Range result = MakeRange(pos);
 
-    TokenIterator it = SeekTokenIterator(buffer, pos);
+    TokenIterator it = IterateTokens(buffer, pos);
 
     TokenKind opening_kind = Token_None;
     TokenKind closing_kind = Token_None;
@@ -911,7 +956,7 @@ SelectSurroundingNest(View *view,
     int64_t start_pos       = -1;
     int64_t inner_start_pos = -1;
 
-    TokenIterator it = SeekTokenIterator(buffer, pos);
+    TokenIterator it = IterateTokens(buffer, pos);
 
     int depth = 0;
     while (IsValid(&it))
@@ -1020,7 +1065,7 @@ MOVEMENT_PROC(EncloseParameter)
     int64_t   inner_end_pos = -1;
 
     NestHelper nests = {};
-    TokenIterator it = SeekTokenIterator(buffer, pos);
+    TokenIterator it = IterateTokens(buffer, pos);
 
     TokenKind open_token = 0;
 
@@ -1565,11 +1610,8 @@ TEXT_COMMAND_PROC(WriteText)
     for (size_t i = 0; i < size; i += 1)
     {
         uint8_t c = data[i];
-        
-        if (c == '\n' ||
-            c == '}'  ||
-            c == ')'  ||
-            c == ':')
+
+        if (c == '\n')
         {
             should_auto_indent = true;
         }
@@ -1612,6 +1654,25 @@ TEXT_COMMAND_PROC(WriteText)
     if (buf_at > 0)
     {
         int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), MakeString(buf_at, buf));
+        
+        if (!should_auto_indent)
+        {
+            IndentRules *indent_rules = buffer->indent_rules;
+            for (TokenIterator it = IterateLineTokens(buffer, GetLineNumber(buffer, new_pos));
+                 IsValid(&it);
+                 Next(&it))
+            {
+                Token *t = it.token;
+                IndentRule rule = indent_rules->table[t->kind];
+                if ((rule & IndentRule_PopIndent) ||
+                    (rule & IndentRule_ForceLeft))
+                {
+                    should_auto_indent = true;
+                    break;
+                }
+            }
+        }
+        
         if (should_auto_indent)
         {
             AutoIndentLineAt(buffer, new_pos);

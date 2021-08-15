@@ -674,6 +674,24 @@ Win32_SetWorkingDirectory(String path)
     return result;
 }
 
+static String
+Win32_PushFullPath(Arena *arena, String filename_utf8)
+{
+    ScopedMemory temp;
+    wchar_t *filename = FormatWString(temp, L"%.*S", StringExpand(filename_utf8));
+
+    DWORD size = GetFullPathNameW(filename, 0, NULL, NULL);
+    wchar_t *buffer = PushArrayNoClear(temp, size, wchar_t);
+
+    if (GetFullPathNameW(filename, size, buffer, NULL) != size - 1)
+    {
+        INVALID_CODE_PATH;
+    }
+
+    String result = Win32_Utf16ToUtf8(arena, buffer, size);
+    return result;
+}
+
 static size_t
 Win32_ReadFileInto(size_t buffer_size, void *buffer, String filename)
 {
@@ -991,14 +1009,21 @@ Win32_WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
         {
             RECT *rect = (RECT *)l_param;
 
-            int w = rect->right - rect->left;
-            int h = rect->bottom - rect->top;
+            POINT br = { rect->right, rect->bottom };
+            ScreenToClient(window, &br);
+
+            // do this slightly awkward thing to get the actual client rect dimensions
+            br.x += win32_state.window_to_client_br_delta.x;
+            br.y += win32_state.window_to_client_br_delta.y;
+
+            int w = br.x;
+            int h = br.y;
 
             w = platform->window_resize_snap_w*((w + platform->window_resize_snap_w - 1) / platform->window_resize_snap_w);
             h = platform->window_resize_snap_h*((h + platform->window_resize_snap_h - 1) / platform->window_resize_snap_h);
 
-            rect->right = rect->left + w;
-            rect->bottom = rect->top + h;
+            rect->right  = rect->left + w + win32_state.window_to_client_tl_delta.x - win32_state.window_to_client_br_delta.x;
+            rect->bottom = rect->top  + h + win32_state.window_to_client_tl_delta.y - win32_state.window_to_client_br_delta.y;
 
             result = true;
         } break;
@@ -1035,29 +1060,50 @@ Win32_CreateWindow(HINSTANCE instance, int x, int y, int w, int h, const wchar_t
     int render_w = w;
     int render_h = h;
 
-    RECT window_rect = { window_x, window_y, window_x + render_w, window_y + render_h };
-    AdjustWindowRectEx(&window_rect, WS_OVERLAPPEDWINDOW, false, 0);
+    RECT desired_window_rect = { window_x, window_y, window_x + render_w, window_y + render_h };
+    AdjustWindowRectEx(&desired_window_rect, WS_OVERLAPPEDWINDOW, false, 0);
 
-    int window_w = window_rect.right - window_rect.left;
-    int window_h = window_rect.bottom - window_rect.top;
+    int window_w = desired_window_rect.right  - desired_window_rect.left;
+    int window_h = desired_window_rect.bottom - desired_window_rect.top;
 
     DWORD extended_style = 0;
     if (no_redirection_bitmap) extended_style |= WS_EX_NOREDIRECTIONBITMAP;
 
-    HWND window_handle = CreateWindowExW(extended_style,
-                                         win32_state.window_class.lpszClassName,
-                                         title,
-                                         WS_OVERLAPPEDWINDOW,
-                                         window_x, window_y,
-                                         window_w, window_h,
-                                         NULL, NULL, instance, NULL);
+    HWND window = CreateWindowExW(extended_style,
+                                  win32_state.window_class.lpszClassName,
+                                  title,
+                                  WS_OVERLAPPEDWINDOW,
+                                  window_x, window_y,
+                                  window_w, window_h,
+                                  NULL, NULL, instance, NULL);
 
-    if (!window_handle)
+    if (!window)
     {
         Win32_ExitWithLastError();
     }
 
-    return window_handle;
+    RECT client_rect;
+    GetClientRect(window, &client_rect);
+
+    RECT window_rect;
+    GetWindowRect(window, &window_rect);
+
+    POINT window_tl = { window_rect.left,  window_rect.top    };
+    POINT window_br = { window_rect.right, window_rect.bottom };
+    ScreenToClient(window, &window_tl);
+    ScreenToClient(window, &window_br);
+
+    window_rect.left   = window_tl.x;
+    window_rect.top    = window_tl.y;
+    window_rect.right  = window_br.x;
+    window_rect.bottom = window_br.y;
+
+    win32_state.window_to_client_tl_delta.x = client_rect.left   - window_rect.left;
+    win32_state.window_to_client_tl_delta.y = client_rect.top    - window_rect.top;
+    win32_state.window_to_client_br_delta.x = client_rect.right  - window_rect.right;
+    win32_state.window_to_client_br_delta.y = client_rect.bottom - window_rect.bottom;
+
+    return window;
 }
 
 struct D3D_State
@@ -2319,6 +2365,7 @@ main(int, char **)
     platform->WaitForJobs            = Win32_WaitForJobs;
 
     platform->SetWorkingDirectory    = Win32_SetWorkingDirectory;
+    platform->PushFullPath           = Win32_PushFullPath;
     platform->ReadFile               = Win32_ReadFile;
     platform->ReadFileInto           = Win32_ReadFileInto;
     platform->GetFileSize            = Win32_GetFileSize;

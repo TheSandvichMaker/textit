@@ -11,6 +11,7 @@
 #include "textit_language.cpp"
 #include "textit_buffer.cpp"
 #include "textit_tokenizer.cpp"
+#include "textit_parser.cpp"
 #include "textit_view.cpp"
 #include "textit_command.cpp"
 #include "textit_theme.cpp"
@@ -154,6 +155,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->undo.current_ordinal = 1;
     result->indent_rules         = &editor->default_indent_rules;
     result->language             = &editor->null_language;
+    result->tags                 = PushStruct(&result->arena, Tags);
 
     result->tokens.SetCapacity(32'000'000);
     result->line_data.SetCapacity(8'000'000);
@@ -169,6 +171,7 @@ function Buffer *
 OpenBufferFromFile(String filename)
 {
     Buffer *result = OpenNewBuffer(filename);
+    result->full_name = platform->PushFullPath(&result->arena, result->name);
     size_t file_size = platform->GetFileSize(filename);
     EnsureSpace(result, file_size);
     if (platform->ReadFileInto(TEXTIT_BUFFER_SIZE, result->text, filename) != file_size)
@@ -194,6 +197,7 @@ OpenBufferFromFile(String filename)
     }
 
     TokenizeBuffer(result);
+    ParseCppTags(result);
 
     if (editor->buffer_count == 2)
     {
@@ -900,13 +904,16 @@ SetEditorFont(String name, int size, PlatformFontQuality quality)
         editor->font_name = MakeStringContainer(ArrayCount(editor->font_name_storage), editor->font_name_storage);
     }
 
-    editor->font_metrics = min_metrics;
+    editor->font_metrics        = min_metrics;
     editor->font_max_glyph_size = MakeV2i(max_metrics.x + 2, max_metrics.y); // why are these metrics insufficient??
 
     Replace(&editor->font_name, name);
     editor->font_size    = size;
     editor->font_quality = quality;
     RebuildGlyphCache();
+
+    platform->window_resize_snap_w = (int32_t)editor->font_metrics.x;
+    platform->window_resize_snap_h = (int32_t)editor->font_metrics.y;
 }
 
 void
@@ -930,12 +937,9 @@ AppUpdateAndRender(Platform *platform_)
     {
         SetEditorFont("Consolas"_str, 15, PlatformFontQuality_SubpixelAA);
 
-        platform->window_resize_snap_w = (int32_t)editor->font_metrics.x;
-        platform->window_resize_snap_h = (int32_t)editor->font_metrics.y;
-
         InitializeRenderState(&editor->transient_arena, &platform->backbuffer.bitmap);
 
-        LoadDefaultTheme();
+        LoadDefaultLightTheme();
         LoadDefaultBindings();
         LoadDefaultIndentRules(&editor->default_indent_rules);
 
@@ -1040,6 +1044,9 @@ AppUpdateAndRender(Platform *platform_)
         {
             DrawCommandLines();
         }
+
+        PushLayer(Layer_ViewForeground);
+        PushRect(MakeRect2iMinMax(0, render_state->viewport.max.y, render_state->viewport.max.x, render_state->viewport.max.y + 1), GetThemeColor("text_background"_id));
     }
 
     if (core_config->debug_show_glyph_cache)

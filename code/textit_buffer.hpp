@@ -88,6 +88,7 @@ struct Buffer : TextStorage
 
     Arena arena;
     String name;
+    String full_name;
 
     LineEndKind line_end;
 
@@ -104,6 +105,7 @@ struct Buffer : TextStorage
 
     struct LanguageSpec *language;
     struct IndentRules  *indent_rules;
+    struct Tags *tags;
 
     LineData null_line_data;
 
@@ -162,31 +164,34 @@ FindTokenIndexForPos(Buffer *buffer, int64_t pos)
 
     uint32_t result = 0;
 
-    int64_t token_count = buffer->tokens.count;
-    int64_t lo = 0;
-    int64_t hi = token_count - 1;
-    while (lo <= hi)
+    if (pos != 0)
     {
-        int64_t index = (lo + hi) / 2;
-        Token *t = &buffer->tokens[index];
-        if (pos < t->pos)
+        int64_t token_count = buffer->tokens.count;
+        int64_t lo = 0;
+        int64_t hi = token_count - 1;
+        while (lo <= hi)
         {
-            hi = index - 1;
+            int64_t index = (lo + hi) / 2;
+            Token *t = &buffer->tokens[index];
+            if (pos < t->pos)
+            {
+                hi = index - 1;
+            }
+            else if (pos >= t->pos + t->length)
+            {
+                lo = index + 1;
+            }
+            else
+            {
+                result = (uint32_t)index;
+                break;
+            }
         }
-        else if (pos >= t->pos + t->length)
-        {
-            lo = index + 1;
-        }
-        else
-        {
-            result = (uint32_t)index;
-            break;
-        }
-    }
 
-    if (lo > hi)
-    {
-        result = (uint32_t)lo;
+        if (lo > hi)
+        {
+            result = (uint32_t)lo;
+        }
     }
 
     return result;
@@ -201,7 +206,7 @@ GetTokenAt(Buffer *buffer, int64_t pos)
 }
 
 function TokenIterator
-SeekTokenIterator(Buffer *buffer, int64_t pos = 0)
+IterateTokens(Buffer *buffer, int64_t pos = 0)
 {
     pos = ClampToBufferRange(buffer, pos);
 
@@ -209,6 +214,19 @@ SeekTokenIterator(Buffer *buffer, int64_t pos = 0)
     result.tokens     = buffer->tokens.data;
     result.tokens_end = result.tokens + buffer->tokens.count;
     result.token      = &buffer->tokens[FindTokenIndexForPos(buffer, pos)];
+
+    return result;
+}
+
+function TokenIterator
+IterateLineTokens(Buffer *buffer, int64_t line)
+{
+    LineData *line_data = GetLineData(buffer, line);
+
+    TokenIterator result = {};
+    result.tokens     = &buffer->tokens[line_data->token_index];
+    result.tokens_end = result.tokens + line_data->token_count;
+    result.token      = result.tokens;
 
     return result;
 }

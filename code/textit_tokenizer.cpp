@@ -385,7 +385,7 @@ parse_string:
         uint8_t *end = tok->at;
 
         t.pos    = tok->base + (int64_t)(start - tok->start);
-        t.length = (int32_t)(end - start);
+        t.length = (int16_t)(end - start);
 
         prev_token = PushToken(tok, t);
     }

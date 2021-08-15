@@ -100,6 +100,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     if (view->scroll_at < 0)
     {
         row += -view->scroll_at;
+        PushLayer(Layer_ViewBackground);
+        PushRect(MakeRect2iMinDim(bounds.min.x, bounds.min.y, bounds.max.x, top_left.y + row), text_background_unreachable);
+        PushLayer(Layer_ViewForeground);
         for (int64_t y = bounds.min.y; y < top_left.y + row; y += 1)
         {
             DrawGlyph(MakeV2i(top_left.x, y), '~', text_foreground_dimmer, text_background);
@@ -254,6 +257,13 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     editor->token_at_mouse = token;
                     background = text_background_highlighted;
                 }
+
+                String token_name = MakeString(token->length, &buffer->text[token->pos]);
+                if (Tag *tag = FindTag(token_name))
+                {
+                    foreground_id = "text_type"_id;
+                }
+
                 foreground = GetThemeColor(foreground_id);
                 text_style = GetThemeStyle(foreground_id);
             }
@@ -438,6 +448,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     if (top_left.y + row < bounds.max.y)
     {
+        PushLayer(Layer_ViewBackground);
+        PushRect(MakeRect2iMinDim(bounds.min.x, top_left.y + row, bounds.max.x, bounds.max.y), text_background_unreachable);
+        PushLayer(Layer_ViewForeground);
         for (int64_t y = top_left.y + row; y < bounds.max.y; y += 1)
         {
             DrawGlyph(MakeV2i(top_left.x, y), '~', text_foreground_dimmer, text_background);

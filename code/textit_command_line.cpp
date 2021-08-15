@@ -387,7 +387,7 @@ DrawCommandLines()
 {
     PushLayer(Layer_OverlayForeground);
 
-    Color text_foreground           = GetThemeColor("text_foreground"_id);
+    Color text_foreground           = GetThemeColor("command_line_foreground"_id);
     Color text_background           = GetThemeColor("command_line_background"_id);
     Color color_name                = GetThemeColor("command_line_name"_id);
     Color color_option              = GetThemeColor("command_line_option"_id);

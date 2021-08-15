@@ -565,6 +565,7 @@ struct Platform
     void (*WaitForJobs)(PlatformJobQueue *queue);
 
     bool (*SetWorkingDirectory)(String path);
+    String (*PushFullPath)(Arena *arena, String filename);
     String (*ReadFile)(Arena *arena, String filename);
     size_t (*ReadFileInto)(size_t buffer_size, void *buffer, String filename);
     size_t (*GetFileSize)(String filename);
