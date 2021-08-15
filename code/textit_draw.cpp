@@ -1,5 +1,23 @@
+function void
+DrawGlyph(V2i p, String utf8, Color foreground, Color background, TextStyleFlags flags = 0)
+{
+    render_state->current_layer = (RenderLayer)(render_state->current_layer - 1);
+    PushRect(MakeRect2iMinDim(p.x, p.y, 1, 1), background);
+    render_state->current_layer = (RenderLayer)(render_state->current_layer + 1);
+    PushUnicode(p, utf8, foreground, background, flags);
+}
+
+function void
+DrawGlyph(V2i p, uint32_t glyph, Color foreground, Color background, TextStyleFlags flags = 0)
+{
+    render_state->current_layer = (RenderLayer)(render_state->current_layer - 1);
+    PushRect(MakeRect2iMinDim(p.x, p.y, 1, 1), background);
+    render_state->current_layer = (RenderLayer)(render_state->current_layer + 1);
+    PushTile(p, MakeSprite(glyph, foreground, background), flags);
+}
+
 function V2i
-DrawLine(V2i p, String line, Color foreground, Color background, size_t max = 0)
+DrawText(V2i p, String line, Color foreground, Color background, size_t max = 0)
 {
     V2i at_p = p;
     for (size_t i = 0; i < line.size;)
@@ -13,13 +31,13 @@ DrawLine(V2i p, String line, Color foreground, Color background, size_t max = 0)
         {
             ParseUtf8Result unicode = ParseUtf8Codepoint(&line.data[i]);
             String string = PushTempStringF("\\u%x", unicode.codepoint);
-            at_p = DrawLine(at_p, string, foreground, background);
+            at_p = DrawText(at_p, string, foreground, background, max);
             i += unicode.advance;
         }
         else if (IsPrintableAscii(line.data[i]))
         {
             Sprite sprite = MakeSprite(line.data[i], foreground, background);
-            PushTile(at_p, sprite);
+            DrawGlyph(at_p, line.data[i], foreground, background);
 
             at_p.x += 1;
             i += 1;
@@ -27,7 +45,7 @@ DrawLine(V2i p, String line, Color foreground, Color background, size_t max = 0)
         else
         {
             String string = PushTempStringF("\\x%02hhx", line.data[i]);
-            at_p = DrawLine(at_p, string, foreground, background);
+            at_p = DrawText(at_p, string, foreground, background, max);
             i += 1;
         }
     }
@@ -84,7 +102,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         row += -view->scroll_at;
         for (int64_t y = bounds.min.y; y < top_left.y + row; y += 1)
         {
-            PushTile(MakeV2i(top_left.x, y), MakeSprite('~', text_foreground_dimmer, text_background));
+            DrawGlyph(MakeV2i(top_left.x, y), '~', text_foreground_dimmer, text_background);
         }
         actual_line_height += -view->scroll_at;
     }
@@ -102,13 +120,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     view->visible_range.start = pos;
 
     V2i metrics = editor->font_metrics;
-
-    // int64_t prev_col = 0;
-    // Color prev_background = {};
-    // Color prev_foreground = {};
-
-    // uint8_t draw_buffer_storage[1024];
-    // StringContainer draw_buffer = MakeStringContainer(ArrayCount(draw_buffer_storage), draw_buffer_storage);
 
     while (IsInBufferRange(buffer, pos))
     {
@@ -138,6 +149,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         Color base_background = text_background;
 
+        PushLayer(Layer_ViewBackground);
+        bool contains_cursor = false;
         if (draw_cursor)
         {
             for (Cursor *cursor = IterateCursors(view->id, buffer->id);
@@ -146,13 +159,17 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             {
                 if (cursor->pos >= data->range.start && cursor->pos < data->range.end)
                 {
-                    base_background = line_highlight;
-                    PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, top_left.y + row),
-                                              MakeV2i(bounds.max.x, top_left.y + row + 1)),
-                             base_background);
+                    contains_cursor = true;
                 }
             }
         }
+
+        if (contains_cursor)
+        {
+            base_background = line_highlight;
+        }
+        PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, top_left.y + row), MakeV2i(bounds.max.x, top_left.y + row + 1)), base_background);
+        PushLayer(Layer_ViewForeground);
 
         Token *token = &buffer->tokens[data->token_index];
 
@@ -161,7 +178,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         if (show_line_numbers)
         {
-            DrawLine(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, base_background);
+            DrawText(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, base_background);
             col += Max(5, max_line_digits + 1);
             // prev_col = col;
         }
@@ -398,14 +415,11 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     i += unicode.advance - 1;
                 }
                 String glyph = MakeString(glyph_size, &string.data[i]);
-                render_state->current_layer = Layer_ViewBackground;
-                PushRect(MakeRect2iMinDim(top_left + MakeV2i(col, row), MakeV2i(1, 1)), background);
-                render_state->current_layer = Layer_ViewForeground;
-                PushUnicode(top_left + MakeV2i(col, row), glyph, foreground, background, text_style);
+                DrawGlyph(top_left + MakeV2i(col, row), glyph, foreground, background, text_style);
                 col += 1;
                 if (col + 1 >= line_width)
                 {
-                    PushTile(top_left + MakeV2i(col, row), MakeSprite('\\', text_foreground_dimmer, background));
+                    DrawGlyph(top_left + MakeV2i(col, row), '\\', text_foreground_dimmer, background);
                     col = 0;
                     row += 1;
                 }
@@ -426,7 +440,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     {
         for (int64_t y = top_left.y + row; y < bounds.max.y; y += 1)
         {
-            PushTile(MakeV2i(top_left.x, y), MakeSprite('~', text_foreground_dimmer, text_background));
+            DrawGlyph(MakeV2i(top_left.x, y), '~', text_foreground_dimmer, text_background);
         }
     }
 
@@ -480,13 +494,16 @@ DrawView(View *view, bool is_active_window)
 
     int64_t filebar_y = bounds.max.y - 1;
 
+    PushLayer(Layer_ViewBackground);
     PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x + 0, filebar_y), MakeV2i(bounds.max.x - 0, filebar_y + 1)), filebar_text_background);
-    DrawLine(MakeV2i(bounds.min.x, filebar_y),
+
+    PushLayer(Layer_ViewForeground);
+    DrawText(MakeV2i(bounds.min.x, filebar_y),
              PushTempStringF("%hd:%.*s", buffer->id.index, StringExpand(leaf)),
              filebar_text_foreground, filebar_text_background);
 
     String right_string = PushTempStringF("[%.*s] %lld%% %lld:%lld ", StringExpand(buffer->language->name), line_percentage, loc.line + 1, loc.col);
-    DrawLine(MakeV2i(bounds.max.x - right_string.size, filebar_y), right_string, filebar_text_foreground, filebar_text_background);
+    DrawText(MakeV2i(bounds.max.x - right_string.size, filebar_y), right_string, filebar_text_foreground, filebar_text_background);
 
     if (core_config->show_scrollbar)
     {
@@ -497,8 +514,7 @@ DrawView(View *view, bool is_active_window)
 
         for (int i = 0; i < scrollbar_size; i += 1)
         {
-            PushTile(MakeV2i(bounds.max.x - 1, bounds.min.y + i + scrollbar_offset),
-                     MakeSprite(' ', text_foreground, MakeColor(127, 127, 127)));
+            DrawGlyph(MakeV2i(bounds.max.x - 1, bounds.min.y + i + scrollbar_offset), ' ', text_foreground, MakeColor(127, 127, 127));
         }
     }
 

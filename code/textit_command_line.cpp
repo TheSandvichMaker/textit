@@ -410,7 +410,7 @@ DrawCommandLines()
     }
     String names = PushFlattenedString(&name_list, arena, " > "_str, StringSeparator_AfterLast);
 
-    text_p = DrawLine(text_p, names, color_name, text_background);
+    text_p = DrawText(text_p, names, color_name, text_background);
 
     CommandLine *cl = editor->command_lines[editor->command_line_count - 1];
 
@@ -444,10 +444,10 @@ DrawCommandLines()
             if (i < 9 + 26)
             {
                 int c = (i < 9 ? '1' + i : 'A' + i - 9);
-                DrawLine(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
+                DrawText(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
             }
 
-            DrawLine(p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
+            DrawText(p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
 
             total_width = Max(total_width, 2 + (int64_t)text.size);
 
@@ -456,7 +456,7 @@ DrawCommandLines()
         
         if (cl->prediction_overflow)
         {
-            DrawLine(p + MakeV2i(2, -prediction_offset), "... and more"_str, color_option, overlay_background);
+            DrawText(p + MakeV2i(2, -prediction_offset), "... and more"_str, color_option, overlay_background);
         }
     }
 
@@ -473,8 +473,8 @@ DrawCommandLines()
         cursor_at = (int)text.size;
     }
 
-    DrawLine(text_p, text, text_foreground, text_background);
-    PushTile(text_p + MakeV2i(cursor_at, 0), MakeSprite(' ', text_background, text_foreground));
+    DrawText(text_p, text, text_foreground, text_background);
+    DrawGlyph(text_p + MakeV2i(cursor_at, 0), ' ', text_background, text_foreground);
 
     if (active_prediction)
     {
@@ -482,7 +482,7 @@ DrawCommandLines()
         if (cmd != NullCommand())
         {
             String desc = cmd->description;
-            DrawLine(MakeV2i(render_state->viewport.max.x - desc.size, text_p.y), desc, text_foreground, text_background);
+            DrawText(MakeV2i(render_state->viewport.max.x - desc.size, text_p.y), desc, text_foreground, text_background);
         }
     }
 }

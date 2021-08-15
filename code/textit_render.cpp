@@ -357,16 +357,15 @@ PushRect(const Rect2i &rect, Color color)
     RenderCommand *command = PushRenderCommand(RenderCommand_Rect);
     command->rect       = rect;
     command->foreground = color;
-
     HashRenderCommand(command, command->rect);
 }
 
 function void
-PushTile(V2i tile_p, Sprite sprite)
+PushTile(V2i tile_p, Sprite sprite, TextStyleFlags flags = 0)
 {
     RenderCommand *command = PushRenderCommand(RenderCommand_Sprite);
     command->p          = tile_p;
-    command->font       = editor->fonts[0];
+    command->font       = editor->fonts[flags];
     command->glyph      = sprite.glyph;
     command->foreground = sprite.foreground;
     command->background = sprite.background;
@@ -538,6 +537,7 @@ RenderCommandsToBitmap(void)
 
     Color text_background = GetThemeColor("text_background"_id);
 
+#if 0
     for (ViewIterator it = IterateViews(); IsValid(&it); Next(&it))
     {
         View *view = it.view;
@@ -553,6 +553,7 @@ RenderCommandsToBitmap(void)
             }
         }
     }
+#endif
 
     int glyph_fills = 0;
 
@@ -643,6 +644,7 @@ RenderCommandsToBitmap(void)
                         if (entry->state == GlyphState_Empty)
                         {
                             platform->SetTextClipRect(&render_state->glyph_texture, MakeRect2iMinDim(glyph_p, editor->font_max_glyph_size));
+                            BlitRect(&glyph_bitmap, MakeRect2iMinDim(MakeV2i(0, 0), editor->font_max_glyph_size), command->background);
                             platform->DrawText(font, &render_state->glyph_texture, text, glyph_p, command->foreground, command->background);
 
                             Color *row = glyph_bitmap.data;
@@ -652,10 +654,9 @@ RenderCommandsToBitmap(void)
                                 for (int x = 0; x < glyph_bitmap.w; x += 1)
                                 {
                                     Color color = *pixel;
-                                    if (!color.u32 ||
-                                        (color.r == command->background.r &&
-                                         color.g == command->background.g &&
-                                         color.b == command->background.b))
+                                    if (color.r == command->background.r &&
+                                        color.g == command->background.g &&
+                                        color.b == command->background.b)
                                     {
                                         color.u32 = 0;
                                     }
@@ -680,8 +681,8 @@ RenderCommandsToBitmap(void)
             {
                 Rect2i rect = command->rect;
 
-                rect.max  = metrics*rect.min + (rect.max - rect.min)*editor->font_max_glyph_size;
                 rect.min *= metrics;
+                rect.max *= metrics;
 
                 if (RectanglesOverlap(clip_rect->rect, rect))
                 {
