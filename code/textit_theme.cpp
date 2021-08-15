@@ -124,7 +124,7 @@ LoadDefaultLightTheme()
     SetThemeColor("text_number"_id, MakeColor(32, 164, 192));
     SetThemeColor("text_literal"_id, MakeColor(32, 92, 192));
     SetThemeColor("text_function"_id, MakeColor(64, 100, 164));
-    SetThemeColor("text_type"_id, MakeColor(12, 128, 64), TextStyle_Bold);
+    SetThemeColor("text_type"_id, MakeColor(12, 128, 64));
     SetThemeColor("text_line_comment"_id, MakeColor(12, 128, 12), TextStyle_Italic);
     SetThemeColor("text_comment"_id,      MakeColor(12, 128, 12), TextStyle_Italic);
     SetThemeColor("text_foreground"_id, MakeColor(12, 12, 12));

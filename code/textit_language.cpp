@@ -80,6 +80,8 @@ PushCppLanguageSpec(void)
     AddKeyword(result, "final"_id, Token_Keyword);
     AddKeyword(result, "constexpr"_id, Token_Keyword);
     AddKeyword(result, "consteval"_id, Token_Keyword);
+    AddKeyword(result, "typedef"_id, Token_Keyword);
+    AddKeyword(result, "using"_id, Token_Keyword);
 
     AddKeyword(result, "case"_id, Token_FlowControl);
     AddKeyword(result, "continue"_id, Token_FlowControl);

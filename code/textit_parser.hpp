@@ -13,7 +13,12 @@ struct Tag
 {
     Tag *next;
     Tag *prev;
-    Tag *next_in_hash;
+
+    union
+    {
+        Tag *next_in_hash;
+        Tag *next_free;
+    };
 
     BufferID buffer;
 
@@ -29,5 +34,7 @@ struct Tags
 {
     Tag sentinel;
 };
+
+function void ParseCppTags(Buffer *buffer);
 
 #endif /* TEXTIT_PARSER_HPP */

@@ -190,8 +190,7 @@ struct EditorState
     TextStorage registers[26];
 
     Project *first_project;
-
-    Tag *tag_table[4096];
+    Tag *first_free_tag;
 
     uint32_t buffer_count;
     Buffer *buffers[MAX_BUFFER_COUNT];

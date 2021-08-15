@@ -640,12 +640,20 @@ COMMAND_PROC(Tags,
             Tags *tags = buffer->tags;
             for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
             {
-                ScopedMemory temp(platform->GetTempArena());
+                ScopedMemory temp;
                 String name = PushBufferRange(temp, buffer, MakeRangeStartLength(tag->pos, tag->length));
                 if (FindSubstring(name, string, StringMatch_CaseInsensitive) != name.size)
                 {
+                    char *kind_name = "??";
+                    switch (tag->kind)
+                    {
+                        case Tag_Declaration: kind_name = "decl"; break;
+                        case Tag_Definition:  kind_name = "defn"; break;
+                    }
+
                     Prediction prediction = {};
-                    prediction.text = name;
+                    prediction.text         = name;
+                    prediction.preview_text = PushTempStringF("%-32.*s %s -- %.*s", StringExpand(name), kind_name, StringExpand(buffer->name));
                     if (!AddPrediction(cl, prediction))
                     {
                         break;
@@ -687,6 +695,16 @@ COMMAND_PROC(JumpToTagUnderCursor,
         {
             JumpToLocation(view, { tag->buffer, tag->pos });
             view->center_view_next_time_we_calculate_scroll = true; // this is terrible
+        }
+    }
+    else if (token->kind == Token_String)
+    {
+        ScopedMemory temp;
+        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token->pos + 1, token->length - 2));
+
+        if (Buffer *found = FindOrOpenBuffer(buffer->project, string))
+        {
+            view->next_buffer = found->id;
         }
     }
 }

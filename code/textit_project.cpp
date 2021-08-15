@@ -68,6 +68,61 @@ OpenCodeFilesRecursively(String search_start)
     }
 }
 
+function Buffer *
+RecursivelyFindAndOpenBuffer(String search_path, String name)
+{
+    Buffer *result = nullptr;
+
+    ScopedMemory temp;
+    for (PlatformFileIterator *it = platform->FindFiles(temp, search_path);
+         platform->FileIteratorIsValid(it);
+         platform->FileIteratorNext(it))
+    {
+        if (AreEqual(it->info.name, "."_str) || AreEqual(it->info.name, ".."_str)) continue; // first two are always '.' and '..', not sure what to do with that yet
+        if (AreEqual(it->info.name, ".vs"_str)) continue; // no.
+        if (AreEqual(it->info.name, ".git"_str)) continue; // don't do it.
+
+        if (it->info.directory)
+        {
+            RecursivelyFindAndOpenBuffer(PushTempStringF("%.*s%.*s\\", StringExpand(search_path), StringExpand(it->info.name)), name);
+        }
+        else if (AreEqual(it->info.name, name, StringMatch_CaseInsensitive))
+        {
+            result = OpenBufferFromFile(PushTempStringF("%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name)));
+            break;
+        }
+    }
+
+    return result;
+}
+
+function Buffer *
+FindOrOpenBuffer(Project *project, String name)
+{
+    // TODO: A better heuristic is needed to make sure we pick the right file
+    // based on absolute path and all that.
+
+    Buffer *result = nullptr;
+
+    for (BufferIterator it = IterateBuffers();
+         IsValid(&it);
+         Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (AreEqual(name, buffer->name, StringMatch_CaseInsensitive))
+        {
+            result = buffer;
+            break;
+        }
+    }
+
+    if (!result)
+    {
+        result = RecursivelyFindAndOpenBuffer(project->root, name);
+    }
+
+    return result;
+}
 
 function Project *
 MakeNewProject(String search_start)
@@ -112,4 +167,12 @@ AssociateProject(Buffer *buffer)
 
     buffer->project = project;
     project->associated_buffer_count += 1;
+}
+
+function void
+RemoveProjectAssociation(Buffer *buffer)
+{
+    buffer->project->associated_buffer_count -= 1;
+    // TODO: Handle projects having 0 bufferss
+    buffer->project = nullptr;
 }

@@ -779,6 +779,7 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     {
         RetokenizeRange(buffer, range.start, delta);
     }
+    ParseCppTags(buffer);
 
     return result;
 }

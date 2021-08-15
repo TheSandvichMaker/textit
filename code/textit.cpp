@@ -174,8 +174,12 @@ OpenBufferFromFile(String filename)
 {
     platform->DebugPrint("Opening: %.*s\n", StringExpand(filename));
 
-    Buffer *result = OpenNewBuffer(filename);
-    result->full_path = platform->PushFullPath(&result->arena, result->name);
+    String name;
+    SplitPath(filename, &name);
+
+    Buffer *result = OpenNewBuffer(name);
+    result->full_path = platform->PushFullPath(&result->arena, filename);
+
     size_t file_size = platform->GetFileSize(filename);
     EnsureSpace(result, file_size);
     if (platform->ReadFileInto(TEXTIT_BUFFER_SIZE, result->text, filename) != file_size)
@@ -238,6 +242,9 @@ DestroyBuffer(BufferID id)
     {
         return;
     }
+
+    RemoveProjectAssociation(buffer);
+    FreeAllTags(buffer);
 
     size_t used_id_index = 0;
     for (size_t i = 0; i < editor->buffer_count; i += 1)
@@ -1087,20 +1094,15 @@ AppUpdateAndRender(Platform *platform_)
 #endif
 
     {
-        uint32_t filled_glyph_count = GetEntryCount(&render_state->glyph_cache, GlyphState_Filled);
-
-        double average_latency = 1000.0*platform->event_latency_accumulator / (double)platform->event_latency_sample_count;
-
         Buffer *active_buffer = GetBuffer(GetView(editor->active_window->view));
+        Project *project = active_buffer->project;
 
         String leaf;
         SplitPath(active_buffer->name, &leaf);
 
-        platform->window_title = PushTempStringF("%.*s - TextIt (avg latency: %fms) (glyph cache: %u/%u)",
+        platform->window_title = PushTempStringF("%.*s - TextIt (project root: %.*s)",
                                                  StringExpand(leaf),
-                                                 average_latency,
-                                                 filled_glyph_count, 
-                                                 render_state->glyph_cache.size);
+                                                 StringExpand(project->root));
     }
                                              
     if (editor->debug.delay_frame_count > 0)
