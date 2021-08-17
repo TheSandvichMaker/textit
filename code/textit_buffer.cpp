@@ -694,6 +694,12 @@ PushBufferRange(Arena *arena, Buffer *buffer, Range range)
     return result;
 }
 
+function String
+PushTokenString(Arena *arena, Buffer *buffer, Token *t)
+{
+    return PushBufferRange(arena, buffer, MakeRangeStartLength(t->pos, t->length));
+}
+
 function int64_t
 ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
 {
@@ -779,7 +785,7 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     {
         RetokenizeRange(buffer, range.start, delta);
     }
-    ParseCppTags(buffer);
+    ParseTags(buffer);
 
     return result;
 }

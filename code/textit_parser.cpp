@@ -72,60 +72,6 @@ FreeAllTags(Buffer *buffer)
     }
 }
 
-function void
-ParseCppTags(Buffer *buffer)
-{
-    PlatformHighResTime start = platform->GetTime();
-
-    FreeAllTags(buffer);
-
-    TokenIterator it = IterateTokens(buffer);
-    while (IsValid(&it))
-    {
-        Token *t = Next(&it);
-        if (!t) break;
-
-        ScopedMemory temp(platform->GetTempArena());
-        String text = PushBufferRange(temp, buffer, MakeRangeStartLength(t->pos, t->length));
-
-        if (AreEqual(text, "struct"_str) ||
-            AreEqual(text, "enum"_str)   ||
-            AreEqual(text, "class"_str)  ||
-            AreEqual(text, "union"_str))
-        {
-            t = Next(&it);
-
-            if (t->kind == Token_Identifier)
-            {
-                String name = PushBufferRange(temp, buffer, MakeRangeStartLength(t->pos, t->length));
-                Tag *tag = AddTag(buffer->tags, buffer, name);
-                tag->kind   = Tag_Declaration;
-                tag->pos    = t->pos;
-                tag->length = t->length;
-            }
-        }
-
-        if (AreEqual(text, "typedef"_str))
-        {
-            t = Next(&it);
-            t = Next(&it);
-            if (!t) break;
-
-            if (t->kind == Token_Identifier)
-            {
-                String name = PushBufferRange(temp, buffer, MakeRangeStartLength(t->pos, t->length));
-                Tag *tag = AddTag(buffer->tags, buffer, name);
-                tag->kind   = Tag_Declaration;
-                tag->pos    = t->pos;
-                tag->length = t->length;
-            }
-        }
-    }
-
-    PlatformHighResTime end = platform->GetTime();
-    platform->DebugPrint("Tag parse time: %fms\n", 1000.0*platform->SecondsElapsed(start, end));
-}
-
 function Tag *
 FindTag(Project *project, String name)
 {
@@ -150,4 +96,14 @@ FindTag(Project *project, String name)
     }
 
     return result;
+}
+
+function void
+ParseTags(Buffer *buffer)
+{
+    LanguageSpec *lang = buffer->language;
+    if (lang->ParseTags)
+    {
+        lang->ParseTags(buffer);
+    }
 }

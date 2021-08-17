@@ -33,6 +33,8 @@
 #include "textit_command_line.hpp"
 #include "textit_auto_indent.hpp"
 
+#include "textit_language_cpp.hpp"
+
 #define CURSOR_HASH_SIZE 512
 
 enum InputMode
@@ -182,8 +184,6 @@ struct EditorState
     int font_size;
     PlatformFontQuality font_quality;
 
-    LanguageSpec null_language;
-    LanguageSpec *first_language;
     IndentRules default_indent_rules;
 
     TextStorage default_register;

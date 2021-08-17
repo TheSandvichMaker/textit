@@ -467,7 +467,7 @@ COMMAND_PROC(SetLanguage,
     {
         String string = TrimSpaces(MakeString(cl->count, cl->text));
 
-        for (LanguageSpec *language = editor->first_language;
+        for (LanguageSpec *language = language_registry->first_language;
              language;
              language = language->next)
         {
@@ -487,7 +487,7 @@ COMMAND_PROC(SetLanguage,
     {
         String string = TrimSpaces(MakeString(cl->count, cl->text));
 
-        for (LanguageSpec *language = editor->first_language;
+        for (LanguageSpec *language = language_registry->first_language;
              language;
              language = language->next)
         {
@@ -678,8 +678,8 @@ COMMAND_PROC(Tags,
     };
 }
 
-COMMAND_PROC(JumpToTagUnderCursor,
-             "Jump to the tag below the cursor"_str)
+COMMAND_PROC(GoToDefinitionUnderCursor,
+             "Go to the definition of the token under the cursor (type, function, file, etc)"_str)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);

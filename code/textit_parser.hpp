@@ -9,6 +9,8 @@ enum TagKind : uint8_t
     Tag_COUNT,
 };
 
+typedef uint8_t TagSubKind;
+
 struct Tag
 {
     Tag *next;
@@ -23,7 +25,7 @@ struct Tag
     BufferID buffer;
 
     TagKind kind;
-    uint8_t sub_kind;
+    TagSubKind sub_kind;
     int16_t length;
 
     HashResult hash;
@@ -35,6 +37,6 @@ struct Tags
     Tag sentinel;
 };
 
-function void ParseCppTags(Buffer *buffer);
+function void ParseTags(Buffer *buffer);
 
 #endif /* TEXTIT_PARSER_HPP */

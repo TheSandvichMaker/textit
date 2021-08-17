@@ -1,13 +1,12 @@
 #ifndef TEXTIT_TOKENS_HPP
 #define TEXTIT_TOKENS_HPP
 
-enum_flags(uint8_t, TokenKind)
+typedef uint8_t TokenKind;
+enum TokenKind_ENUM : TokenKind
 {
     Token_None = 0,
 
-    /* ascii */
-
-    Token_Identifier = 128,
+    Token_Identifier,
     Token_Keyword,
     Token_FlowControl,
     Token_Label,
@@ -21,6 +20,7 @@ enum_flags(uint8_t, TokenKind)
     Token_OpenBlockComment,
     Token_CloseBlockComment,
     Token_Type,
+    Token_LineContinue,
 
     Token_FirstOperator,
     Token_Operator = Token_FirstOperator,
@@ -56,9 +56,8 @@ TokenThemeID(TokenKind kind)
         case Token_Type:              return "text_type"_id;
     }
     // single character tokens / scopes are dim
-    if (kind < 128 ||
-        (kind >= Token_FirstOperator &&
-         kind <= Token_LastOperator))
+    if (kind >= Token_FirstOperator &&
+        kind <= Token_LastOperator)
     {
         return "text_foreground_dim"_id;
     }
@@ -73,13 +72,17 @@ enum_flags(uint8_t, TokenFlags)
     TokenFlag_LastInLine     = 0x8,
 };
 
+typedef uint8_t TokenSubKind;
+
 struct Token
 {
-    TokenKind kind;   // 2
-    TokenFlags flags; // 4
-    int16_t length;   // 6
-    int16_t pad0;     // 8
-    int64_t pos;      // 16
+    TokenKind    kind;     // 1
+    TokenSubKind sub_kind; // 2
+    TokenFlags   flags;    // 3
+    uint8_t      pad0;     // 4
+    int16_t      length;   // 6
+    int16_t      pad1;     // 8
+    int64_t      pos;      // 16
 };
 
 struct TokenIterator

@@ -1,4 +1,4 @@
-static inline void *
+function void *
 CreateGlobalState_(size_t size, size_t align, void *variable_at, void *prototype, String guid)
 {
     SimpleAssert(global_state->entry_count < MAX_GLOBAL_STATE);
@@ -13,7 +13,7 @@ CreateGlobalState_(size_t size, size_t align, void *variable_at, void *prototype
     return nullptr;
 }
 
-static GlobalStateEntry *
+function GlobalStateEntry *
 FindEntry(GlobalState *state, String guid)
 {
     GlobalStateEntry *result = nullptr;
@@ -29,14 +29,9 @@ FindEntry(GlobalState *state, String guid)
     return result;
 }
 
-static void
+function void
 RestoreGlobalState(GlobalState *previous_global_state, Arena *permanent_storage)
 {
-    if (!previous_global_state)
-    {
-        previous_global_state = PushStruct(permanent_storage, GlobalState);
-    }
-
     for (size_t i = 0; i < global_state->entry_count; ++i)
     {
         GlobalStateEntry *entry = &global_state->entries[i];

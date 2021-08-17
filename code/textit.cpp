@@ -21,6 +21,8 @@
 #include "textit_draw.cpp"
 #include "textit_command_line.cpp"
 
+#include "textit_language_cpp.cpp"
+
 // things missing:
 // automatic line comment inserts
 // autocomplete of any kind
@@ -155,7 +157,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->undo.insert_pos      = -1;
     result->undo.current_ordinal = 1;
     result->indent_rules         = &editor->default_indent_rules;
-    result->language             = &editor->null_language;
+    result->language             = &language_registry->null_language;
     result->tags                 = PushStruct(&result->arena, Tags);
     DllInit(&result->tags->sentinel);
 
@@ -192,7 +194,7 @@ OpenBufferFromFile(String filename)
     String ext;
     SplitExtension(filename, &ext);
 
-    for (LanguageSpec *spec = editor->first_language; spec; spec = spec->next)
+    for (LanguageSpec *spec = language_registry->first_language; spec; spec = spec->next)
     {
         for (int extension_index = 0; extension_index < spec->associated_extension_count; extension_index += 1)
         {
@@ -214,7 +216,7 @@ OpenBufferFromFile(String filename)
     AssociateProject(result);
 
     TokenizeBuffer(result);
-    ParseCppTags(result);
+    ParseTags(result);
 
     return result;
 }
@@ -971,11 +973,6 @@ AppUpdateAndRender(Platform *platform_)
         {
             editor->free_view_ids[i].index = MAX_VIEW_COUNT - i - 1;
         }
-
-        editor->null_language.name = "none"_str;
-        SllStackPush(editor->first_language, &editor->null_language);
-
-        PushCppLanguageSpec();
 
         editor->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
         editor->null_view   = OpenNewView(BufferID::Null());

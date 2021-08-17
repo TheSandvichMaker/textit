@@ -114,7 +114,7 @@ PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
 {
     if (!arena->capacity)
     {
-        Assert(!arena->base);
+        SimpleAssert(!arena->base);
         arena->capacity = DEFAULT_ARENA_CAPACITY;
     }
 
@@ -129,7 +129,7 @@ PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
     size_t align_offset = GetAlignOffset(arena, align);
     size_t aligned_size = size + align_offset;
 
-    Assert((arena->used + aligned_size) <= arena->capacity);
+    SimpleAssert((arena->used + aligned_size) <= arena->capacity);
 
     char *unaligned_base = arena->base + arena->used;
 
@@ -138,7 +138,7 @@ PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
         size_t commit_size = AlignPow2(aligned_size, platform->page_size);
         platform->CommitMemory(arena->base + arena->committed, commit_size);
         arena->committed += commit_size;
-        Assert(arena->committed >= (arena->used + aligned_size));
+        SimpleAssert(arena->committed >= (arena->used + aligned_size));
     }
 
     void *result = unaligned_base + align_offset;
