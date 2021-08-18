@@ -22,6 +22,10 @@ TokenizeCpp(Tokenizer *tok)
         }
 
         uint8_t c = Advance(tok);
+        if (c == '(')
+        {
+            int y = 0; (void)y;
+        }
         switch (c)
         {
             default:
@@ -74,10 +78,12 @@ parse_default:
 
             case ':':
             {
-                if (prev_t->kind == Token_Identifier)
+                if ((prev_t->kind == Token_Identifier) &&
+                    (prev_t->flags & TokenFlag_FirstInLine))
                 {
                     prev_t->kind = Token_Label;
                 }
+                goto parse_default;
             } break;
 
             case '\'':
@@ -115,7 +121,6 @@ parse_default:
         }
 
         EndToken(tok, &t);
-        PushToken(tok, &t);
     }
 }
 

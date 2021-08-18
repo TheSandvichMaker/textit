@@ -31,6 +31,7 @@
 #define INVALID_CODE_PATH Assert(!"Invalid Code Path!");
 #define INVALID_DEFAULT_CASE default: { Assert(!"Invalid Default Case!"); } break;
 #define INCOMPLETE_SWITCH default: { /* nah */ } break;
+#define DUMMY_STATEMENT int Paste(dummy_, __LINE__); (void)Paste(dummy_, __LINE__);
 
 #define Swap(a, b) do { auto swap_temp_ = a; a = b; b = swap_temp_; } while(0)
 

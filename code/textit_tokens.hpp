@@ -6,7 +6,9 @@ enum TokenKind_ENUM : TokenKind
 {
     Token_None = 0,
 
-    Token_Identifier,
+    /* ascii */
+
+    Token_Identifier = 128,
     Token_Keyword,
     Token_FlowControl,
     Token_Label,
@@ -56,8 +58,9 @@ TokenThemeID(TokenKind kind)
         case Token_Type:              return "text_type"_id;
     }
     // single character tokens / scopes are dim
-    if (kind >= Token_FirstOperator &&
-        kind <= Token_LastOperator)
+    if (kind >= 128 ||
+        (kind >= Token_FirstOperator &&
+         kind <= Token_LastOperator))
     {
         return "text_foreground_dim"_id;
     }

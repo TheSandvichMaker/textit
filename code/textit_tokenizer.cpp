@@ -5,14 +5,6 @@ AllocateLineData(void)
     return result;
 }
 
-function Token *
-PushToken(Tokenizer *tok, Token *t)
-{
-    Token *result = tok->tokens->Push(*t);
-    tok->prev_token = result;
-    return result;
-}
-
 function int64_t
 CharsLeft(Tokenizer *tok)
 {
@@ -98,7 +90,7 @@ MatchOperator(Tokenizer *tok, Token *t, uint8_t a)
         {
             t->kind     = slot->kind;
             t->sub_kind = slot->sub_kind;
-            Advance(tok, slot->pattern_length);
+            Advance(tok, slot->pattern_length - 1);
 
             result = true;
             break;
@@ -176,7 +168,7 @@ ParseStandardToken(Tokenizer *tok, Token *t)
     }
     else
     {
-        t->kind = Token_Operator;
+        t->kind = c;
     }
 }
 
@@ -307,6 +299,8 @@ EndToken(Tokenizer *tok, Token *t)
     }
 
     t->length = (int16_t)(tok->at - tok->start - t->pos);
+
+    tok->prev_token = tok->tokens->Push(*t);
 }
 
 function void
@@ -322,9 +316,7 @@ TokenizeBasic(Tokenizer *tok)
         Token t;
         BeginToken(tok, &t);
         ParseStandardToken(tok, &t);
-
         EndToken(tok, &t);
-        PushToken(tok, &t);
     }
 
     LineData *end_line_data = &(*tok->line_data)[tok->at_line];

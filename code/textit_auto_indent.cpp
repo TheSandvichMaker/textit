@@ -304,8 +304,8 @@ LoadDefaultIndentRules(IndentRules *rules)
     rules->table[Token_RightScope]   = IndentRule_PopIndent;
     rules->table[Token_Preprocessor] = IndentRule_ForceLeft;
     rules->table[Token_Label]        = IndentRule_ForceLeft;
-    rules->table[(TokenKind)';']     = IndentRule_StatementEnd;
-    rules->table[(TokenKind)',']     = IndentRule_StatementEnd;
+    rules->table[';']                = IndentRule_StatementEnd;
+    rules->table[',']                = IndentRule_StatementEnd;
 }
 
 function void
@@ -319,6 +319,6 @@ LoadOtherIndentRules(IndentRules *rules)
     rules->table[Token_RightScope]   = IndentRule_PopIndent;
     rules->table[Token_Preprocessor] = IndentRule_ForceLeft;
     rules->table[Token_Label]        = IndentRule_ForceLeft;
-    rules->table[(TokenKind)';']     = IndentRule_StatementEnd;
-    rules->table[(TokenKind)',']     = IndentRule_StatementEnd;
+    rules->table[';']                = IndentRule_StatementEnd;
+    rules->table[',']                = IndentRule_StatementEnd;
 }
