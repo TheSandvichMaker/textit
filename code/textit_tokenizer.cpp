@@ -103,6 +103,7 @@ MatchOperator(Tokenizer *tok, Token *t, uint8_t a)
 function void
 ParseString(Tokenizer *tok, Token *t, uint8_t end_char)
 {
+    // TODO: Make strings not even be tokens, just a flag?
     t->kind = Token_String;
     while (CharsLeft(tok))
     {
@@ -175,6 +176,7 @@ ParseStandardToken(Tokenizer *tok, Token *t)
 function bool
 ParseWhitespace(Tokenizer *tok)
 {
+    // TODO: Handle implicit line endings
     Token *prev_t = tok->prev_token;
 
     while (CharsLeft(tok))
@@ -231,8 +233,6 @@ ParseWhitespace(Tokenizer *tok)
             break;
         }
     }
-    
-    tok->continue_next_line = false;
 
     bool result = !CharsLeft(tok);
     return result;
@@ -253,6 +253,8 @@ BeginToken(Tokenizer* tok, Token *t)
 function void
 EndToken(Tokenizer *tok, Token *t)
 {
+    t->length = (int16_t)(tok->at - tok->start - t->pos);
+
     if (t->kind == Token_Identifier)
     {
         String string = MakeString(t->length, &tok->start[t->pos]);
@@ -297,8 +299,6 @@ EndToken(Tokenizer *tok, Token *t)
     {
         t->flags |= TokenFlag_IsComment;
     }
-
-    t->length = (int16_t)(tok->at - tok->start - t->pos);
 
     tok->prev_token = tok->tokens->Push(*t);
 }

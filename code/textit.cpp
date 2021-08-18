@@ -11,7 +11,7 @@
 #include "textit_language.cpp"
 #include "textit_buffer.cpp"
 #include "textit_tokenizer.cpp"
-#include "textit_parser.cpp"
+#include "textit_tags.cpp"
 #include "textit_project.cpp"
 #include "textit_view.cpp"
 #include "textit_command.cpp"
@@ -956,11 +956,11 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-        SetEditorFont("Consolas"_str, 15, PlatformFontQuality_SubpixelAA);
+        SetEditorFont(core_config->font_name, 15, PlatformFontQuality_SubpixelAA);
 
         InitializeRenderState(&editor->transient_arena, &platform->backbuffer.bitmap);
 
-        LoadDefaultLightTheme();
+        LoadDefaultThemes();
         LoadDefaultBindings();
         LoadDefaultIndentRules(&editor->default_indent_rules);
 

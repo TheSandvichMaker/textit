@@ -133,8 +133,28 @@ MakeNewProject(String search_start)
     project->next = editor->first_project;
     editor->first_project = project;
 
+    PlatformHighResTime start = platform->GetTime();
     OpenCodeFilesRecursively(project->root);
+    PlatformHighResTime end = platform->GetTime();
 
+    double total_time = platform->SecondsElapsed(start, end);
+
+    size_t total_bytes         = 0;
+    size_t total_lines_of_code = 0;
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (buffer->project != project) continue;
+
+        total_bytes         += buffer->count;
+        total_lines_of_code += buffer->line_data.count;
+    }
+
+    platform->DebugPrint("Loaded %s worth of text representing %zu lines of code in %fms\n",
+                         FormatHumanReadableBytes(total_bytes).data,
+                         total_lines_of_code,
+                         1000.0*total_time);
+    
     return project;
 }
 

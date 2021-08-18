@@ -27,7 +27,7 @@
 #include "textit_text_storage.hpp"
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
-#include "textit_parser.hpp"
+#include "textit_tags.hpp"
 #include "textit_project.hpp"
 #include "textit_view.hpp"
 #include "textit_command_line.hpp"
@@ -83,7 +83,9 @@ function void DestroyWindow(Window *window);
     X(_, bool,   debug_show_glyph_cache          = false)          \
     X(_, String, font_name                       = "Consolas"_str) \
     X(_, int,    font_size                       = 15)             \
-    X(_, bool,   use_cached_cleartype_blend      = true)
+    X(_, bool,   use_cached_cleartype_blend      = true)           \
+    X(_, bool,   auto_line_comments              = true)           \
+    X(_, String, theme_name                      = "textit-light"_str)
 DeclareIntrospectedStruct(CoreConfig);
 GLOBAL_STATE(CoreConfig, core_config);
 
@@ -162,7 +164,9 @@ struct EditorState
 
     Arena command_arena;
 
-    Theme theme;
+    Theme *first_theme;
+    Theme *last_theme;
+    Theme *theme;
 
     InputMode input_mode;
     bool suppress_text_event;

@@ -15,6 +15,7 @@ struct Tag
 {
     Tag *next;
     Tag *prev;
+    Tag *parent;
 
     union
     {
@@ -24,6 +25,7 @@ struct Tag
 
     BufferID buffer;
 
+    TokenKind related_token_kind;
     TagKind kind;
     TagSubKind sub_kind;
     int16_t length;
@@ -35,6 +37,19 @@ struct Tag
 struct Tags
 {
     Tag sentinel;
+};
+
+struct TagParser
+{
+    Buffer *buffer;
+    TokenIterator it;
+    Token null_token;
+    Token *t;
+    bool pushed_text;
+    uint8_t text_container_storage[512];
+    StringContainer text_container;
+    TokenFlags require_flags;
+    TokenFlags reject_flags;
 };
 
 function void ParseTags(Buffer *buffer);

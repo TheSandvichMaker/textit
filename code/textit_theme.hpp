@@ -11,11 +11,12 @@ struct ThemeColor
 #define MAX_THEME_COLORS 256
 struct Theme
 {
+    Theme *next;
+    String name;
     ThemeColor map[MAX_THEME_COLORS];
 };
 
 function void LoadDefaultTheme();
-function void SetThemeColor(StringID key, Color color, TextStyleFlags style = 0);
 function Color GetThemeColor(StringID key);
 function TextStyleFlags GetThemeStyle(StringID key);
 

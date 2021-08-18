@@ -35,8 +35,8 @@ enum TokenKind_ENUM : TokenKind
     Token_COUNT,
 };
 
-function uint64_t
-TokenThemeID(TokenKind kind)
+function StringID
+GetBaseTokenThemeID(TokenKind kind)
 {
     switch (kind)
     {
@@ -58,7 +58,7 @@ TokenThemeID(TokenKind kind)
         case Token_Type:              return "text_type"_id;
     }
     // single character tokens / scopes are dim
-    if (kind >= 128 ||
+    if (kind < 128 ||
         (kind >= Token_FirstOperator &&
          kind <= Token_LastOperator))
     {
@@ -67,7 +67,8 @@ TokenThemeID(TokenKind kind)
     return "text_foreground"_id;
 }
 
-enum_flags(uint8_t, TokenFlags)
+typedef uint8_t TokenFlags;
+enum TokenFlags_ENUM : TokenFlags
 {
     TokenFlag_IsComment      = 0x1,
     TokenFlag_IsPreprocessor = 0x2,
@@ -212,6 +213,8 @@ Clear(NestHelper *nests)
 function bool
 IsInNest(NestHelper *nests, TokenKind t, Direction dir)
 {
+    if (nests->depth < 0) return false;
+
     bool result = nests->depth > 0;
 
     if (nests->opener)
@@ -240,6 +243,7 @@ IsInNest(NestHelper *nests, TokenKind t, Direction dir)
             if (nests->depth == 0)
             {
                 Clear(nests);
+                nests->depth = -1;
             }
         }
     }

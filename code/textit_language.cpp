@@ -56,6 +56,59 @@ AddOperator(LanguageSpec *spec, String pattern, TokenKind kind, TokenSubKind sub
     slot->sub_kind = sub_kind;
 }
 
+function void
+AddTokenSubKind(LanguageSpec *spec, TokenSubKind kind, StringID theme_id)
+{
+    Assert(kind >= 0 && kind < ArrayCount(spec->sub_token_kind_to_theme_id));
+    spec->sub_token_kind_to_theme_id[kind] = theme_id;
+}
+
+function StringID
+GetThemeIDForToken(LanguageSpec *spec, Token *t)
+{
+    StringID result     = GetBaseTokenThemeID(t->kind);
+    StringID sub_result = spec->sub_token_kind_to_theme_id[t->sub_kind];
+    if (sub_result)
+    {
+        result = sub_result;
+    }
+    return result;
+}
+
+function void
+AddTagSubKind(LanguageSpec *spec, TagSubKind kind, String name, StringID theme_id)
+{
+    Assert(kind >= 0 && kind < ArrayCount(spec->sub_tag_kind_to_theme_id));
+    spec->sub_tag_kind_name[kind]        = name;
+    spec->sub_tag_kind_to_theme_id[kind] = theme_id;
+}
+
+function StringID
+GetThemeIDForTag(LanguageSpec *spec, Tag *tag)
+{
+    StringID result = spec->sub_tag_kind_to_theme_id[tag->sub_kind];
+    return result;
+}
+
+function String
+GetTagBaseKindName(Tag *tag)
+{
+    String result = "??"_str;
+    switch (tag->kind)
+    {
+        case Tag_Declaration: result = "decl"_str; break;
+        case Tag_Definition:  result = "defn"_str; break;
+    }
+    return result;
+}
+
+function String
+GetTagSubKindName(LanguageSpec *spec, Tag *tag)
+{
+    String result = spec->sub_tag_kind_name[tag->sub_kind];
+    return result;
+}
+
 function TokenKind
 GetTokenKindFromStringID(LanguageSpec *spec, StringID id)
 {
@@ -72,6 +125,23 @@ GetTokenKindFromStringID(LanguageSpec *spec, StringID id)
         else if (slot.id == masked_id)
         {
             result = slot.kind;
+        }
+    }
+    return result;
+}
+
+function String
+GetOperatorAsString(LanguageSpec *spec, TokenKind kind, TokenSubKind sub_kind = 0)
+{
+    String result = {};
+    for (size_t i = 0; i < spec->operator_count; i += 1)
+    {
+        OperatorSlot *slot = &spec->operators[i];
+        if (slot->kind == kind &&
+            (!sub_kind || slot->sub_kind == sub_kind))
+        {
+            result = MakeString(slot->pattern_length, (uint8_t *)&slot->pattern);
+            break;
         }
     }
     return result;

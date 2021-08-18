@@ -357,7 +357,8 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 {
                     sort_keys[i].key = CalculateEditDistance(cl_string, prediction->preview_text);
                 }
-                if (!AreEqual(cl_string, prediction->preview_text, StringMatch_CaseInsensitive))
+                if (!AreEqual(cl_string, prediction->preview_text, StringMatch_CaseInsensitive) &&
+                    !AreEqual(cl_string, prediction->text,         StringMatch_CaseInsensitive))
                 {
                     sort_keys[i].key += 100;
                 }

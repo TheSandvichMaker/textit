@@ -690,6 +690,13 @@ FormatHumanReadableBytes(size_t bytes)
     return string;
 }
 
+function size_t
+GetSizeLeft(StringContainer *container)
+{
+    size_t left = container->capacity - container->size;
+    return left;
+}
+
 function bool
 CanFitAppend(StringContainer *container, String string)
 {

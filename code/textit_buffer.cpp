@@ -700,6 +700,21 @@ PushTokenString(Arena *arena, Buffer *buffer, Token *t)
     return PushBufferRange(arena, buffer, MakeRangeStartLength(t->pos, t->length));
 }
 
+function String
+PushBufferRange(StringContainer *container, Buffer *buffer, Range range)
+{
+    int64_t range_size = range.end - range.start;
+    String string = MakeString(range_size, buffer->text + range.start);
+    Append(container, string);
+    return container->as_string;
+}
+
+function String
+PushTokenString(StringContainer *container, Buffer *buffer, Token *t)
+{
+    return PushBufferRange(container, buffer, MakeRangeStartLength(t->pos, t->length));
+}
+
 function int64_t
 ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
 {
@@ -761,6 +776,7 @@ BufferEndBulkEdit(Buffer *buffer)
     if (!core_config->incremental_parsing)
     {
         TokenizeBuffer(buffer);
+        ParseTags(buffer);
     }
 }
 

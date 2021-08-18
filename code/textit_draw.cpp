@@ -57,6 +57,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 {
     Buffer *buffer = GetBuffer(view);
     Project *project = buffer->project;
+    LanguageSpec *language = buffer->language;
 
     bool draw_cursor    = is_active_window;
     bool draw_selection = (editor->edit_mode != EditMode_Text);
@@ -221,31 +222,54 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
             if (token)
             {
+                String token_name = MakeString(token->length, &buffer->text[token->pos]);
+
                 StringID foreground_id = "text_foreground"_id;
                 if (core_config->syntax_highlighting)
                 {
-                    foreground_id = TokenThemeID(token->kind);
+                    foreground_id = GetThemeIDForToken(language, token);
+                    // FIXME: Decide what to do about highlighting untagged functions
+                    if (token->kind == Token_Function)
+                    {
+                        foreground_id = "text_unknown_function"_id;
+                    }
                     if (HasFlag(token->flags, TokenFlag_IsComment))
                     {
                         foreground_id = "text_comment"_id;
+                        if (AreEqual(token_name, "NOTE"_str))
+                        {
+                            foreground_id = "text_comment_note"_id;
+                        }
+                        else if (AreEqual(token_name, "TODO"_str))
+                        {
+                            foreground_id = "text_comment_todo"_id;
+                        }
+                    }
+                    else if (token->kind != Token_String && HasFlag(token->flags, TokenFlag_IsPreprocessor))
+                    {
+                        foreground_id = "text_preprocessor"_id;
                     }
                     else if (token->kind == Token_Identifier ||
                              token->kind == Token_Function)
                     {
-                        if (HasFlag(token->flags, TokenFlag_IsPreprocessor))
+                        String string = MakeString(token->length, &buffer->text[token->pos]);
+                        StringID id = HashStringID(string);
+                        TokenKind kind = GetTokenKindFromStringID(language, id);
+                        if (kind)
                         {
-                            foreground_id = "text_preprocessor"_id;
+                            foreground_id = GetThemeIDForToken(language, token);
+                            token->kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
+                                                // but maybe it should be moved outside of the actual drawing function
                         }
-                        else if (buffer->language)
+
+                        // TODO: Bit excessive
+                        ScopedMemory temp;
+                        for (Tag *tag = PushTagsWithName(temp, project, token_name); tag; tag = tag->next)
                         {
-                            String string = MakeString(token->length, &buffer->text[token->pos]);
-                            StringID id = HashStringID(string);
-                            TokenKind kind = GetTokenKindFromStringID(buffer->language, id);
-                            if (kind)
+                            if (tag->related_token_kind == token->kind)
                             {
-                                foreground_id = TokenThemeID(token->kind);
-                                token->kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
-                                                    // but maybe it should be moved outside of the actual drawing function
+                                foreground_id = GetThemeIDForTag(language, tag);
+                                break;
                             }
                         }
                     }
@@ -257,12 +281,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 {
                     editor->token_at_mouse = token;
                     background = text_background_highlighted;
-                }
-
-                String token_name = MakeString(token->length, &buffer->text[token->pos]);
-                if (Tag *tag = FindTag(project, token_name))
-                {
-                    foreground_id = "text_type"_id;
                 }
 
                 foreground = GetThemeColor(foreground_id);

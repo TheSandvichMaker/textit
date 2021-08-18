@@ -644,16 +644,11 @@ COMMAND_PROC(Tags,
                 String name = PushBufferRange(temp, buffer, MakeRangeStartLength(tag->pos, tag->length));
                 if (FindSubstring(name, string, StringMatch_CaseInsensitive) != name.size)
                 {
-                    char *kind_name = "??";
-                    switch (tag->kind)
-                    {
-                        case Tag_Declaration: kind_name = "decl"; break;
-                        case Tag_Definition:  kind_name = "defn"; break;
-                    }
-
+                    String kind_name     = GetTagBaseKindName(tag);
+                    String sub_kind_name = GetTagSubKindName(buffer->language, tag);
                     Prediction prediction = {};
                     prediction.text         = name;
-                    prediction.preview_text = PushTempStringF("%-32.*s %s -- %.*s", StringExpand(name), kind_name, StringExpand(buffer->name));
+                    prediction.preview_text = PushTempStringF("%-32.*s %.*s %.*s -- %.*s", StringExpand(name), StringExpand(sub_kind_name), StringExpand(kind_name), StringExpand(buffer->name));
                     if (!AddPrediction(cl, prediction))
                     {
                         break;
@@ -668,12 +663,48 @@ COMMAND_PROC(Tags,
         String string = TrimSpaces(MakeString(cl->count, cl->text));
         View *view = GetActiveView();
         Buffer *buffer = GetBuffer(view);
-        if (Tag *tag = FindTag(buffer->project, string))
+
+        // TODO: How do we know which tag you really wanted?
+        ScopedMemory temp;
+        if (Tag *tag = PushTagsWithName(temp, buffer->project, string))
         {
             JumpToLocation(view, { tag->buffer, tag->pos });
             view->center_view_next_time_we_calculate_scroll = true; // this is terrible
         }
 
+        return true;
+    };
+}
+
+COMMAND_PROC(SetTheme,
+             "Set the theme for the editor"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "SetTheme"_str;
+    cl->no_quickselect = true;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+
+        for (Theme *theme = editor->first_theme; theme; theme = theme->next)
+        {
+            if (FindSubstring(theme->name, string, StringMatch_CaseInsensitive) != theme->name.size)
+            {
+                Prediction prediction = {};
+                prediction.text = theme->name;
+                if (!AddPrediction(cl, prediction))
+                {
+                    break;
+                }
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        SetEditorTheme(string);
         return true;
     };
 }
@@ -686,14 +717,24 @@ COMMAND_PROC(GoToDefinitionUnderCursor,
     Cursor *cursor = GetCursor(view);
 
     Token *token = GetTokenAt(buffer, cursor->pos);
-    if (token->kind == Token_Identifier)
+    if (token->kind == Token_Identifier ||
+        token->kind == Token_Function)
     {
         ScopedMemory temp;
         String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token->pos, token->length));
 
-        if (Tag *tag = FindTag(buffer->project, string))
+        if (Tag *tags = PushTagsWithName(temp, buffer->project, string))
         {
-            JumpToLocation(view, { tag->buffer, tag->pos });
+            Tag *best_tag = tags;
+            for (Tag *tag = tags; tag; tag = tag->next)
+            {
+                if ((tag->related_token_kind == token->kind) &&
+                    (tag->kind > best_tag->kind))
+                {
+                    best_tag = tag;
+                }
+            }
+            JumpToLocation(view, { best_tag->buffer, best_tag->pos });
             view->center_view_next_time_we_calculate_scroll = true; // this is terrible
         }
     }
@@ -1615,29 +1656,13 @@ CHANGE_PROC(PasteReplaceSelection)
     platform->WriteClipboard(replaced_string);
 }
 
-COMMAND_PROC(OpenNewLineBelow)
-{
-    View *view = GetActiveView();
-    Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
-
-    CMD_EnterTextMode();
-
-    String line_end = LineEndString(buffer->line_end);
-
-    int64_t insert_pos = FindLineEnd(buffer, cursor->pos).outer;
-    BufferReplaceRange(buffer, MakeRange(insert_pos), line_end);
-    int64_t new_pos = AutoIndentLineAt(buffer, insert_pos);
-    SetCursor(view, new_pos);
-}
-
 TEXT_COMMAND_PROC(WriteText)
 {
     View   *view   = GetActiveView();
     Buffer *buffer = GetBuffer(view);
 
-    uint8_t     buf[256];
-    int         buf_at           = 0;
+    uint8_t buf_storage[256];
+    StringContainer buf = MakeStringContainer(ArrayCount(buf_storage), buf_storage);
 
     size_t      size             = text.size;
     uint8_t    *data             = text.data;
@@ -1648,6 +1673,7 @@ TEXT_COMMAND_PROC(WriteText)
     Cursor *cursor = GetCursor(view);
     int64_t pos = cursor->pos;
 
+    bool newline            = false;
     bool should_auto_indent = false;
     for (size_t i = 0; i < size; i += 1)
     {
@@ -1655,12 +1681,13 @@ TEXT_COMMAND_PROC(WriteText)
 
         if (c == '\n')
         {
+            newline            = true;
             should_auto_indent = true;
         }
 
         if (!indent_with_tabs && c == '\t')
         {
-            int left = sizeof(buf) - buf_at;
+            int left = (int)GetSizeLeft(&buf);
 
             int64_t line_start = FindLineStart(buffer, pos);
             int64_t col = pos - line_start;
@@ -1669,38 +1696,46 @@ TEXT_COMMAND_PROC(WriteText)
             int64_t spaces = target_col - col;
             Assert(spaces < left);
 
-            for (int64_t j = 0; j < spaces; j += 1)
-            {
-                buf[buf_at++] = ' ';
-            }
+            AppendFill(&buf, spaces, ' ');
         }
-        else if (line_end_kind == LineEnd_CRLF && c == '\n')
+        else if (newline && line_end_kind == LineEnd_CRLF)
         {
-            Assert(buf_at + 1 < (int)sizeof(buf));
-            buf[buf_at++] = '\r';
-            buf[buf_at++] = '\n';
+            Assert(CanFitAppend(&buf, "\r\n"_str));
+            Append(&buf, "\r\n"_str);
         }
         else
         {
-            Assert(buf_at < (int)sizeof(buf));
+            Assert(GetSizeLeft(&buf) > 0);
             if (c == '\n' ||
                 c == '\t' ||
                 (c >= ' ' && c <= '~') ||
                 c >= 128)
             {
-                buf[buf_at++] = c;
+                Append(&buf, c);
             }
         }
     }
 
-    if (buf_at > 0)
+    if (buf.size > 0)
     {
-        int64_t new_pos = BufferReplaceRange(buffer, MakeRange(pos), MakeString(buf_at, buf));
+        if (newline && core_config->auto_line_comments)
+        {
+            LineData *prev_line = GetLineData(buffer, GetLineNumber(buffer, pos));
+            Token *t = &buffer->tokens[prev_line->token_index];
+            if (t->kind == Token_LineComment)
+            {
+                String line_comment_string = GetOperatorAsString(buffer->language, Token_LineComment);
+                Append(&buf, line_comment_string);
+                Append(&buf, ' ');
+            }
+        }
+
+        BufferReplaceRange(buffer, MakeRange(pos), buf.as_string);
         
         if (!should_auto_indent)
         {
             IndentRules *indent_rules = buffer->indent_rules;
-            for (TokenIterator it = IterateLineTokens(buffer, GetLineNumber(buffer, new_pos));
+            for (TokenIterator it = IterateLineTokens(buffer, GetLineNumber(buffer, cursor->pos));
                  IsValid(&it);
                  Next(&it))
             {
@@ -1717,9 +1752,22 @@ TEXT_COMMAND_PROC(WriteText)
         
         if (should_auto_indent)
         {
-            AutoIndentLineAt(buffer, new_pos);
+            AutoIndentLineAt(buffer, cursor->pos);
         }
     }
+}
+
+COMMAND_PROC(OpenNewLineBelow)
+{
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    CMD_EnterTextMode();
+
+    int64_t insert_pos = FindLineEnd(buffer, cursor->pos).inner + 1;
+    SetCursor(cursor, insert_pos);
+    CMD_WriteText("\n"_str); // NOTE: CRLF line endings are correctly expanded in WriteText
 }
 
 function void

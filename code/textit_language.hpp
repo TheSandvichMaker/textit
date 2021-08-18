@@ -35,6 +35,7 @@ struct LanguageSpec
     void (*ParseTags)(Buffer *buffer);
 
     StringID    sub_token_kind_to_theme_id[256];
+    StringID    sub_tag_kind_to_theme_id[256];
     String      sub_tag_kind_name[256];
     KeywordSlot keyword_table[256];
 
