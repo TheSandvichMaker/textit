@@ -19,10 +19,31 @@ MoveCursorRelative(View *view, V2i delta)
 }
 
 function void
-SaveJump(View *view, BufferID buffer, int64_t pos)
+SaveJump(View *view, BufferID buffer_id, int64_t pos)
 {
+    Buffer *buffer = GetBuffer(buffer_id);
+    int64_t this_line = GetLineNumber(buffer, pos);
+    for (int i = OldestJumpIndex(view); i < view->jump_top; i += 1)
+    {
+        Jump *jump = GetJump(view, i);
+        if (jump->buffer == buffer_id)
+        {
+            int64_t line = GetLineNumber(GetBuffer(jump->buffer), jump->pos);
+            if (line == this_line)
+            {
+                for (int j = i + 1; j < view->jump_top; j += 1)
+                {
+                    Jump *src = GetJump(view, j);
+                    Jump *dst = GetJump(view, j - 1);
+                    *dst = *src;
+                }
+                view->jump_top -= 1;
+                if (view->jump_at >= view->jump_top) view->jump_at = view->jump_top;
+            }
+        }
+    }
     Jump *jump = &view->jump_buffer[view->jump_at++ % ArrayCount(view->jump_buffer)];
-    jump->buffer = buffer;
+    jump->buffer = buffer_id;
     jump->pos    = pos;
     view->jump_top = view->jump_at;
 }

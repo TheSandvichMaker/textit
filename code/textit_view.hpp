@@ -46,9 +46,9 @@ OldestJumpIndex(View *view)
 function Jump *
 GetJump(View *view, int index)
 {
-    if (index <  OldestJumpIndex(view)) index = OldestJumpIndex(view);
     if (index >= view->jump_top)        index = view->jump_top - 1;
-    return &view->jump_buffer[index];
+    if (index <  OldestJumpIndex(view)) index = OldestJumpIndex(view);
+    return &view->jump_buffer[index % ArrayCount(view->jump_buffer)];
 }
 
 function View *GetView(ViewID id);

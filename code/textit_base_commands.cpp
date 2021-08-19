@@ -1301,14 +1301,14 @@ MOVEMENT_PROC(MoveUp)
     return move;
 }
 
-COMMAND_PROC(PageUp)
+COMMAND_PROC(PageUp, ""_str, Command_Jump)
 {
     View *view = GetActiveView();
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
     MoveCursorRelative(view, MakeV2i(0, -Max(0, viewport_height - 4)));
 }
 
-COMMAND_PROC(PageDown)
+COMMAND_PROC(PageDown, ""_str, Command_Jump)
 {
     View *view = GetActiveView();
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
