@@ -560,7 +560,7 @@ DrawView(View *view, bool is_active_window)
     DrawText(MakeV2i(bounds.max.x - 32, bounds.min.x),
              PushTempStringF("jump at: %d, jump top: %d", view->jump_at, view->jump_top),
              COLOR_WHITE, COLOR_BLACK);
-    for (int i = OldestJumpIndex(view); i < view->jump_top; i += 1)
+    for (uint32_t i = OldestJumpIndex(view); i < view->jump_top; i += 1)
     {
         Jump *jump = GetJump(view, i);
         V2i p = MakeV2i(bounds.max.x - 32, bounds.min.x + i + 1);

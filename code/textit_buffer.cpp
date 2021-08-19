@@ -749,7 +749,7 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
             cursor->selection.outer.end   = ApplyPositionDelta(cursor->selection.outer.end,   pos, delta);
         }
 
-        for (int jump_index = OldestJumpIndex(view); jump_index < view->jump_top; jump_index += 1)
+        for (uint32_t jump_index = OldestJumpIndex(view); jump_index < view->jump_top; jump_index += 1)
         {
             Jump *jump = GetJump(view, jump_index);
             if (jump->buffer = buffer->id)

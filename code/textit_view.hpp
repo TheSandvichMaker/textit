@@ -30,24 +30,27 @@ struct View
     uint64_t *line_hashes;
     uint64_t *prev_line_hashes;
 
-    int jump_top;
-    int jump_at;
+    uint32_t jump_top;
+    uint32_t jump_at;
     Jump jump_buffer[256];
 };
 
-function int
+function uint32_t
 OldestJumpIndex(View *view)
 {
-    int index = view->jump_top - ArrayCount(view->jump_buffer);
-    if (index < 0) index = 0;
-    return index;
+    uint32_t result = 0;
+    if (view->jump_top >= ArrayCount(view->jump_buffer))
+    {
+        result = view->jump_top - ArrayCount(view->jump_buffer);
+    }
+    return result;
 }
 
 function Jump *
-GetJump(View *view, int index)
+GetJump(View *view, uint32_t index)
 {
-    if (index >= view->jump_top)        index = view->jump_top - 1;
-    if (index <  OldestJumpIndex(view)) index = OldestJumpIndex(view);
+    if (view->jump_top > 0 && index >= view->jump_top) index = view->jump_top - 1;
+    if (index < OldestJumpIndex(view))                 index = OldestJumpIndex(view);
     return &view->jump_buffer[index % ArrayCount(view->jump_buffer)];
 }
 

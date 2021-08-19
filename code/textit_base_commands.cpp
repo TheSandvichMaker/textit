@@ -766,7 +766,7 @@ COMMAND_PROC(NextJump)
 COMMAND_PROC(PreviousJump)
 {
     View *view = GetActiveView();
-    if (view->jump_at >= view->jump_top - 1)
+    if (view->jump_at + 1 > view->jump_top)
     {
         SaveJump(view, view->buffer, GetCursor(view)->pos);
         PreviousJump(view);
