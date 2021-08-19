@@ -359,6 +359,10 @@ DuplicateView(ViewID id)
         new_cursor->selection  = cursor->selection;
         new_cursor->pos        = cursor->pos;
 
+        new_view->jump_at  = view->jump_at;
+        new_view->jump_top = view->jump_top;
+        CopyArray(ArrayCount(view->jump_buffer), view->jump_buffer, new_view->jump_buffer);
+
         new_view->scroll_at = view->scroll_at;
         result = new_view->id;
     }
@@ -717,6 +721,11 @@ ApplyMove(Buffer *buffer, Cursor *cursor, Move move)
 function void
 ExecuteCommand(View *view, Command *command)
 {
+    BufferID prev_buffer = view->buffer;
+
+    Cursor *cursor = GetCursor(view);
+    int64_t prev_pos = cursor->pos;
+
     switch (command->kind)
     {
         case Command_Basic:
@@ -731,8 +740,6 @@ ExecuteCommand(View *view, Command *command)
 
         case Command_Movement:
         {
-            Cursor *cursor = GetCursor(view);
-
             Move move = command->movement();
             ApplyMove(GetBuffer(view), cursor, move);
 
@@ -742,8 +749,6 @@ ExecuteCommand(View *view, Command *command)
 
         case Command_Change:
         {
-            Cursor *cursor = GetCursor(view);
-
             Selection selection;
             selection.inner = SanitizeRange(cursor->selection.inner);
             selection.outer = SanitizeRange(cursor->selection.outer);
@@ -763,6 +768,17 @@ ExecuteCommand(View *view, Command *command)
                 }
             }
         } break;
+    }
+
+    if (command->flags & Command_Jump)
+    {
+        Buffer *buffer = GetBuffer(view);
+        int64_t prev_line = GetLineNumber(buffer, prev_pos);
+        int64_t next_line = GetLineNumber(buffer, cursor->pos);
+        if ((view->next_buffer && view->next_buffer != view->buffer) || Abs(prev_line - next_line) > 1)
+        {
+            SaveJump(view, view->buffer, prev_pos);
+        }
     }
 }
 

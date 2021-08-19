@@ -18,6 +18,43 @@ MoveCursorRelative(View *view, V2i delta)
     SetCursor(view, pos);
 }
 
+function void
+SaveJump(View *view, BufferID buffer, int64_t pos)
+{
+    Jump *jump = &view->jump_buffer[view->jump_at++ % ArrayCount(view->jump_buffer)];
+    jump->buffer = buffer;
+    jump->pos    = pos;
+    view->jump_top = view->jump_at;
+}
+
+function Jump *
+NextJump(View *view)
+{
+    Jump *result = nullptr;
+
+    view->jump_at += 1;
+    if (view->jump_at >= view->jump_top) view->jump_at = view->jump_top - 1;
+
+    if (view->jump_at < view->jump_top)
+    {
+        result = &view->jump_buffer[view->jump_at % ArrayCount(view->jump_buffer)];
+    }
+
+    return result;
+}
+
+function Jump
+PreviousJump(View *view)
+{
+    int min_index = OldestJumpIndex(view);
+
+    view->jump_at -= 1;
+    if (view->jump_at < min_index) view->jump_at = min_index;
+
+    Jump result = view->jump_buffer[view->jump_at % ArrayCount(view->jump_buffer)];
+    return result;
+}
+
 function Range
 UndoOnce(View *view)
 {
@@ -93,9 +130,9 @@ RedoOnce(View *view)
 }
 
 function void
-JumpToLocation(View *view, Jump jump)
+JumpToLocation(View *view, BufferID buffer, int64_t pos)
 {
-    view->next_buffer = jump.buffer;
-    Cursor *cursor = GetCursor(view->id, jump.buffer);
-    SetCursor(cursor, jump.pos);
+    view->next_buffer = buffer;
+    Cursor *cursor = GetCursor(view->id, buffer);
+    SetCursor(cursor, pos);
 }

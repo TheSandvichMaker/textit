@@ -4,10 +4,10 @@ AllocateTag()
     if (!editor->first_free_tag)
     {
         editor->first_free_tag = PushStructNoClear(&editor->transient_arena, Tag);
-        editor->first_free_tag->next_free = nullptr;
+        editor->first_free_tag->next = nullptr;
     }
     Tag *result = editor->first_free_tag;
-    editor->first_free_tag = result->next_free;
+    editor->first_free_tag = result->next;
 
     ZeroStruct(result);
 
@@ -81,6 +81,8 @@ FreeAllTags(Buffer *buffer)
         *slot = tag->next_in_hash;
 
         DllRemove(tag);
+        tag->next = tag->prev = nullptr;
+
         FreeTag(tag);
     }
 }
@@ -127,6 +129,10 @@ Advance(TagParser *parser)
     parser->pushed_text = false;
     Token *result = parser->t;
     Token *t = Next(&parser->it);
+    while (t && (t->flags & TokenFlag_IsComment))
+    {
+        t = Next(&parser->it);
+    }
     if (t)
     {
         parser->t = t;
@@ -189,16 +195,17 @@ PeekToken(TagParser *parser)
 }
 
 function Token *
-MatchNextToken(TagParser *parser, TokenKind kind, String match_text = {})
+MatchNextToken(TagParser *parser, TokenKind kind, String match_text = {}, int offset = 0)
 {
     Token *result = nullptr;
-    Token *t = PeekNext(&parser->it, 0);
+    Token *t = PeekNext(&parser->it, offset);
     if (t && t->kind == kind)
     {
         result = t;
         if (match_text.size > 0)
         {
-            String text = GetTokenText(parser);
+            ScopedMemory temp;
+            String text = PushTokenString(temp, parser->buffer, t);
             if (!AreEqual(match_text, text))
             {
                 result = nullptr;

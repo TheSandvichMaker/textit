@@ -96,16 +96,15 @@ LoadDefaultDarkTheme()
     SetThemeColor(theme, "text_preprocessor"_id, MakeColor(255, 192, 255));
     SetThemeColor(theme, "text_string"_id, MakeColor(255, 192, 64));
     SetThemeColor(theme, "text_number"_id, MakeColor(64, 192, 255));
-    SetThemeColor(theme, "text_literal"_id, MakeColor(64, 128, 255));
+    SetThemeColor(theme, "text_literal"_id, MakeColor(192, 212, 255));
     SetThemeColor(theme, "text_function"_id, MakeColor(128, 196, 255));
     SetThemeColor(theme, "text_unknown_function"_id, MakeColor(192, 212, 255));
     SetThemeColor(theme, "text_macro"_id, MakeColor(224, 128, 224), TextStyle_Bold);
     SetThemeColor(theme, "text_function_macro"_id, MakeColor(128, 196, 255), TextStyle_Bold);
-    SetThemeColor(theme, "text_line_comment"_id, MakeColor(0, 192, 0), TextStyle_Italic);
-    SetThemeColor(theme, "text_comment"_id,      MakeColor(0, 192, 0), TextStyle_Italic);
-    SetThemeColor(theme, "text_comment_note"_id, MakeColor(192, 192, 0), TextStyle_Italic|TextStyle_Bold|TextStyle_Underline);
+    SetThemeColor(theme, "text_comment"_id,      MakeColor(0, 164, 0), TextStyle_Italic);
+    SetThemeColor(theme, "text_comment_note"_id, MakeColor(192, 255, 0), TextStyle_Italic|TextStyle_Bold|TextStyle_Underline);
     SetThemeColor(theme, "text_comment_todo"_id, MakeColor(192, 64,  0), TextStyle_Italic|TextStyle_Bold|TextStyle_Underline);
-    SetThemeColor(theme, "text_type"_id, MakeColor(64, 255, 192));
+    SetThemeColor(theme, "text_type"_id, MakeColor(128, 255, 200));
     SetThemeColor(theme, "text_foreground"_id, MakeColor(235, 235, 225));
     SetThemeColor(theme, "text_foreground_dim"_id, MakeColor(192, 192, 192));
     SetThemeColor(theme, "text_foreground_dimmer"_id, MakeColor(128, 128, 128));
@@ -153,7 +152,6 @@ LoadDefaultLightTheme()
     SetThemeColor(theme, "text_macro"_id, MakeColor(12, 12, 12), TextStyle_Bold);
     SetThemeColor(theme, "text_function_macro"_id, MakeColor(64, 100, 164), TextStyle_Bold);
     SetThemeColor(theme, "text_type"_id, MakeColor(12, 128, 64));
-    SetThemeColor(theme, "text_line_comment"_id, MakeColor(168, 168, 128), TextStyle_Italic);
     SetThemeColor(theme, "text_comment"_id,      MakeColor(168, 168, 128), TextStyle_Italic);
     SetThemeColor(theme, "text_comment_note"_id, MakeColor(128, 128, 64),  TextStyle_Italic|TextStyle_Bold);
     SetThemeColor(theme, "text_comment_todo"_id, MakeColor(64,  128, 64),  TextStyle_Italic|TextStyle_Bold);

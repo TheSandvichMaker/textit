@@ -52,9 +52,9 @@ GetBaseTokenThemeID(TokenKind kind)
         case Token_Literal:           return "text_literal"_id;
         case Token_CharacterLiteral:  return "text_literal"_id;
         case Token_Function:          return "text_function"_id;
-        case Token_LineComment:       return "text_line_comment"_id;
-        case Token_OpenBlockComment:  return "text_line_comment"_id;
-        case Token_CloseBlockComment: return "text_line_comment"_id;
+        case Token_LineComment:       return "text_comment"_id;
+        case Token_OpenBlockComment:  return "text_comment"_id;
+        case Token_CloseBlockComment: return "text_comment"_id;
         case Token_Type:              return "text_type"_id;
     }
     // single character tokens / scopes are dim
@@ -70,10 +70,11 @@ GetBaseTokenThemeID(TokenKind kind)
 typedef uint8_t TokenFlags;
 enum TokenFlags_ENUM : TokenFlags
 {
-    TokenFlag_IsComment      = 0x1,
-    TokenFlag_IsPreprocessor = 0x2,
-    TokenFlag_FirstInLine    = 0x4,
-    TokenFlag_LastInLine     = 0x8,
+    TokenFlag_IsComment        = 0x1,
+    TokenFlag_IsPreprocessor   = 0x2,
+    TokenFlag_NonParticipating = 0x4,
+    TokenFlag_FirstInLine      = 0x8,
+    TokenFlag_LastInLine       = 0x10,
 };
 
 typedef uint8_t TokenSubKind;
@@ -112,6 +113,8 @@ Rewind(TokenIterator *it, Token *t)
 function Token *
 PeekNext(TokenIterator *it, int offset = 0)
 {
+    if (!it->token) return nullptr;
+
     Token *result = nullptr;
     if ((it->token + offset) < it->tokens_end)
     {
@@ -123,6 +126,8 @@ PeekNext(TokenIterator *it, int offset = 0)
 function Token *
 Next(TokenIterator *it)
 {
+    if (!it->token) return nullptr;
+
     Token *result = nullptr;
     if (it->token < it->tokens_end)
     {
@@ -138,6 +143,8 @@ Next(TokenIterator *it)
 function Token *
 PeekPrev(TokenIterator *it, int offset = 0)
 {
+    if (!it->token) return nullptr;
+
     Token *result = nullptr;
     if ((it->token - offset - 1) >= it->tokens)
     {
@@ -149,6 +156,8 @@ PeekPrev(TokenIterator *it, int offset = 0)
 function Token *
 Prev(TokenIterator *it)
 {
+    if (!it->token) return nullptr;
+
     Token *result = nullptr;
     if (it->token > it->tokens)
     {
@@ -214,7 +223,6 @@ function bool
 IsInNest(NestHelper *nests, TokenKind t, Direction dir)
 {
     if (nests->depth < 0) return false;
-
     bool result = nests->depth > 0;
 
     if (nests->opener)

@@ -185,6 +185,21 @@ bail:
     return result;
 }
 
+function bool
+ConsumeCppIf0(TagParser *parser)
+{
+    Token *rewind = PeekToken(parser);
+    if (ConsumeToken(parser, Token_Preprocessor) &&
+        ConsumeToken(parser, Token_FlowControl, "if"_str) &&
+        (ConsumeToken(parser, Token_Number, "0"_str) ||
+         ConsumeToken(parser, Token_Literal, "false"_str)))
+    {
+        return true;
+    }
+    Rewind(parser, rewind);
+    return false;
+}
+
 function void
 ParseTagsCpp(Buffer *buffer)
 {

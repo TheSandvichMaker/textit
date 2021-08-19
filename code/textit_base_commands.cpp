@@ -207,7 +207,8 @@ COMMAND_PROC(EnterCommandLineMode)
 }
 
 COMMAND_PROC(OpenBuffer,
-             "Interactively open a buffer"_str)
+             "Interactively open a buffer"_str,
+             Command_Jump)
 {
     CommandLine *cl = BeginCommandLine();
     cl->name = "Open Buffer"_str;
@@ -270,7 +271,8 @@ COMMAND_PROC(OpenBuffer,
 }
 
 COMMAND_PROC(OpenFile,
-             "Interactively open a file"_str)
+             "Interactively open a file"_str,
+             Command_Jump)
 {
     CommandLine *cl = BeginCommandLine();
     cl->name           = "Open File"_str;
@@ -597,7 +599,8 @@ COMMAND_PROC(SetFontSize,
 }
 
 COMMAND_PROC(GoToFileUnderCursor,
-             "Go to the file under the cursor, if there is one"_str)
+             "Go to the file under the cursor, if there is one"_str,
+             Command_Jump)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
@@ -668,7 +671,7 @@ COMMAND_PROC(Tags,
         ScopedMemory temp;
         if (Tag *tag = PushTagsWithName(temp, buffer->project, string))
         {
-            JumpToLocation(view, { tag->buffer, tag->pos });
+            JumpToLocation(view, tag->buffer, tag->pos);
             view->center_view_next_time_we_calculate_scroll = true; // this is terrible
         }
 
@@ -710,7 +713,8 @@ COMMAND_PROC(SetTheme,
 }
 
 COMMAND_PROC(GoToDefinitionUnderCursor,
-             "Go to the definition of the token under the cursor (type, function, file, etc)"_str)
+             "Go to the definition of the token under the cursor (type, function, file, etc)"_str,
+             Command_Jump)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
@@ -734,7 +738,7 @@ COMMAND_PROC(GoToDefinitionUnderCursor,
                     best_tag = tag;
                 }
             }
-            JumpToLocation(view, { best_tag->buffer, best_tag->pos });
+            JumpToLocation(view, best_tag->buffer, best_tag->pos);
             view->center_view_next_time_we_calculate_scroll = true; // this is terrible
         }
     }
@@ -748,6 +752,27 @@ COMMAND_PROC(GoToDefinitionUnderCursor,
             view->next_buffer = found->id;
         }
     }
+}
+
+COMMAND_PROC(NextJump)
+{
+    View *view = GetActiveView();
+    if (Jump *jump = NextJump(view))
+    {
+        JumpToLocation(view, jump->buffer, jump->pos);
+    }
+}
+
+COMMAND_PROC(PreviousJump)
+{
+    View *view = GetActiveView();
+    if (view->jump_at >= view->jump_top - 1)
+    {
+        SaveJump(view, view->buffer, GetCursor(view)->pos);
+        PreviousJump(view);
+    }
+    Jump jump = PreviousJump(view);
+    JumpToLocation(view, jump.buffer, jump.pos);
 }
 
 COMMAND_PROC(ResetSelection)

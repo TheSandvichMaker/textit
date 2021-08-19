@@ -17,11 +17,7 @@ struct Tag
     Tag *prev;
     Tag *parent;
 
-    union
-    {
-        Tag *next_in_hash;
-        Tag *next_free;
-    };
+    Tag *next_in_hash;
 
     BufferID buffer;
 

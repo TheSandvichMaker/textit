@@ -285,6 +285,13 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
                 foreground = GetThemeColor(foreground_id);
                 text_style = GetThemeStyle(foreground_id);
+
+                if (token->flags & TokenFlag_NonParticipating)
+                {
+                    foreground.r = foreground.r / 2;
+                    foreground.g = foreground.g / 2;
+                    foreground.b = foreground.b / 2;
+                }
             }
 
             String string = {};
@@ -548,6 +555,18 @@ DrawView(View *view, bool is_active_window)
         {
             DrawGlyph(MakeV2i(bounds.max.x - 1, bounds.min.y + i + scrollbar_offset), ' ', text_foreground, MakeColor(127, 127, 127));
         }
+    }
+
+    DrawText(MakeV2i(bounds.max.x - 32, bounds.min.x),
+             PushTempStringF("jump at: %d, jump top: %d", view->jump_at, view->jump_top),
+             COLOR_WHITE, COLOR_BLACK);
+    for (int i = OldestJumpIndex(view); i < view->jump_top; i += 1)
+    {
+        Jump *jump = GetJump(view, i);
+        V2i p = MakeV2i(bounds.max.x - 32, bounds.min.x + i + 1);
+        Color color = COLOR_WHITE;
+        if (view->jump_at == i) color = MakeColor(255, 0, 0);
+        DrawText(p, PushTempStringF("[%d] buffer: %d, pos: %lld", i, jump->buffer.index, jump->pos), color, COLOR_BLACK);
     }
 
     return actual_line_height;

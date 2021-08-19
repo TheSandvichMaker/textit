@@ -79,32 +79,33 @@ MakeMove(int64_t pos)
 }
 
 typedef void (*CommandProc)(void);
-#define COMMAND_PROC(name, ...)                                                                                                    \
-    static void Paste(CMD_, name)(void);                                                                                           \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), (void *)&Paste(CMD_, name), ##__VA_ARGS__); \
+#define COMMAND_PROC(name, ...)                                                                                                              \
+    static void Paste(CMD_, name)(void);                                                                                                     \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), (void *)&Paste(CMD_, name), ##__VA_ARGS__);           \
     static void Paste(CMD_, name)(void)
 
 typedef void (*TextCommandProc)(String text);
-#define TEXT_COMMAND_PROC(name)                                                                                                    \
-    static void Paste(CMD_, name)(String text);                                                                                    \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), (void *)&Paste(CMD_, name));                 \
+#define TEXT_COMMAND_PROC(name)                                                                                                              \
+    static void Paste(CMD_, name)(String text);                                                                                              \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), (void *)&Paste(CMD_, name));                           \
     static void Paste(CMD_, name)(String text)
 
 typedef Move (*MovementProc)(void);
-#define MOVEMENT_PROC(name)                                                                                                        \
-    static Move Paste(MOV_, name)(void);                                                                                           \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), (void *)&Paste(MOV_, name));             \
+#define MOVEMENT_PROC(name)                                                                                                                  \
+    static Move Paste(MOV_, name)(void);                                                                                                     \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), (void *)&Paste(MOV_, name), ""_str, Command_Jump); \
     static Move Paste(MOV_, name)(void)
 
 typedef void (*ChangeProc)(Selection selection);
-#define CHANGE_PROC(name)                                                                                                          \
-    static void Paste(CHG_, name)(Selection selection);                                                                            \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), (void *)&Paste(CHG_, name));               \
+#define CHANGE_PROC(name)                                                                                                                    \
+    static void Paste(CHG_, name)(Selection selection);                                                                                      \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), (void *)&Paste(CHG_, name));                         \
     static void Paste(CHG_, name)(Selection selection)
 
 enum_flags(int, CommandFlags)
 {
     Command_Visible = 0x1,
+    Command_Jump    = 0x2,
 };
 
 struct Command
