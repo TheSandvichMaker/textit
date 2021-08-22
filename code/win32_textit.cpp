@@ -56,10 +56,16 @@ Win32_NextEvent(PlatformEventIterator *it, PlatformEvent *out_event)
 {
     bool result = false;
 
+    static uint32_t last_event_index = UINT32_MAX;
+
     uint32_t write_index = win32_state.working_write_index;
     while (it->index != write_index)
     {
+        platform->DebugPrint("reading event index %u\n", it->index);
+
         int event_index = it->index % ArrayCount(win32_state.events);
+        it->index += 1;
+
         PlatformEvent *event = &win32_state.events[event_index];
         if (!event->consumed_ && MatchFilter(event->type, it->filter))
         {
@@ -75,7 +81,6 @@ Win32_NextEvent(PlatformEventIterator *it, PlatformEvent *out_event)
 
             break;
         }
-        it->index += 1;
     }
 
     return result;
@@ -513,7 +518,7 @@ Win32_WriteClipboard(String text)
 {
     bool result = false;
 
-    if (text.size <= (size_t)INT32_MAX)
+    if (text.size > 0 && text.size <= (size_t)INT32_MAX)
     {
         if (OpenClipboard(win32_state.window))
         {
@@ -677,11 +682,10 @@ Win32_SetWorkingDirectory(String path)
 static String
 Win32_PushFullPath(Arena *arena, String filename_utf8)
 {
-    ScopedMemory temp;
-    wchar_t *filename = FormatWString(temp, L"%.*S", StringExpand(filename_utf8));
+    wchar_t *filename = FormatWString(arena, L"%.*S", StringExpand(filename_utf8));
 
     DWORD size = GetFullPathNameW(filename, 0, NULL, NULL);
-    wchar_t *buffer = PushArrayNoClear(temp, size, wchar_t);
+    wchar_t *buffer = PushArrayNoClear(arena, size, wchar_t);
 
     DWORD real_size = GetFullPathNameW(filename, size, buffer, NULL);
     Assert(real_size + 1 <= size);
@@ -2270,7 +2274,6 @@ Win32_AppThread(LPVOID userdata)
 
         win32_state.event_read_index = win32_state.working_write_index;
 
-
         uint64_t last_write_time = Win32_GetLastWriteTime(win32_state.dll_path);
         if (app_code->last_write_time != last_write_time)
         {
@@ -2575,8 +2578,7 @@ main(int, char **)
                     }
                 }
                 event.type = PlatformEvent_Text;
-                event.text.size = WideCharToMultiByte(CP_UTF8, 0, chars, -1, (char *)event.text_storage, ArrayCount(event.text_storage), NULL, NULL) - 1;
-                event.text.data = event.text_storage;
+                event.text_size = (uint8_t)WideCharToMultiByte(CP_UTF8, 0, chars, -1, (char *)event.text_storage, ArrayCount(event.text_storage), NULL, NULL) - 1;
 
                 Win32_PushEvent(&event);
             } break;

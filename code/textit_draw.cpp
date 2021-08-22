@@ -557,6 +557,7 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
+#if 0
     DrawText(MakeV2i(bounds.max.x - 32, bounds.min.x),
              PushTempStringF("jump at: %d, jump top: %d", view->jump_at, view->jump_top),
              COLOR_WHITE, COLOR_BLACK);
@@ -568,6 +569,7 @@ DrawView(View *view, bool is_active_window)
         if (view->jump_at == i) color = MakeColor(255, 0, 0);
         DrawText(p, PushTempStringF("[%d] buffer: %d, pos: %lld", i, jump->buffer.index, jump->pos), color, COLOR_BLACK);
     }
+#endif
 
     return actual_line_height;
 }

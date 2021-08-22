@@ -9,6 +9,7 @@
 #include "textit_render.cpp"
 #include "textit_text_storage.cpp"
 #include "textit_language.cpp"
+#include "textit_line_index.cpp"
 #include "textit_buffer.cpp"
 #include "textit_tokenizer.cpp"
 #include "textit_tags.cpp"
@@ -24,11 +25,7 @@
 #include "textit_language_cpp.cpp"
 
 // things missing:
-// automatic line comment inserts
 // autocomplete of any kind
-// code indexing
-// go to definition
-// jump history
 // multiple cursors
 // local search (and replace)
 // project wide search (and replace)
@@ -37,9 +34,7 @@
 // undo tree visualization / ux (I mean that was supposed to be a thing)
 // yank behaviour (yank inner vs outer / yank on delete / etc)
 // registers
-// refinement of the paradigm of course
-// better text rendering
-// better rendering
+// sensible scrolling in rendering
 // hardware accelerated rendering
 // rendering api that isn't dumb as bananacakes
 // incremental tokenization
@@ -60,8 +55,8 @@
 // nakst how2uniscribe: https://gist.github.com/nakst/ab7ae09ed943100ea13707fa4f42b548
 //
 
-function Cursor *
-GetCursorInternal(ViewID view, BufferID buffer, bool make_if_missing)
+function Cursor **
+GetCursorSlot(ViewID view, BufferID buffer, bool make_if_missing)
 {
     CursorHashKey key;
     key.view   = view;
@@ -92,27 +87,76 @@ GetCursorInternal(ViewID view, BufferID buffer, bool make_if_missing)
 
         entry->key = key;
 
-        ZeroStruct(&entry->cursor);
+        if (!editor->first_free_cursor)
+        {
+            editor->first_free_cursor = PushStructNoClear(&editor->transient_arena, Cursor);
+            editor->first_free_cursor->next = nullptr;
+        }
+        entry->cursor = SllStackPop(editor->first_free_cursor);
+        ZeroStruct(entry->cursor);
     }
 
     return entry ? &entry->cursor : nullptr;
 }
 
 function Cursor *
+CreateCursor(View *view)
+{
+    Buffer *buffer = GetBuffer(view);
+
+    if (!editor->first_free_cursor)
+    {
+        editor->first_free_cursor = PushStructNoClear(&editor->transient_arena, Cursor);
+        editor->first_free_cursor->next = nullptr;
+    }
+    Cursor *result = SllStackPop(editor->first_free_cursor);
+    ZeroStruct(result);
+
+    Cursor **slot = GetCursorSlot(view->id, buffer->id, true);
+    result->next = *slot;
+    *slot = result;
+
+    return result;
+}
+
+function void
+FreeCursor(Cursor *cursor)
+{
+    cursor->next = editor->first_free_cursor;
+    editor->first_free_cursor = cursor;
+}
+
+function Cursor *
 GetCursor(ViewID view, BufferID buffer)
 {
-    return GetCursorInternal(view, buffer, true);
+    if (editor->override_cursor)
+    {
+        return editor->override_cursor;
+    }
+    return *GetCursorSlot(view, buffer, true);
+}
+
+function Cursor *
+IterateCursors(View *view)
+{
+    Buffer *buffer = GetBuffer(view);
+    return GetCursor(view->id, buffer->id);
 }
 
 function Cursor *
 IterateCursors(ViewID view, BufferID buffer)
 {
-    return GetCursorInternal(view, buffer, false);
+    Cursor **cursor_slot = GetCursorSlot(view, buffer, false);
+    return cursor_slot ? *cursor_slot : nullptr;
 }
 
 function Cursor *
 GetCursor(View *view, Buffer *buffer)
 {
+    if (editor->override_cursor)
+    {
+        return editor->override_cursor;
+    }
     return GetCursor(view->id, (buffer ? buffer->id : view->buffer));
 }
 
@@ -174,13 +218,25 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
 function Buffer *
 OpenBufferFromFile(String filename)
 {
+    ScopedMemory temp;
+    String full_path = platform->PushFullPath(temp, filename);
+
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (AreEqual(buffer->full_path, full_path))
+        {
+            return buffer;
+        }
+    }
+
     platform->DebugPrint("Opening: %.*s\n", StringExpand(filename));
 
-    String name;
-    SplitPath(filename, &name);
+    String leaf;
+    SplitPath(filename, &leaf);
 
-    Buffer *result = OpenNewBuffer(name);
-    result->full_path = platform->PushFullPath(&result->arena, filename);
+    Buffer *result = OpenNewBuffer(leaf);
+    result->full_path = PushString(&result->arena, full_path);
 
     size_t file_size = platform->GetFileSize(filename);
     EnsureSpace(result, file_size);
@@ -723,58 +779,67 @@ ExecuteCommand(View *view, Command *command)
 {
     BufferID prev_buffer = view->buffer;
 
-    Cursor *cursor = GetCursor(view);
-    int64_t prev_pos = cursor->pos;
+    Cursor *base_cursor = GetCursor(view);
+    int64_t prev_pos = base_cursor->pos;
 
-    switch (command->kind)
+    if (command->kind == Command_Basic)
     {
-        case Command_Basic:
-        {
-            command->command();
-        } break;
-
-        case Command_Text:
-        {
-            INVALID_CODE_PATH;
-        } break;
-
-        case Command_Movement:
-        {
-            Move move = command->movement();
-            ApplyMove(GetBuffer(view), cursor, move);
-
-            editor->last_movement   = command; 
-            editor->last_move_flags = move.flags;
-        } break;
-
-        case Command_Change:
-        {
-            Selection selection;
-            selection.inner = SanitizeRange(cursor->selection.inner);
-            selection.outer = SanitizeRange(cursor->selection.outer);
-            command->change(selection);
-
-            if (editor->last_movement)
-            {
-                Assert(editor->last_movement->kind == Command_Movement);
-                if (editor->last_move_flags & MoveFlag_NoAutoRepeat)
-                {
-                    cursor->selection = MakeSelection(cursor->pos);
-                }
-                else if (editor->next_edit_mode == EditMode_Command)
-                {
-                    Move next_move = editor->last_movement->movement();
-                    ApplyMove(GetBuffer(view), cursor, next_move);
-                }
-            }
-        } break;
+        command->command();
     }
+    else
+    {
+        for (Cursor *cursor = IterateCursors(view->id, view->buffer);
+             cursor;
+             cursor = cursor->next)
+        {
+            editor->override_cursor = cursor;
+            switch (command->kind)
+            {
+                case Command_Text:
+                {
+                    INVALID_CODE_PATH;
+                } break;
+
+                case Command_Movement:
+                {
+                    Move move = command->movement();
+                    ApplyMove(GetBuffer(view), cursor, move);
+
+                    editor->last_movement   = command; 
+                    editor->last_move_flags = move.flags;
+                } break;
+
+                case Command_Change:
+                {
+                    Selection selection;
+                    selection.inner = SanitizeRange(cursor->selection.inner);
+                    selection.outer = SanitizeRange(cursor->selection.outer);
+                    command->change(selection);
+
+                    if (editor->last_movement)
+                    {
+                        Assert(editor->last_movement->kind == Command_Movement);
+                        if (editor->last_move_flags & MoveFlag_NoAutoRepeat)
+                        {
+                            cursor->selection = MakeSelection(cursor->pos);
+                        }
+                        else if (editor->next_edit_mode == EditMode_Command)
+                        {
+                            Move next_move = editor->last_movement->movement();
+                            ApplyMove(GetBuffer(view), cursor, next_move);
+                        }
+                    }
+                } break;
+            }
+        }
+    }
+    editor->override_cursor = nullptr;
 
     if (command->flags & Command_Jump)
     {
         Buffer *buffer = GetBuffer(view);
         int64_t prev_line = GetLineNumber(buffer, prev_pos);
-        int64_t next_line = GetLineNumber(buffer, cursor->pos);
+        int64_t next_line = GetLineNumber(buffer, base_cursor->pos);
         if ((view->next_buffer && view->next_buffer != view->buffer) || Abs(prev_line - next_line) > 1)
         {
             SaveJump(view, view->buffer, prev_pos);
@@ -783,7 +848,7 @@ ExecuteCommand(View *view, Command *command)
 }
 
 function bool
-HandleViewEvent(ViewID view_id, const PlatformEvent &event)
+HandleViewEvent(ViewID view_id, PlatformEvent *event)
 {
     bool result = true;
 
@@ -792,18 +857,23 @@ HandleViewEvent(ViewID view_id, const PlatformEvent &event)
 
     BindingMap *bindings = &editor->bindings[editor->edit_mode];
 
-    Cursor *cursor = GetCursor(view);
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
-    if ((event.type == PlatformEvent_Text) && bindings->text_command)
+    if ((event->type == PlatformEvent_Text) && bindings->text_command)
     {
-        String text = event.text;
-        bindings->text_command->text(text);
+        String text = GetText(event);
+        for (Cursor *cursor = IterateCursors(view->id, buffer->id);
+             cursor;
+             cursor = cursor->next)
+        {
+            editor->override_cursor = cursor;
+            bindings->text_command->text(text);
+        }
+        editor->override_cursor = nullptr;
     }
-    else if (MatchFilter(event.type, PlatformEventFilter_KeyDown))
+    else if (MatchFilter(event->type, PlatformEventFilter_KeyDown))
     {
-        bool ctrl_down  = event.ctrl_down;
-        bool shift_down = event.shift_down;
-        bool alt_down   = event.alt_down;
+        bool ctrl_down  = event->ctrl_down;
+        bool shift_down = event->shift_down;
+        bool alt_down   = event->alt_down;
 
         Modifiers modifiers = 0;
         if (ctrl_down)  modifiers |= Modifier_Ctrl;
@@ -813,15 +883,15 @@ HandleViewEvent(ViewID view_id, const PlatformEvent &event)
         bool consumed_digit = false;
         if (!modifiers &&
             editor->edit_mode == EditMode_Command &&
-            event.input_code >= PlatformInputCode_0 &&
-            event.input_code <= PlatformInputCode_9)
+            event->input_code >= PlatformInputCode_0 &&
+            event->input_code <= PlatformInputCode_9)
         {
-            if (event.input_code > PlatformInputCode_0 ||
+            if (event->input_code > PlatformInputCode_0 ||
                 view->repeat_value > 0)
             {
                 consumed_digit = true;
 
-                int64_t digit = (int64_t)(event.input_code - PlatformInputCode_0);
+                int64_t digit = (int64_t)(event->input_code - PlatformInputCode_0);
                 view->repeat_value *= 10;
                 view->repeat_value += digit;
 
@@ -836,7 +906,7 @@ HandleViewEvent(ViewID view_id, const PlatformEvent &event)
         {
             editor->clutch = shift_down;
 
-            Binding *binding = &bindings->by_code[event.input_code];
+            Binding *binding = &bindings->by_code[event->input_code];
             Command *command = binding->by_modifiers[modifiers];
             if (!command)
             {
@@ -892,11 +962,11 @@ HandleViewEvent(ViewID view_id, const PlatformEvent &event)
             }
         }
     }
-    else if (MatchFilter(event.type, PlatformEventFilter_Mouse))
+    else if (MatchFilter(event->type, PlatformEventFilter_Mouse))
     {
-        if (event.input_code == PlatformInputCode_LButton)
+        if (event->input_code == PlatformInputCode_LButton)
         {
-            if (event.pressed)
+            if (event->pressed)
             {
                 editor->mouse_down = true;
                 OnMouseDown();
@@ -1038,11 +1108,11 @@ AppUpdateAndRender(Platform *platform_)
         if (editor->command_line_count > 0)
         {
             editor->clutch = false;
-            handled_any_events = HandleCommandLineEvent(editor->command_lines[editor->command_line_count - 1], event);
+            handled_any_events = HandleCommandLineEvent(editor->command_lines[editor->command_line_count - 1], &event);
         }
         else
         {
-            handled_any_events = HandleViewEvent(editor->active_window->view, event);
+            handled_any_events = HandleViewEvent(editor->active_window->view, &event);
             if (editor->command_line_count > 0)
             {
                 // if we began a command line, it needs to be warmed up to not show a frame of lag for the predictions
@@ -1107,7 +1177,7 @@ AppUpdateAndRender(Platform *platform_)
 #endif
 
     {
-        Buffer *active_buffer = GetBuffer(GetView(editor->active_window->view));
+        Buffer *active_buffer = GetActiveBuffer();
         Project *project = active_buffer->project;
 
         String leaf;

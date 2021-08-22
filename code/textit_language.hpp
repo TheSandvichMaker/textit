@@ -43,6 +43,8 @@ struct LanguageSpec
     OperatorSlot operators[256];
 };
 
+function void TokenizeBasic(Tokenizer *tok);
+
 struct LanguageRegistry
 {
     LanguageSpec null_language;
@@ -53,6 +55,7 @@ struct LanguageRegistry
         first_language = nullptr;
 
         null_language.name = "none"_str;
+        null_language.Tokenize = TokenizeBasic;
         SllStackPush(first_language, &null_language);
     }
 };

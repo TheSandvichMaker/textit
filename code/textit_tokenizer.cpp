@@ -324,36 +324,36 @@ TokenizeBasic(Tokenizer *tok)
 }
 
 function void
+InitializeTokenizer(Tokenizer *tok, Buffer *buffer, Range range, VirtualArray<Token> *tokens, VirtualArray<LineData> *line_data)
+{
+    ZeroStruct(tok);
+    tok->prev_token = &tok->null_token;
+    tok->tokens     = tokens;
+    tok->line_data  = line_data;
+    tok->language   = buffer->language;
+    tok->start      = buffer->text + range.start;
+    tok->end        = buffer->text + range.end;
+    tok->at         = tok->start;
+
+    tok->line_data->Clear();
+    tok->tokens->Clear();
+    tok->tokens->EnsureSpace(1); // what the fuck
+
+    LineData *first_line_data = tok->line_data->Push(); // TODO: Jank alert?
+    ZeroStruct(first_line_data);
+}
+
+function void
 TokenizeBuffer(Buffer *buffer)
 {
     PlatformHighResTime start = platform->GetTime();
 
     LanguageSpec *lang = buffer->language;
 
-    Tokenizer tok = {};
-    tok.prev_token = &tok.null_token;
-    tok.tokens     = &buffer->tokens;
-    tok.line_data  = &buffer->line_data;
-    tok.language   = buffer->language;
-    tok.start      = buffer->text;
-    tok.end        = buffer->text + buffer->count;
-    tok.at         = tok.start;
-    tok.new_line   = true;
-    tok.line_data->Clear();
-    tok.tokens->Clear();
-    tok.tokens->EnsureSpace(1); // TODO: jank alert? forcing the allocation so that line_data->tokens below will not be null
+    Tokenizer tok;
+    InitializeTokenizer(&tok, buffer, BufferRange(buffer), &buffer->tokens, &buffer->line_data);
 
-    LineData *line_data = tok.line_data->Push();
-    ZeroStruct(line_data);
-
-    if (lang->Tokenize)
-    {
-        lang->Tokenize(&tok);
-    }
-    else
-    {
-        TokenizeBasic(&tok);
-    }
+    lang->Tokenize(&tok);
 
     PlatformHighResTime end = platform->GetTime();
     double time = platform->SecondsElapsed(start, end);
@@ -365,6 +365,9 @@ function void
 RetokenizeRange(Buffer *buffer, int64_t pos, int64_t delta)
 {
     if (delta == 0) return;
+
+    // int64_t first_line = GetLineNumber(buffer, pos);
+    // int64_t last_line  = GetLineNumber(buffer, pos + Abs(delta));
 
     LanguageSpec *lang = buffer->language;
 
@@ -387,22 +390,10 @@ RetokenizeRange(Buffer *buffer, int64_t pos, int64_t delta)
     line_data.SetCapacity(1'000'000);
     defer { line_data.Release(); };
 
-    Tokenizer tok = {};
-    tok.tokens    = &tokens;
-    tok.line_data = &line_data;
-    tok.language  = buffer->language;
-    tok.base      = min_pos;
-    tok.start     = buffer->text + min_pos;
-    tok.end       = buffer->text + max_pos;
-    tok.at        = tok.start;
-    if (lang->Tokenize)
-    {
-        lang->Tokenize(&tok);
-    }
-    else
-    {
-        TokenizeBasic(&tok);
-    }
+    Tokenizer tok;
+    InitializeTokenizer(&tok, buffer, MakeRange(min_pos, max_pos), &tokens, &line_data);
+
+    lang->Tokenize(&tok);
 
     for (size_t i = max_token_index; i < buffer->tokens.count; i += 1)
     {

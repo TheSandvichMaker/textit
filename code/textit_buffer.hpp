@@ -57,25 +57,6 @@ enum_flags(int, BufferFlags)
     Buffer_ReadOnly       = 0x2,
 };
 
-enum_flags(uint8_t, LineFlags)
-{
-    Line_Empty = 0x1,
-};
-
-enum_flags(uint8_t, LineTokenizeState)
-{
-};
-
-struct LineData
-{
-    Range             range;          // 16
-    int64_t           newline_pos;    // 24
-    LineFlags         flags;          // 25
-    LineTokenizeState tokenize_state; // 26
-    int16_t           token_count;    // 28
-    uint32_t          token_index;    // 32
-};
-
 #define TEXTIT_BUFFER_SIZE Gigabytes(8)
 #define BUFFER_ASYNC_THRESHOLD Megabytes(4)
 struct Buffer : TextStorage

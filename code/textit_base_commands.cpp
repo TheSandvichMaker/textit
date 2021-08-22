@@ -121,41 +121,6 @@ COMMAND_PROC(BenchmarkPosToLine,
     buffer->count           = orig_buff_count;
 }
 
-COMMAND_PROC(NextBuffer,
-             "Select the next buffer"_str)
-{
-    View *view = GetActiveView();
-    Buffer *buffer = GetBuffer(view);
-
-    BufferID next_buffer = {};
-    for (size_t index = 1; index < editor->buffer_count; index += 1)
-    {
-        BufferID id = editor->used_buffer_ids[index];
-        if (id == buffer->id)
-        {
-            if (index + 1 == editor->buffer_count)
-            {
-                next_buffer = editor->used_buffer_ids[1];
-            }
-            else
-            {
-                next_buffer = editor->used_buffer_ids[index + 1];
-            }
-        }
-    }
-
-    if (next_buffer)
-    {
-        view->next_buffer = next_buffer;
-    }
-}
-
-COMMAND_PROC(ForceTick,
-             "Force the editor to tick"_str)
-{
-    platform->PushTickEvent();
-}
-
 COMMAND_PROC(LoadDefaultIndentRules,
              "Load the default indent rules for the current buffer"_str)
 {
@@ -630,6 +595,7 @@ COMMAND_PROC(Tags,
 {
     CommandLine *cl = BeginCommandLine();
     cl->name = "Tags"_str;
+    cl->sort_by_edit_distance = true;
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
@@ -647,11 +613,17 @@ COMMAND_PROC(Tags,
                 String name = PushBufferRange(temp, buffer, MakeRangeStartLength(tag->pos, tag->length));
                 if (FindSubstring(name, string, StringMatch_CaseInsensitive) != name.size)
                 {
+                    int64_t line = GetLineNumber(buffer, tag->pos);
                     String kind_name     = GetTagBaseKindName(tag);
                     String sub_kind_name = GetTagSubKindName(buffer->language, tag);
                     Prediction prediction = {};
                     prediction.text         = name;
-                    prediction.preview_text = PushTempStringF("%-32.*s %.*s %.*s -- %.*s", StringExpand(name), StringExpand(sub_kind_name), StringExpand(kind_name), StringExpand(buffer->name));
+                    prediction.preview_text = PushTempStringF("%-48.*s %.*s %.*s -- %.*s (line: %lld)", 
+                                                              StringExpand(name), 
+                                                              StringExpand(sub_kind_name), 
+                                                              StringExpand(kind_name), 
+                                                              StringExpand(buffer->name),
+                                                              line);
                     if (!AddPrediction(cl, prediction))
                     {
                         break;
@@ -754,6 +726,70 @@ COMMAND_PROC(GoToDefinitionUnderCursor,
     }
 }
 
+function void
+CreateNewCursorOnNextLine(View *view, Direction direction)
+{
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t delta = direction;
+
+    Cursor *relevant_cursor = nullptr;
+    for (Cursor *cursor = IterateCursors(view);
+         cursor;
+         cursor = cursor->next)
+    {
+        if (!relevant_cursor) relevant_cursor = cursor;
+        if (direction == Direction_Forward  && relevant_cursor->pos < cursor->pos) relevant_cursor = cursor;
+        if (direction == Direction_Backward && relevant_cursor->pos > cursor->pos) relevant_cursor = cursor;
+    }
+
+    BufferLocation loc = CalculateBufferLocationFromPos(buffer, relevant_cursor->pos);
+    int64_t line = loc.line;
+    int64_t col  = loc.col;
+    for (;;)
+    {
+        line += delta;
+
+        if (!LineIsInBuffer(buffer, line))
+        {
+            break;
+        }
+
+        Range range = GetLineRange(buffer, line);
+
+        ScopedMemory temp;
+        String line_string = PushBufferRange(temp, buffer, range);
+
+        bool line_empty = true;
+        for (size_t i = 0; i < line_string.size; i += 1)
+        {
+            if (!IsWhitespaceAscii(line_string.data[i]))
+            {
+                line_empty = false;
+            }
+        }
+
+        if (!line_empty)
+        {
+            Cursor *new_cursor = CreateCursor(view);
+            SetCursor(new_cursor, CalculateBufferLocationFromLineCol(buffer, line, col).pos);
+            break;
+        }
+    }
+}
+
+COMMAND_PROC(NewCursorUp)
+{
+    View *view = GetActiveView();
+    CreateNewCursorOnNextLine(view, Direction_Backward);
+}
+
+COMMAND_PROC(NewCursorDown)
+{
+    View *view = GetActiveView();
+    CreateNewCursorOnNextLine(view, Direction_Forward);
+}
+
 COMMAND_PROC(NextJump)
 {
     View *view = GetActiveView();
@@ -775,10 +811,18 @@ COMMAND_PROC(PreviousJump)
     JumpToLocation(view, jump.buffer, jump.pos);
 }
 
-COMMAND_PROC(ResetSelection)
+COMMAND_PROC(ResetCursors)
 {
     View *view = GetActiveView();
-    Cursor *cursor = GetCursor(view);
+    Cursor **slot = GetCursorSlot(view->id, view->buffer, true);
+    for (Cursor *cursor = *slot; cursor->next; cursor = *slot)
+    {
+        cursor->selection.inner = MakeRange(cursor->pos);
+        cursor->selection.outer = MakeRange(cursor->pos);
+        *slot = cursor->next;
+        FreeCursor(cursor);
+    }
+    Cursor *cursor = *slot;
     cursor->selection.inner = MakeRange(cursor->pos);
     cursor->selection.outer = MakeRange(cursor->pos);
 }
@@ -841,12 +885,13 @@ COMMAND_PROC(EnterCommandMode,
     EndUndoBatch(buffer);
 
     View *view = GetActiveView();
-    Cursor *cursor = GetCursor(view);
-
-    BufferLocation loc = CalculateRelativeMove(buffer, cursor, MakeV2i(-1, 0));
-    cursor->pos = loc.pos;
-    cursor->selection = MakeSelection(cursor->pos);
-    cursor->sticky_col = loc.col;
+    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    {
+        BufferLocation loc = CalculateRelativeMove(buffer, cursor, MakeV2i(-1, 0));
+        cursor->pos = loc.pos;
+        cursor->selection = MakeSelection(cursor->pos);
+        cursor->sticky_col = loc.col;
+    }
 }
 
 COMMAND_PROC(CenterView,
@@ -1202,12 +1247,14 @@ MOVEMENT_PROC(EncloseParameter)
 
         if (t->kind == Token_RightParen ||
             t->kind == Token_RightScope ||
+            t->kind == ';' ||
             t->kind == ',')
         {
             end_kind      = t->kind;
             inner_end_pos = t->pos;
             end_pos       = t->pos;
-            if (t->kind == ',')
+            if (t->kind == ',' ||
+                t->kind == ';')
             {
                 end_pos = t->pos + t->length;
                 Token *next = PeekNext(&it);
@@ -1241,7 +1288,8 @@ MOVEMENT_PROC(EncloseParameter)
                  (t->kind == Token_LeftParen   ||
                   t->kind == Token_LeftScope)) ||
                 t->kind == open_token          ||
-                t->kind == ',')
+                t->kind == ',' ||
+                t->kind == ';')
             {
                 int64_t inner_start_pos = t->pos + t->length;
 
@@ -1252,8 +1300,7 @@ MOVEMENT_PROC(EncloseParameter)
                 }
 
                 int64_t start_pos = inner_start_pos;
-                if (t->kind  == ',' &&
-                    end_kind != ',')
+                if ((t->kind == ',' || t->kind == ';') && end_kind != t->kind)
                 {
                     start_pos = t->pos;
                 }
@@ -1301,14 +1348,14 @@ MOVEMENT_PROC(MoveUp)
     return move;
 }
 
-COMMAND_PROC(PageUp, ""_str, Command_Jump)
+COMMAND_PROC(PageUp)
 {
     View *view = GetActiveView();
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
     MoveCursorRelative(view, MakeV2i(0, -Max(0, viewport_height - 4)));
 }
 
-COMMAND_PROC(PageDown, ""_str, Command_Jump)
+COMMAND_PROC(PageDown)
 {
     View *view = GetActiveView();
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
@@ -1681,6 +1728,37 @@ CHANGE_PROC(PasteReplaceSelection)
     platform->WriteClipboard(replaced_string);
 }
 
+COMMAND_PROC(AlignCursors, "Insert whitespaces before all the cursors so that they line up vertically"_str)
+{
+    View   *view   = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+
+    int64_t align_col = 0;
+    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    {
+        // TODO: Handle tabs vs spaces
+        BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+        if (align_col < loc.col)
+        {
+            align_col = loc.col;
+        }
+    }
+
+    ScopedMemory temp;
+    String padding_string = PushStringSpace(temp, align_col);
+    for (size_t i = 0; i < padding_string.size; i += 1) padding_string.data[i] = ' ';
+
+    BeginUndoBatch(buffer);
+    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    {
+        BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+        int64_t padding = align_col - loc.col;
+        Assert(padding >= 0);
+        BufferReplaceRange(buffer, MakeRange(cursor->pos), MakeString((size_t)padding, padding_string.data));
+    }
+    EndUndoBatch(buffer);
+}
+
 TEXT_COMMAND_PROC(WriteText)
 {
     View   *view   = GetActiveView();
@@ -1696,7 +1774,7 @@ TEXT_COMMAND_PROC(WriteText)
     LineEndKind line_end_kind    = buffer->line_end;
 
     Cursor *cursor = GetCursor(view);
-    int64_t pos = cursor->pos;
+    int64_t insert_pos = cursor->pos;
 
     bool newline            = false;
     bool should_auto_indent = false;
@@ -1714,8 +1792,8 @@ TEXT_COMMAND_PROC(WriteText)
         {
             int left = (int)GetSizeLeft(&buf);
 
-            int64_t line_start = FindLineStart(buffer, pos);
-            int64_t col = pos - line_start;
+            int64_t line_start = FindLineStart(buffer, insert_pos);
+            int64_t col = insert_pos - line_start;
             int64_t target_col = RoundUpNextTabStop(col, indent_width);
 
             int64_t spaces = target_col - col;
@@ -1745,7 +1823,7 @@ TEXT_COMMAND_PROC(WriteText)
     {
         if (newline && core_config->auto_line_comments)
         {
-            LineData *prev_line = GetLineData(buffer, GetLineNumber(buffer, pos));
+            LineData *prev_line = GetLineData(buffer, GetLineNumber(buffer, insert_pos));
             Token *t = &buffer->tokens[prev_line->token_index];
             if (t->kind == Token_LineComment)
             {
@@ -1755,26 +1833,20 @@ TEXT_COMMAND_PROC(WriteText)
             }
         }
 
-        BufferReplaceRange(buffer, MakeRange(pos), buf.as_string);
+        BufferReplaceRange(buffer, MakeRange(insert_pos), buf.as_string);
         
         if (!should_auto_indent)
         {
             IndentRules *indent_rules = buffer->indent_rules;
-            for (TokenIterator it = IterateLineTokens(buffer, GetLineNumber(buffer, cursor->pos));
-                 IsValid(&it);
-                 Next(&it))
+
+            Token *t = GetTokenAt(buffer, insert_pos);
+            IndentRule rule = indent_rules->table[t->kind];
+            if (rule & IndentRule_RequiresReindent)
             {
-                Token *t = it.token;
-                IndentRule rule = indent_rules->table[t->kind];
-                if ((rule & IndentRule_PopIndent) ||
-                    (rule & IndentRule_ForceLeft))
-                {
-                    should_auto_indent = true;
-                    break;
-                }
+                should_auto_indent = true;
             }
         }
-        
+
         if (should_auto_indent)
         {
             AutoIndentLineAt(buffer, cursor->pos);

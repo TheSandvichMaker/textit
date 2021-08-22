@@ -293,6 +293,10 @@ ConsumeBalancedPair(TagParser *parser, TokenKind left_kind)
         while (IsInNest(&helper, PeekToken(parser)->kind, Direction_Forward))
         {
             Advance(parser);
+            if (!TokensLeft(parser))
+            {
+                return false;
+            }
         }
 
         return true;

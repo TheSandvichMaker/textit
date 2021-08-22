@@ -25,6 +25,7 @@
 #include "textit_tokens.hpp"
 #include "textit_language.hpp"
 #include "textit_text_storage.hpp"
+#include "textit_line_index.hpp"
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
 #include "textit_tags.hpp"
@@ -151,7 +152,7 @@ struct CursorHashEntry
     };
 
     CursorHashKey key;
-    Cursor cursor;
+    Cursor *cursor;
 };
 
 struct EditorState
@@ -210,6 +211,8 @@ struct EditorState
 
     View *null_view;
 
+    Cursor *override_cursor;
+    Cursor *first_free_cursor;
     CursorHashEntry *first_free_cursor_hash_entry;
     CursorHashEntry *cursor_hash[CURSOR_HASH_SIZE];
 
@@ -243,9 +246,13 @@ static EditorState *editor;
 function void ExecuteCommand(View *view, Command *command);
 function Buffer *OpenBufferFromFile(String filename);
 
+function Cursor *CreateCursor(View *view);
+function void FreeCursor(Cursor *cursor);
+function Cursor **GetCursorSlot(ViewID view, BufferID buffer, bool make_if_missing);
 function Cursor *GetCursor(ViewID view, BufferID buffer);
 function Cursor *GetCursor(View *view, Buffer *buffer = nullptr);
 function Cursor *IterateCursors(ViewID view, BufferID buffer);
+function Cursor *IterateCursors(View *view);
 
 function void SetEditorFont(String name, int size, PlatformFontQuality quality);
 

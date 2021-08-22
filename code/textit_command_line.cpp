@@ -77,8 +77,16 @@ AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key)
     return false;
 }
 
+function Prediction *
+GetPrediction(CommandLine *cl, int index)
+{
+    if (index <  0)                    index = 0;
+    if (index >= cl->prediction_count) index = cl->prediction_count - 1;
+    return &cl->predictions[cl->sort_keys[index].index];
+}
+
 function bool
-HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
+HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
 {
     bool handled_any_events = false;
 
@@ -89,20 +97,20 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
         if (cl->prediction_selected_index == -1) return;
         if (!cl->prediction_count) return;
 
-        const Prediction &prediction = cl->predictions[cl->sort_keys[cl->prediction_selected_index].index];
+        Prediction *prediction = GetPrediction(cl, cl->prediction_selected_index);
 
-        cl->count = (int)prediction.text.size;
-        CopyArray(cl->count, prediction.text.data, cl->text);
+        cl->count = (int)prediction->text.size;
+        CopyArray(cl->count, prediction->text.data, cl->text);
 
         cl->cursor = cl->count;
     };
 
-    if (MatchFilter(event.type, PlatformEventFilter_Text|PlatformEventFilter_Keyboard))
+    if (MatchFilter(event->type, PlatformEventFilter_Text|PlatformEventFilter_Keyboard))
     {
         bool handled_event = true;
-        if (event.type == PlatformEvent_Text)
+        if (event->type == PlatformEvent_Text)
         {
-            String text = event.text;
+            String text = GetText(event);
 
             for (size_t i = 0; i < text.size; i += 1)
             {
@@ -131,11 +139,11 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 }
             }
         }
-        else if (event.type == PlatformEvent_KeyDown)
+        else if (event->type == PlatformEvent_KeyDown)
         {
             cl->cycling_predictions = false;
 
-            switch (event.input_code)
+            switch (event->input_code)
             {
                 case PlatformInputCode_Left:
                 {
@@ -180,14 +188,14 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 case '7': case '8': case '9':
                 {
                     int selection = -1;
-                    if (event.input_code >= '1' &&
-                        event.input_code <= '9')
+                    if (event->input_code >= '1' &&
+                        event->input_code <= '9')
                     {
-                        selection = (int)event.input_code - '1';
+                        selection = (int)event->input_code - '1';
                     }
-                    else if (event.ctrl_down)
+                    else if (event->ctrl_down)
                     {
-                        selection = 9 + (int)event.input_code - 'A';
+                        selection = 9 + (int)event->input_code - 'A';
                     }
 
                     if (selection == -1)
@@ -196,7 +204,7 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                         break;
                     }
 
-                    if (cl->no_quickselect && !event.ctrl_down)
+                    if (cl->no_quickselect && !event->ctrl_down)
                     {
                         handled_event = false;
                         break;
@@ -237,8 +245,8 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 case PlatformInputCode_Down:
                 case PlatformInputCode_Tab:
                 {
-                    bool going_down = ((event.input_code == PlatformInputCode_Down) ||
-                                       (event.input_code == PlatformInputCode_Tab && event.shift_down));
+                    bool going_down = ((event->input_code == PlatformInputCode_Down) ||
+                                       (event->input_code == PlatformInputCode_Tab && event->shift_down));
                     if (cl->prediction_count == 1)
                     {
                         cl->prediction_selected_index = 0;
@@ -268,7 +276,7 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 
                 case PlatformInputCode_Back:
                 {
-                    if (event.ctrl_down)
+                    if (event->ctrl_down)
                     {
                         if (cl->count > 0)
                         {
@@ -322,9 +330,9 @@ HandleCommandLineEvent(CommandLine *cl, const PlatformEvent &event)
                 } break;
             }
         }
-        else if (event.type == PlatformEvent_KeyUp)
+        else if (event->type == PlatformEvent_KeyUp)
         {
-            switch (event.input_code)
+            switch (event->input_code)
             {
                 case PlatformInputCode_Control:
                 {
@@ -427,12 +435,12 @@ DrawCommandLines()
 
     if (cl->prediction_count > 0)
     {
-        active_prediction = &cl->predictions[0];
+        active_prediction = GetPrediction(cl, 0);
 
         int prediction_offset = 1;
         for (int i = 0; i < cl->prediction_count; i += 1)
         {
-            Prediction *prediction = &cl->predictions[cl->sort_keys[i].index];
+            Prediction *prediction = GetPrediction(cl, i);
             String text = prediction->preview_text;
 
             Color color = GetThemeColor(prediction->color ? prediction->color : "command_line_option"_id);
@@ -470,7 +478,7 @@ DrawCommandLines()
     int cursor_at = cl->cursor;
     String text = MakeString(cl->count, cl->text); if (cl->prediction_selected_index != -1)
     {
-        text = cl->predictions[cl->prediction_selected_index].text;
+        text = GetPrediction(cl, cl->prediction_selected_index)->text;
         cursor_at = (int)text.size;
     }
 

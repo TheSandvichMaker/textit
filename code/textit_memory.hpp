@@ -4,30 +4,30 @@
 #define DEFAULT_ARENA_CAPACITY Gigabytes(8)
 
 function size_t
-GetAlignOffset(Arena *arena, size_t Align)
+GetAlignOffset(Arena *arena, size_t align)
 {
-    size_t Offset = (size_t)(arena->base + arena->used) & (Align - 1);
-    if (Offset)
+    size_t offset = (size_t)(arena->base + arena->used) & (align - 1);
+    if (offset)
     {
-        Offset = Align - Offset;
+        offset = align - offset;
     }
-    return Offset;
+    return offset;
 }
 
 function char *
-GetNextAllocationLocation(Arena *arena, size_t Align)
+GetNextAllocationLocation(Arena *arena, size_t align)
 {
-    size_t AlignOffset = GetAlignOffset(arena, Align);
-    char* Result = arena->base + arena->used + AlignOffset;
-    return Result;
+    size_t align_offset = GetAlignOffset(arena, align);
+    char* result = arena->base + arena->used + align_offset;
+    return result;
 }
 
 function size_t
-GetSizeRemaining(Arena *arena, size_t Align)
+GetSizeRemaining(Arena *arena, size_t align)
 {
-    size_t AlignOffset = GetAlignOffset(arena, Align);
-    size_t Result = arena->capacity - (arena->used + AlignOffset);
-    return Result;
+    size_t align_offset = GetAlignOffset(arena, align);
+    size_t result = arena->capacity - (arena->used + align_offset);
+    return result;
 }
 
 function void
@@ -50,10 +50,10 @@ Release(Arena *arena)
 }
 
 function void
-ResetTo(Arena *arena, char *Target)
+ResetTo(Arena *arena, char *target)
 {
-    Assert((Target >= arena->base) && (Target <= (arena->base + arena->used)));
-    arena->used = (Target - arena->base);
+    Assert((target >= arena->base) && (target <= (arena->base + arena->used)));
+    arena->used = (target - arena->base);
 }
 
 function void
@@ -65,19 +65,19 @@ SetCapacity(Arena *arena, size_t capacity)
 }
 
 function void
-InitWithMemory(Arena *arena, size_t MemorySize, void *Memory)
+InitWithMemory(Arena *arena, size_t memory_size, void *memory)
 {
     ZeroStruct(arena);
-    arena->capacity = MemorySize;
+    arena->capacity = memory_size;
     // NOTE: There's an assumption here that the memory passed in is valid, committed memory.
     //       If you want an Arena that exploits virtual memory to progressively commit, you
     //       shouldn't init it with any existing memory.
-    arena->committed = MemorySize;
-    arena->base = (char *)Memory;
+    arena->committed = memory_size;
+    arena->base = (char *)memory;
 }
 
 function void
-CheckArena(Arena* arena)
+CheckArena(Arena *arena)
 {
     Assert(arena->temp_count == 0);
 }
@@ -155,13 +155,13 @@ PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
     (Type *)BootstrapPushStruct_(sizeof(Type), alignof(Type), offsetof(Type, Member), \
                                  LOCATION_STRING("Bootstrap " #Type "::" #Member), ##__VA_ARGS__)
 function void *
-BootstrapPushStruct_(size_t Size, size_t Align, size_t arenaOffset, const char *Tag, size_t capacity = DEFAULT_ARENA_CAPACITY)
+BootstrapPushStruct_(size_t size, size_t align, size_t arena_offset, const char *tag, size_t capacity = DEFAULT_ARENA_CAPACITY)
 {
     Arena arena = {};
     SetCapacity(&arena, capacity);
-    void *State = PushSize_(&arena, Size, Align, true, Tag);
-    *(Arena *)((char *)State + arenaOffset) = arena;
-    return State;
+    void *state = PushSize_(&arena, size, align, true, tag);
+    *(Arena *)((char *)state + arena_offset) = arena;
+    return state;
 }
 
 function Arena *
@@ -213,25 +213,25 @@ BeginTemporaryMemory(Arena *arena)
 }
 
 function void
-EndTemporaryMemory(TemporaryMemory Temp)
+EndTemporaryMemory(TemporaryMemory temp)
 {
-    if (Temp.arena)
+    if (temp.arena)
     {
-        Assert(Temp.used <= Temp.arena->used);
-        Temp.arena->used = Temp.used;
-        --Temp.arena->temp_count;
+        Assert(temp.used <= temp.arena->used);
+        temp.arena->used = temp.used;
+        --temp.arena->temp_count;
     }
 }
 
 function void
-CommitTemporaryMemory(TemporaryMemory *Temp)
+CommitTemporaryMemory(TemporaryMemory *temp)
 {
-    Arena *arena = Temp->arena;
+    Arena *arena = temp->arena;
     if (arena)
     {
         Assert(arena->temp_count > 0);
         --arena->temp_count;
-        Temp->arena = NULL;
+        temp->arena = NULL;
     }
 }
 

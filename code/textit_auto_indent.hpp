@@ -9,7 +9,8 @@ enum_flags(uint8_t, IndentRule)
     IndentRule_ForceLeft     = 0x8,
     IndentRule_Additive      = 0x10,
 
-    IndentRule_AffectsIndent = 0x1|0x2|0x4|0x8|0x10,
+    IndentRule_RequiresReindent = IndentRule_PopIndent|IndentRule_ForceLeft,
+    IndentRule_AffectsIndent    = (IndentRule_Additive << 1) - 1,
 
     IndentRule_StatementEnd  = 0x20,
 };

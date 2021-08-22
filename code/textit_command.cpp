@@ -45,7 +45,9 @@ LoadDefaultBindings()
     BindCommand(command, PlatformInputCode_Down,   Modifier_Ctrl,  "MoveDown"_str);
     BindCommand(command, 'H',                      0,              "MoveLeft"_str);
     BindCommand(command, 'J',                      0,              "MoveDown"_str);
+    BindCommand(command, 'J',                      Modifier_Ctrl,  "NewCursorDown"_str);
     BindCommand(command, 'K',                      0,              "MoveUp"_str);
+    BindCommand(command, 'K',                      Modifier_Ctrl,  "NewCursorUp"_str);
     BindCommand(command, 'L',                      0,              "MoveRight"_str);
     BindCommand(command, 'W',                      0,              "MoveRightIdentifier"_str);
     BindCommand(command, 'B',                      0,              "MoveLeftIdentifier"_str);
@@ -60,10 +62,10 @@ LoadDefaultBindings()
 
     BindCommand(command, 'V',                      Modifier_Ctrl,  "SplitWindowVertical"_str);
     BindCommand(command, 'S',                      Modifier_Ctrl,  "SplitWindowHorizontal"_str);
-    BindCommand(command, 'H',                      Modifier_Ctrl,  "FocusWindowLeft"_str);
-    BindCommand(command, 'J',                      Modifier_Ctrl,  "FocusWindowDown"_str);
-    BindCommand(command, 'K',                      Modifier_Ctrl,  "FocusWindowUp"_str);
-    BindCommand(command, 'L',                      Modifier_Ctrl,  "FocusWindowRight"_str);
+    // BindCommand(command, 'H',                      Modifier_Ctrl,  "FocusWindowLeft"_str);
+    // BindCommand(command, 'J',                      Modifier_Ctrl,  "FocusWindowDown"_str);
+    // BindCommand(command, 'K',                      Modifier_Ctrl,  "FocusWindowUp"_str);
+    // BindCommand(command, 'L',                      Modifier_Ctrl,  "FocusWindowRight"_str);
     BindCommand(command, 'Q',                      Modifier_Ctrl,  "DestroyWindow"_str);
 
     BindCommand(command, 'O',                      Modifier_Ctrl,  "PreviousJump"_str);
@@ -93,7 +95,7 @@ LoadDefaultBindings()
     BindCommand(command, PlatformInputCode_F1,     0,              "ToggleVisualizeNewlines"_str);
     BindCommand(command, PlatformInputCode_Comma,  0,              "EncloseParameter"_str);
 
-    BindCommand(command, PlatformInputCode_Escape, 0,              "ResetSelection"_str);
+    BindCommand(command, PlatformInputCode_Escape, 0,              "ResetCursors"_str);
 
     BindCommand(command, 'Y',                      0,              "Copy"_str);
     BindCommand(command, 'P',                      Modifier_Shift, "PasteAfter"_str);

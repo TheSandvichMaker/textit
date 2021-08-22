@@ -3,8 +3,8 @@
 
 enum Direction
 {
-    Direction_Forward,
-    Direction_Backward,
+    Direction_Forward  = 1,
+    Direction_Backward = -1,
 };
 
 static constexpr inline bool

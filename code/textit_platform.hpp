@@ -414,11 +414,17 @@ struct PlatformEvent
 
     int pos_x, pos_y;
 
+    uint8_t text_size;
     uint8_t text_storage[4];
-    String text;
 
     bool consumed_;
 };
+
+function String
+GetText(PlatformEvent *event)
+{
+    return MakeString(event->text_size, event->text_storage);
+}
 
 enum PlatformErrorType
 {
