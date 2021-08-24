@@ -121,8 +121,18 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     V2i metrics = editor->font_metrics;
 
-    while (IsInBufferRange(buffer, pos) && IsValid(&line_it))
+    while (IsInBufferRange(buffer, pos))
     {
+        if (pos >= line_it.range.end)
+        {
+            Next(&line_it);
+        }
+
+        if (!IsValid(&line_it))
+        {
+            break;
+        }
+
         actual_line_height += 1;
 
         bool empty_line = (ReadBufferByte(buffer, line_it.range.start) == '\n');
@@ -445,11 +455,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         }
 
         row += 1;
-
-        if (pos >= line_it.range.end)
-        {
-            Next(&line_it);
-        }
     }
     view->visible_range.end = pos;
 

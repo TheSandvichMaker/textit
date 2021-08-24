@@ -16,17 +16,27 @@ struct LineIndexLocator
     int64_t        line;
 };
 
+template <bool by_line>
 function void
-LocateLineIndexNodeByPos(LineIndexNode *node, int64_t pos, LineIndexLocator *locator, int64_t offset = 0, int64_t line_offset = 0)
+LocateLineIndexNode(LineIndexNode *node, int64_t target, LineIndexLocator *locator, int64_t offset = 0, int64_t line_offset = 0)
 {
     Assert(node->kind != LineIndexNode_Record);
 
     int next_index = 0;
-    for (; next_index < node->entry_count; next_index += 1)
+    for (; next_index < node->entry_count - 1; next_index += 1)
     {
         LineIndexNode *child = node->children[next_index];
 
-        int64_t delta = (pos - offset) - child->span;
+        int64_t delta;
+        if constexpr(by_line)
+        {
+            delta = target - line_offset - child->line_span;
+        }
+        else
+        {
+            delta = target - offset - child->span;
+        }
+
         if (delta < 0)
         {
             break;
@@ -47,79 +57,51 @@ LocateLineIndexNodeByPos(LineIndexNode *node, int64_t pos, LineIndexLocator *loc
         return;
     }
 
-    LocateLineIndexNodeByPos(node->children[next_index], pos, locator, offset, line_offset);
+    LocateLineIndexNode<by_line>(child, target, locator, offset, line_offset);
 }
 
 function void
-LocateLineIndexNodeByLine(LineIndexNode *node, int64_t line, LineIndexLocator *locator, int64_t offset = 0, int64_t line_offset = 0)
+LocateLineIndexNodeByPos(LineIndexNode *node, int64_t pos, LineIndexLocator *locator)
 {
-    Assert(node->kind != LineIndexNode_Record);
+    LocateLineIndexNode<false>(node, pos, locator);
+}
 
-    int next_index = 0;
-    for (; next_index < node->entry_count; next_index += 1)
-    {
-        LineIndexNode *child = node->children[next_index];
+function void
+LocateLineIndexNodeByLine(LineIndexNode *node, int64_t line, LineIndexLocator *locator)
+{
+    LocateLineIndexNode<true>(node, line, locator);
+}
 
-        int64_t delta = (line - line_offset) - child->line_span;
-        if (delta < 0)
-        {
-            break;
-        }
+template <bool by_line>
+function void
+FindLineInfo(LineIndex *index, int64_t target, LineInfo *out_info)
+{
+    LineIndexLocator locator;
+    LocateLineIndexNode<by_line>(index->root, target, &locator);
 
-        offset      += child->span;
-        line_offset += child->line_span;
-    }
+    LineIndexNode *node = locator.parent->children[locator.child_index];
+    Assert(node->kind == LineIndexNode_Record);
 
-    LineIndexNode *child = node->children[next_index];
-    if (child->kind == LineIndexNode_Record)
-    {
-        ZeroStruct(locator);
-        locator->parent      = node;
-        locator->child_index = next_index;
-        locator->pos         = offset;
-        locator->line        = line_offset;
-        return;
-    }
+    LineData *data = &node->data;
 
-    LocateLineIndexNodeByLine(node->children[next_index], line, locator, offset, line_offset);
+    ZeroStruct(out_info);
+    out_info->line        = locator.line;
+    out_info->range       = MakeRangeStartLength(locator.pos, node->span);
+    out_info->newline_pos = data->newline_pos;
+    out_info->token_count = data->token_count;
+    out_info->token_index = data->token_index;
 }
 
 function void
 FindLineInfoByPos(LineIndex *index, int64_t pos, LineInfo *out_info)
 {
-    LineIndexLocator locator;
-    LocateLineIndexNodeByPos(index->root, pos, &locator);
-
-    LineIndexNode *node = locator.parent->children[locator.child_index];
-
-    Assert(node->kind == LineIndexNode_Record);
-
-    LineData *data = &node->data;
-
-    ZeroStruct(out_info);
-    out_info->line        = locator.line;
-    out_info->range       = MakeRangeStartLength(locator.pos, node->span);
-    out_info->token_count = data->token_count;
-    out_info->token_index = data->token_index;
+    FindLineInfo<false>(index, pos, out_info);
 }
 
 function void
 FindLineInfoByLine(LineIndex *index, int64_t line, LineInfo *out_info)
 {
-    LineIndexLocator locator;
-    LocateLineIndexNodeByLine(index->root, line, &locator);
-
-    LineIndexNode *node = locator.parent->children[locator.child_index];
-
-    Assert(node->kind == LineIndexNode_Record);
-
-    LineData *data = &node->data;
-
-    ZeroStruct(out_info);
-    out_info->line        = locator.line;
-    out_info->range       = MakeRangeStartLength(locator.pos, node->span);
-    out_info->token_count = data->token_count;
-    out_info->token_index = data->token_index;
+    FindLineInfo<true>(index, line, out_info);
 }
 
 #if 0
@@ -139,6 +121,38 @@ RemoveEntry(LineIndexNode *node, int entry_index)
     return result;
 }
 #endif
+
+function LineIndexNode *
+SplitNode(Arena *arena, LineIndexNode *node)
+{
+    int8_t  left_count = LINE_INDEX_ORDER;
+    int8_t right_count = LINE_INDEX_ORDER + 1;
+
+    LineIndexNode *l1 = node;
+    LineIndexNode *l2 = AllocateLineIndexNode(arena, l1->kind);
+
+    l1->entry_count = left_count;
+    l2->entry_count = right_count;
+
+    l1->span      = 0;
+    l1->line_span = 0;
+    for (int i = 0; i < left_count; i += 1)
+    {
+        l1->span      += l1->children[i]->span;
+        l1->line_span += l1->children[i]->line_span;
+    }
+
+    l2->span      = 0;
+    l2->line_span = 0;
+    for (int i = 0; i < right_count; i += 1)
+    {
+        l2->children[i] = l1->children[left_count + i];
+        l2->span      += l2->children[i]->span;
+        l2->line_span += l2->children[i]->line_span;
+    }
+
+    return l2;
+}
 
 function LineIndexNode *
 InsertEntry(Arena          *arena,
@@ -172,41 +186,13 @@ InsertEntry(Arena          *arena,
             node->children[i] = node->children[i - 1];
         }
 
-        // insert
-
         node->children[insert_index] = record;
         node->entry_count += 1;
 
         if (node->entry_count > 2*LINE_INDEX_ORDER)
         {
-            int8_t  left_count = LINE_INDEX_ORDER;
-            int8_t right_count = LINE_INDEX_ORDER + 1;
-
-            LineIndexNode *l1 = node;
-            LineIndexNode *l2 = AllocateLineIndexNode(arena, l1->kind);
-
-            l1->entry_count = left_count;
-            l2->entry_count = right_count;
-
-            l1->span      = 0;
-            l1->line_span = 0;
-            for (int i = 0; i < left_count; i += 1)
-            {
-                l1->span      += l1->children[i]->span;
-                l1->line_span += l1->children[i]->line_span;
-            }
-
-            l2->span      = 0;
-            l2->line_span = 0;
-            for (int i = 0; i < right_count; i += 1)
-            {
-                l2->children[i] = l1->children[left_count + i];
-                l2->span      += l2->children[i]->span;
-                l2->line_span += l2->children[i]->line_span;
-            }
-
-            result   = l2;
-            l1->next = l2;
+            result = SplitNode(arena, node);
+            node->next = result;
         }
     }
     else
@@ -226,47 +212,20 @@ InsertEntry(Arena          *arena,
         LineIndexNode *child = node->children[insert_index];
         if (LineIndexNode *split = InsertEntry(arena, child, pos, record, offset))
         {
-            // shift
-
             for (int i = node->entry_count; i > insert_index; i -= 1)
             {
                 node->children[i] = node->children[i - 1];
             }
-
-            // insert
 
             node->children[insert_index + 1] = split;
             node->entry_count += 1;
 
             if (node->entry_count > 2*LINE_INDEX_ORDER)
             {
-                int8_t  left_count = LINE_INDEX_ORDER;
-                int8_t right_count = LINE_INDEX_ORDER + 1;
-
-                LineIndexNode *l1 = node;
-                LineIndexNode *l2 = AllocateLineIndexNode(arena, l1->kind);
-
-                l1->entry_count = left_count;
-                l2->entry_count = right_count;
-
-                l1->span      = 0;
-                l1->line_span = 0;
-                for (int i = 0; i < left_count; i += 1)
-                {
-                    l1->span      += l1->children[i]->span;
-                    l1->line_span += l1->children[i]->line_span;
-                }
-
-                l2->span      = 0;
-                l2->line_span = 0;
-                for (int i = 0; i < right_count; i += 1)
-                {
-                    l2->children[i] = l1->children[left_count + i];
-                    l2->span      += l2->children[i]->span;
-                    l2->line_span += l2->children[i]->line_span;
-                }
-
-                result = l2;
+                result = SplitNode(arena, node);
+                node->next = result; // NOTE: I always have room left over because this is a strange
+                                     // B+ tree of nonsense, so I can link all levels together for free.
+                                     // Might as well?
             }
         }
     }
@@ -333,6 +292,7 @@ IterateLineIndexFromLine(LineIndex *index, int64_t line)
     LineIndexIterator result = {};
     result.leaf   = locator.parent;
     result.record = locator.parent->children[locator.child_index];
+    result.index  = locator.child_index;
     result.range  = MakeRangeStartLength(locator.pos, result.record->span);
     result.line   = locator.line;
 
@@ -348,14 +308,14 @@ IsValid(LineIndexIterator *it)
 function void
 Next(LineIndexIterator *it)
 {
-    it->range.start += it->record->span;
+    it->range.start = it->range.end;
 
+    it->index += 1;
     if (it->index >= it->leaf->entry_count)
     {
         it->leaf  = it->leaf->next;
         it->index = 0;
     }
-    it->index += 1;
     it->record = it->leaf->children[it->index];
 
     it->range.end = it->range.start + it->record->span;

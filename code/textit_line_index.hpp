@@ -14,6 +14,7 @@ struct LineInfo
 {
     int64_t   line;
     Range     range;
+    int64_t   newline_pos;
     LineFlags flags;
     int16_t   token_count;
     uint32_t  token_index;

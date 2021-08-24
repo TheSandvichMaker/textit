@@ -196,6 +196,8 @@ ParseWhitespace(Tokenizer *tok)
                 // finish old line data
                 //
 
+                int64_t newline_pos = tok->at - tok->start;
+
                 if ((Peek(tok, -1) == '\r') && (Peek(tok, 0) == '\n'))
                 {
                     Advance(tok);
@@ -205,6 +207,7 @@ ParseWhitespace(Tokenizer *tok)
                 Range line_range = MakeRange(tok->line_start, currently_at);
 
                 LineData *line_data = InsertLine(tok->line_index, line_range);
+                line_data->newline_pos = newline_pos;
 
                 line_data->token_index = tok->line_start_token_count;
                 line_data->token_count = (int16_t)(tok->tokens->count - line_data->token_index);
@@ -260,7 +263,7 @@ EndToken(Tokenizer *tok, Token *t)
     {
         case Token_LineComment:
         {
-            tok->in_line_comment = true;
+            tok->in_line_comment = true);
         } break;
 
         case Token_OpenBlockComment:
@@ -286,7 +289,9 @@ EndToken(Tokenizer *tok, Token *t)
         t->flags |= TokenFlag_IsPreprocessor;
     }
 
-    if (tok->in_line_comment || tok->block_comment_count > 0)
+    if (tok->in_line_comment         || 
+        tok->block_comment_count > 0 || 
+        t->kind == Token_CloseBlockComment)
     {
         t->flags |= TokenFlag_IsComment;
     }
@@ -322,6 +327,7 @@ InitializeTokenizer(Tokenizer *tok, Buffer *buffer, Range range, VirtualArray<To
     tok->start      = buffer->text + range.start;
     tok->end        = buffer->text + range.end;
     tok->at         = tok->start;
+    tok->new_line   = true;
 
     tok->tokens->Clear();
     tok->tokens->EnsureSpace(1); // what the fuck

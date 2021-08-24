@@ -419,7 +419,7 @@ CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
     FindLineInfoByLine(&buffer->line_index, line, &info);
 
     result.line       = info.line;
-    result.col        = Clamp(col, 0, RangeSize(info.range));
+    result.col        = Clamp(col, 0, info.newline_pos - info.range.start);
     result.pos        = info.range.start + result.col;
     result.line_range = info.range;
 
