@@ -216,6 +216,9 @@ struct EditorState
     CursorHashEntry *first_free_cursor_hash_entry;
     CursorHashEntry *cursor_hash[CURSOR_HASH_SIZE];
 
+    LineData *first_free_line_data;
+    LineIndexNode *first_free_line_index_node;
+
     Window root_window;
     Window *active_window;
     Window *first_free_window;

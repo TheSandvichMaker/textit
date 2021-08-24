@@ -1,10 +1,3 @@
-function LineData *
-AllocateLineData(void)
-{
-    LineData *result = PushStruct(&editor->transient_arena, LineData);
-    return result;
-}
-
 function int64_t
 CharsLeft(Tokenizer *tok)
 {
@@ -203,29 +196,27 @@ ParseWhitespace(Tokenizer *tok)
                 // finish old line data
                 //
 
-                LineData *line_data = &(*tok->line_data)[tok->at_line];
-                line_data->newline_pos = tok->at - tok->start - 1;
-
                 if ((Peek(tok, -1) == '\r') && (Peek(tok, 0) == '\n'))
                 {
                     Advance(tok);
                 }
 
-                line_data->range.end   = tok->at - tok->start;
+                int64_t currently_at = tok->at - tok->start;
+                Range line_range = MakeRange(tok->line_start, currently_at);
+
+                LineData *line_data = InsertLine(tok->line_index, line_range);
+
+                line_data->token_index = tok->line_start_token_count;
                 line_data->token_count = (int16_t)(tok->tokens->count - line_data->token_index);
                 
                 tok->at_line += 1;
-                Assert(tok->at_line < (int64_t)tok->line_data->capacity);
 
                 //
                 // new line data
                 //
 
-                LineData *new_line = tok->line_data->Push();
-                ZeroStruct(new_line);
-
-                new_line->range.start = tok->at - tok->start;
-                new_line->token_index = (int32_t)tok->tokens->count;
+                tok->line_start = line_range.end;
+                tok->line_start_token_count = tok->tokens->count;
             }
         }
         else
@@ -318,29 +309,22 @@ TokenizeBasic(Tokenizer *tok)
         ParseStandardToken(tok, &t);
         EndToken(tok, &t);
     }
-
-    LineData *end_line_data = &(*tok->line_data)[tok->at_line];
-    end_line_data->range.end = tok->end - tok->start;
 }
 
 function void
-InitializeTokenizer(Tokenizer *tok, Buffer *buffer, Range range, VirtualArray<Token> *tokens, VirtualArray<LineData> *line_data)
+InitializeTokenizer(Tokenizer *tok, Buffer *buffer, Range range, VirtualArray<Token> *tokens)
 {
     ZeroStruct(tok);
     tok->prev_token = &tok->null_token;
     tok->tokens     = tokens;
-    tok->line_data  = line_data;
+    tok->line_index = &buffer->line_index;
     tok->language   = buffer->language;
     tok->start      = buffer->text + range.start;
     tok->end        = buffer->text + range.end;
     tok->at         = tok->start;
 
-    tok->line_data->Clear();
     tok->tokens->Clear();
     tok->tokens->EnsureSpace(1); // what the fuck
-
-    LineData *first_line_data = tok->line_data->Push(); // TODO: Jank alert?
-    ZeroStruct(first_line_data);
 }
 
 function void
@@ -351,9 +335,21 @@ TokenizeBuffer(Buffer *buffer)
     LanguageSpec *lang = buffer->language;
 
     Tokenizer tok;
-    InitializeTokenizer(&tok, buffer, BufferRange(buffer), &buffer->tokens, &buffer->line_data);
+    InitializeTokenizer(&tok, buffer, BufferRange(buffer), &buffer->tokens);
 
     lang->Tokenize(&tok);
+
+    Assert(tok.at == tok.end);
+
+    int64_t currently_at = tok.at - tok.start;
+    Range line_range = MakeRange(tok.line_start, currently_at);
+
+    LineData *final_line_data = InsertLine(tok.line_index, line_range);
+
+    final_line_data->token_index = tok.line_start_token_count;
+    final_line_data->token_count = (int16_t)(tok.tokens->count - final_line_data->token_index);
+    
+    tok.at_line += 1;
 
     PlatformHighResTime end = platform->GetTime();
     double time = platform->SecondsElapsed(start, end);
@@ -386,12 +382,8 @@ RetokenizeRange(Buffer *buffer, int64_t pos, int64_t delta)
     tokens.SetCapacity(4'000'000);
     defer { tokens.Release(); };
 
-    VirtualArray<LineData> line_data = {};
-    line_data.SetCapacity(1'000'000);
-    defer { line_data.Release(); };
-
     Tokenizer tok;
-    InitializeTokenizer(&tok, buffer, MakeRange(min_pos, max_pos), &tokens, &line_data);
+    InitializeTokenizer(&tok, buffer, MakeRange(min_pos, max_pos), &tokens);
 
     lang->Tokenize(&tok);
 

@@ -339,76 +339,39 @@ EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
     return result;
 }
 
-function LineData *
-GetLineData(Buffer *buffer, int64_t line)
-{
-    LineData *result = &buffer->null_line_data;
-    if (LineIsInBuffer(buffer, line))
-    {
-        result = &buffer->line_data[line];
-    }
-    return result;
-}
-
 function Range
 GetLineRange(Buffer *buffer, int64_t line)
 {
-    Range range = {};
-    if (LineIsInBuffer(buffer, line))
-    {
-        range = buffer->line_data[line].range;
-    }
-    return range;
+    LineInfo info;
+    FindLineInfoByLine(&buffer->line_index, line, &info);
+    return info.range;
 }
 
 function Range
 GetInnerLineRange(Buffer *buffer, int64_t line)
 {
-    Range range = {};
-    if (LineIsInBuffer(buffer, line))
-    {
-        range = MakeRange(buffer->line_data[line].range.start,
-                          buffer->line_data[line].newline_pos);
-    }
-    return range;
+    LineInfo info;
+    FindLineInfoByLine(&buffer->line_index, line, &info);
+
+    Range result = info.range;
+    if (IsVerticalWhitespaceAscii(ReadBufferByte(buffer, result.end - 1))) result.end -= 1;
+    if (IsVerticalWhitespaceAscii(ReadBufferByte(buffer, result.end - 1))) result.end -= 1;
+
+    return result;
 }
 
 function void
 GetLineRanges(Buffer *buffer, int64_t line, Range *inner, Range *outer)
 {
-    if (LineIsInBuffer(buffer, line))
-    {
-        LineData *data = &buffer->line_data[line];
-        Token *t = &buffer->tokens[data->token_index];
-        *inner = MakeRange(t->pos, // FIXME: WHACK!
-                           data->newline_pos);
-        *outer = data->range;
-    }
-}
+    LineInfo info;
+    FindLineInfoByLine(&buffer->line_index, line, &info);
 
-function BufferLocation
-CalculateBufferLocationFromPosLinearSearch(Buffer *buffer, int64_t pos)
-{
-    pos = ClampToBufferRange(buffer, pos);
+    *outer = info.range;
 
-    BufferLocation result = {};
-
-    for (int64_t line = 0; line < buffer->line_data.count; line += 1)
-    {
-        LineData *data = &buffer->line_data[line];
-        if ((pos >= data->range.start) &&
-            (pos <  data->range.end))
-        {
-            result.line = line;
-            result.pos  = Min(pos, data->newline_pos);
-            result.col  = result.pos - data->range.start;
-            result.line_range = data->range;
-
-            break;
-        }
-    }
-
-    return result;
+    *inner = info.range;
+    inner->start = FindFirstNonHorzWhitespace(buffer, inner->start);
+    if (IsVerticalWhitespaceAscii(ReadBufferByte(buffer, inner->end - 1))) inner->end -= 1;
+    if (IsVerticalWhitespaceAscii(ReadBufferByte(buffer, inner->end - 1))) inner->end -= 1;
 }
 
 function BufferLocation
@@ -418,73 +381,13 @@ CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos)
 
     BufferLocation result = {};
 
-    int64_t lo = 0;
-    int64_t hi = (int64_t)buffer->line_data.count - 1;
-    while (lo <= hi)
-    {
-        int64_t line = (lo + hi) / 2;
+    LineInfo info;
+    FindLineInfoByPos(&buffer->line_index, pos, &info);
 
-        LineData *data = &buffer->line_data[line];
-        if (pos < data->range.start)
-        {
-            hi = line - 1;
-        }
-        else if (pos >= data->range.end)
-        {
-            lo = line + 1;
-        }
-        else
-        {
-            result.line = line;
-            result.pos  = Min(pos, data->newline_pos);
-            result.col  = result.pos - data->range.start;
-            result.line_range = data->range;
-
-            break;
-        }
-    }
-
-    return result;
-}
-
-function BufferLocation
-CalculateBufferLocationFromPosO1Search(Buffer *buffer, int64_t pos)
-{
-    pos = ClampToBufferRange(buffer, pos);
-
-    BufferLocation result = {};
-
-    int64_t line_count = buffer->line_data.count;
-    int64_t buff_count = buffer->count;
-    int64_t line = pos*line_count / buff_count;
-    int64_t max_delta = line_count;
-    for (;;)
-    {
-        LineData *data = &buffer->line_data[line];
-        int64_t start = data->range.start;
-        int64_t end   = data->range.end;
-        if (pos < start)
-        {
-            int64_t delta = Max(1, Min(max_delta, (start - pos)*line_count / buff_count));
-            line -= delta;
-            max_delta = delta - 1;
-        }
-        else if (pos >= end)
-        {
-            int64_t delta = Max(1, Min(max_delta, (pos - end)*line_count / buff_count));
-            line += delta;
-            max_delta = delta - 1;
-        }
-        else
-        {
-            result.line = line;
-            result.pos  = Min(pos, data->newline_pos);
-            result.col  = result.pos - data->range.start;
-            result.line_range = data->range;
-
-            break;
-        }
-    }
+    result.line       = info.line;
+    result.pos        = pos;
+    result.col        = pos - info.range.start;
+    result.line_range = info.range;
 
     return result;
 }
@@ -511,6 +414,18 @@ function BufferLocation
 CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
 {
     BufferLocation result = {};
+
+    LineInfo info;
+    FindLineInfoByLine(&buffer->line_index, line, &info);
+
+    result.line       = info.line;
+    result.col        = Clamp(col, 0, RangeSize(info.range));
+    result.pos        = info.range.start + result.col;
+    result.line_range = info.range;
+
+    return result;
+
+#if 0
     if ((line >= 0) &&
         (line < buffer->line_data.count))
     {
@@ -531,6 +446,7 @@ CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
     }
 
     return result;
+#endif
 }
 
 function BufferLocation
@@ -835,3 +751,90 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
     return result;
 }
 
+function TokenIterator
+MakeTokenIterator(Buffer *buffer, int index, int count = 0)
+{
+    int max_count = buffer->tokens.count - index;
+    if (count <= 0 || count > max_count) count = max_count;
+
+    TokenIterator result = {};
+    result.tokens = &buffer->tokens[index];
+    result.tokens_end = &result.tokens[count];
+    result.token = result.tokens;
+    return result;
+}
+
+function uint32_t
+FindTokenIndexForPos(Buffer *buffer, int64_t pos)
+{
+    Assert(IsInBufferRange(buffer, pos));
+
+    uint32_t result = 0;
+
+    if (pos != 0)
+    {
+        int64_t token_count = buffer->tokens.count;
+        int64_t lo = 0;
+        int64_t hi = token_count - 1;
+        while (lo <= hi)
+        {
+            int64_t index = (lo + hi) / 2;
+            Token *t = &buffer->tokens[index];
+            if (pos < t->pos)
+            {
+                hi = index - 1;
+            }
+            else if (pos >= t->pos + t->length)
+            {
+                lo = index + 1;
+            }
+            else
+            {
+                result = (uint32_t)index;
+                break;
+            }
+        }
+
+        if (lo > hi)
+        {
+            result = (uint32_t)lo;
+        }
+    }
+
+    return result;
+}
+
+function Token *
+GetTokenAt(Buffer *buffer, int64_t pos)
+{
+    uint32_t index = FindTokenIndexForPos(buffer, pos);
+    Token *token = &buffer->tokens[index];
+    return token;
+}
+
+function TokenIterator
+IterateTokens(Buffer *buffer, int64_t pos = 0)
+{
+    pos = ClampToBufferRange(buffer, pos);
+
+    TokenIterator result = {};
+    result.tokens     = buffer->tokens.data;
+    result.tokens_end = result.tokens + buffer->tokens.count;
+    result.token      = &buffer->tokens[FindTokenIndexForPos(buffer, pos)];
+
+    return result;
+}
+
+function TokenIterator
+IterateLineTokens(Buffer *buffer, int64_t line)
+{
+    LineInfo info;
+    FindLineInfoByLine(&buffer->line_index, line, &info);
+
+    TokenIterator result = {};
+    result.tokens     = &buffer->tokens[info.token_index];
+    result.tokens_end = result.tokens + info.token_count;
+    result.token      = result.tokens;
+
+    return result;
+}

@@ -205,8 +205,9 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->tags                 = PushStruct(&result->arena, Tags);
     DllInit(&result->tags->sentinel);
 
+    result->line_index.arena = &result->arena; // I don't like this
+
     result->tokens.SetCapacity(32'000'000);
-    result->line_data.SetCapacity(8'000'000);
 
     AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
 
@@ -325,7 +326,6 @@ DestroyBuffer(BufferID id)
 
     editor->buffers[id.index] = nullptr;
 
-    buffer->line_data.Release();
     buffer->tokens.Release();
     Release(&buffer->arena);
 }
@@ -1123,7 +1123,7 @@ AppUpdateAndRender(Platform *platform_)
     }
 
     {
-        View *view = GetActiveView();
+        View   *view   = GetActiveView();
         Buffer *buffer = GetBuffer(view);
 
         if (view->next_buffer)

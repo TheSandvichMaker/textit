@@ -134,6 +134,7 @@ enum RenderCommandKind : uint16_t
     RenderCommand_Rect,
     RenderCommand_Unicode,
     RenderCommand_Bitmap,
+    RenderCommand_Line,
 };
 
 union RenderSortKey

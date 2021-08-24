@@ -85,7 +85,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     V2i top_left = bounds.min;
 
-    int64_t buffer_line_count = buffer->line_data.count;
+    int64_t buffer_line_count = GetLineCount(buffer);
 
     int64_t min_line = view->scroll_at;
     int64_t max_line = view->scroll_at + GetHeight(bounds);
@@ -114,43 +114,19 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     int64_t line = min_line;
 
-    LineData null_data = {};
-    LineData *data = &null_data;
-    if (!buffer->line_data.Empty())
-    {
-        data = &buffer->line_data[min_line];
-    }
+    LineIndexIterator line_it = IterateLineIndexFromLine(&buffer->line_index, min_line);
 
-    int64_t pos = data->range.start;
+    int64_t pos = line_it.range.start;
     view->visible_range.start = pos;
 
     V2i metrics = editor->font_metrics;
 
-    while (IsInBufferRange(buffer, pos))
+    while (IsInBufferRange(buffer, pos) && IsValid(&line_it))
     {
-        if ((line + 1 == max_line) &&
-            RangeSize(data->range) == 0)
-        {
-            break;
-        }
-
-        if (pos >= data->range.end)
-        {
-            line += 1;
-            if (line < max_line)
-            {
-                data = &buffer->line_data[line];
-            }
-            else
-            {
-                break;
-            }
-        }
-
         actual_line_height += 1;
 
-        bool empty_line = data->newline_pos == data->range.start;
-        int64_t indentation_end = FindFirstNonHorzWhitespace(buffer, data->range.start);
+        bool empty_line = (ReadBufferByte(buffer, line_it.range.start) == '\n');
+        int64_t indentation_end = FindFirstNonHorzWhitespace(buffer, line_it.range.start);
 
         Color base_background = text_background;
 
@@ -162,7 +138,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                  cursor;
                  cursor = cursor->next)
             {
-                if (cursor->pos >= data->range.start && cursor->pos < data->range.end)
+                if (cursor->pos >= line_it.range.start && cursor->pos < line_it.range.end)
                 {
                     contains_cursor = true;
                 }
@@ -176,7 +152,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, top_left.y + row), MakeV2i(bounds.max.x, top_left.y + row + 1)), base_background);
         PushLayer(Layer_ViewForeground);
 
-        Token *token = &buffer->tokens[data->token_index];
+        Token *token = &buffer->tokens[line_it.record->data.token_index];
 
         int64_t col = 0;
         int64_t line_number = line + 1;
@@ -469,6 +445,11 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         }
 
         row += 1;
+
+        if (pos >= line_it.range.end)
+        {
+            Next(&line_it);
+        }
     }
     view->visible_range.end = pos;
 
@@ -525,7 +506,7 @@ DrawView(View *view, bool is_active_window)
 
     int64_t actual_line_height = DrawTextArea(view, text_bounds, is_active_window);
     int64_t line = loc.line + 1;
-    int64_t line_count = Max(1, (int64_t)buffer->line_data.count);
+    int64_t line_count = Max(1, GetLineCount(buffer));
     int64_t line_percentage = 100*line / line_count;
 
     String leaf;
@@ -546,7 +527,7 @@ DrawView(View *view, bool is_active_window)
 
     if (core_config->show_scrollbar)
     {
-        int64_t scan_line = Clamp(view->scroll_at, 0, buffer->line_data.count);
+        int64_t scan_line = Clamp(view->scroll_at, 0, GetLineCount(buffer));
         int64_t bounds_height = GetHeight(bounds) - 1;
         int64_t scrollbar_size = Max(1, bounds_height*bounds_height / line_count);
         int64_t scrollbar_offset = Min(bounds_height - scrollbar_size, scan_line*bounds_height / line_count);
@@ -574,3 +555,25 @@ DrawView(View *view, bool is_active_window)
     return actual_line_height;
 }
 
+function void
+DrawLineIndex(LineIndex *index)
+{
+    uint32_t queue_at  = 0;
+    uint32_t queue_top = 0;
+    LineIndexNode *queue[128];
+
+    queue[queue_top++ % 128] = index->root;
+
+    for (;;)
+    {
+        LineIndexNode *node = queue[queue_at++ % 128];
+        
+        if (node->kind == LineIndexNode_Internal)
+        {
+            for (int i = 0; i < node->entry_count; i += 1)
+            {
+                queue[queue_top++ % 128] = node->children[i];
+            }
+        }
+    }
+}

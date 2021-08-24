@@ -307,6 +307,50 @@ BlitCharMask(Bitmap *dest, Font *font, V2i p, Glyph glyph, Color foreground, Col
     }
 }
 
+function void
+RenderLine(Bitmap *bitmap, V2i start, V2i end, Color color)
+{
+    int64_t x0 = start.x;
+    int64_t y0 = start.y;
+    int64_t x1 = end.x;
+    int64_t y1 = end.y;
+
+    int64_t dx =  Abs(x1 - x0);
+    int64_t dy = -Abs(y1 - y0);
+    int64_t err = dx + dy;
+
+    int64_t xi = (x1 > x0 ? 1 : -1);
+    int64_t yi = (y1 > y0 ? 1 : -1);
+
+    int64_t x = x0;
+    int64_t y = y0;
+
+    for (;;)
+    {
+        V2i p = MakeV2i(x, y);
+        bitmap->data[y*bitmap->pitch + x] = color;
+
+        if (x == x1 && y == y1)
+        {
+            break;
+        }
+
+        int64_t err2 = 2*err;
+
+        if (err2 >= dy)
+        {
+            err += dy;
+            x += xi;
+        }
+
+        if (err2 <= dx)
+        {
+            err += dx;
+            y += yi;
+        }
+    }
+}
+
 function RenderCommand *
 PushRenderCommand(RenderCommandKind kind)
 {
@@ -474,6 +518,16 @@ PushBitmap(Bitmap *bitmap, V2i p)
     int64_t snapped_h = (bitmap->h + editor->font_metrics.y - 1) / editor->font_metrics.y;
 
     HashRenderCommand(command, MakeRect2iMinDim(snapped_x, snapped_y, snapped_w, snapped_h));
+}
+
+function void
+PushLine(V2i start, V2i end, Color color)
+{
+    RenderCommand *command = PushRenderCommand(RenderCommand_Line);
+    command->rect.min = start;
+    command->rect.max = end;
+    command->foreground = color;
+    HashRenderCommand(command, command->rect);
 }
 
 function uint16_t
@@ -764,6 +818,21 @@ RenderCommandsToBitmap(void)
                     rect.max -= clip_rect->rect.min;
 
                     BlitBitmap(&target, command->bitmap, p);
+                }
+            } break;
+
+            case RenderCommand_Line:
+            {
+                Rect2i rect = command->rect;
+
+                if (RectanglesOverlap(clip_rect->rect, rect))
+                {
+                    rect.min -= clip_rect->rect.min;
+                    rect.max -= clip_rect->rect.min;
+                    rect.min *= metrics;
+                    rect.max *= metrics;
+
+                    RenderLine(&target, rect.min, rect.max, command->foreground);
                 }
             } break;
         }

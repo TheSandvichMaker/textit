@@ -15,8 +15,8 @@ struct Tokenizer
     Token null_token;
     Token *prev_token;
 
-    VirtualArray<Token>    *tokens;
-    VirtualArray<LineData> *line_data;
+    LineIndex *line_index;
+    VirtualArray<Token> *tokens;
 
     LanguageSpec *language;
 
@@ -28,6 +28,9 @@ struct Tokenizer
     bool in_preprocessor;
     bool allow_nested_block_comments;
     int block_comment_count;
+
+    int64_t  line_start;
+    uint32_t line_start_token_count;
 
     int64_t at_line;
     bool new_line;

@@ -56,10 +56,11 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
 
     IndentRules *rules = buffer->indent_rules;
 
-    LineData *line_data = GetLineData(buffer, line);
+    LineInfo info;
+    FindLineInfoByLine(&buffer->line_index, line, &info);
 
-    int64_t line_start           = line_data->range.start;
-    int64_t line_end             = line_data->range.end;
+    int64_t line_start           = info.range.start;
+    int64_t line_end             = info.range.end;
     int64_t first_non_whitespace = FindFirstNonHorzWhitespace(buffer, line_start);
 
     TokenIterator it = IterateTokens(buffer, first_non_whitespace);

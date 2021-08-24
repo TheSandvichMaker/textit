@@ -89,15 +89,12 @@ struct Buffer : TextStorage
     struct IndentRules  *indent_rules;
     struct Tags         *tags;
 
-    LineData null_line_data;
-
+    LineIndex line_index;
     VirtualArray<Token> tokens;
-    VirtualArray<LineData> line_data;
 };
 
 function Buffer *GetBuffer(BufferID id);
 function Range GetLineRange(Buffer *buffer, int64_t line);
-function LineData *GetLineData(Buffer *buffer, int64_t line);
 
 function bool
 IsInBufferRange(Buffer *buffer, int64_t pos)
@@ -109,7 +106,7 @@ IsInBufferRange(Buffer *buffer, int64_t pos)
 function bool
 LineIsInBuffer(Buffer *buffer, int64_t line)
 {
-    return ((line >= 0) && (line < buffer->line_data.count));
+    return ((line >= 0) && (line < GetLineCount(&buffer->line_index)));
 }
 
 function int64_t
@@ -126,91 +123,10 @@ BufferRange(Buffer *buffer)
     return MakeRange(0, buffer->count);
 }
 
-function TokenIterator
-MakeTokenIterator(Buffer *buffer, int index, int count = 0)
+function int64_t
+GetLineCount(Buffer *buffer)
 {
-    int max_count = buffer->tokens.count - index;
-    if (count <= 0 || count > max_count) count = max_count;
-
-    TokenIterator result = {};
-    result.tokens = &buffer->tokens[index];
-    result.tokens_end = &result.tokens[count];
-    result.token = result.tokens;
-    return result;
-}
-
-function uint32_t
-FindTokenIndexForPos(Buffer *buffer, int64_t pos)
-{
-    Assert(IsInBufferRange(buffer, pos));
-
-    uint32_t result = 0;
-
-    if (pos != 0)
-    {
-        int64_t token_count = buffer->tokens.count;
-        int64_t lo = 0;
-        int64_t hi = token_count - 1;
-        while (lo <= hi)
-        {
-            int64_t index = (lo + hi) / 2;
-            Token *t = &buffer->tokens[index];
-            if (pos < t->pos)
-            {
-                hi = index - 1;
-            }
-            else if (pos >= t->pos + t->length)
-            {
-                lo = index + 1;
-            }
-            else
-            {
-                result = (uint32_t)index;
-                break;
-            }
-        }
-
-        if (lo > hi)
-        {
-            result = (uint32_t)lo;
-        }
-    }
-
-    return result;
-}
-
-function Token *
-GetTokenAt(Buffer *buffer, int64_t pos)
-{
-    uint32_t index = FindTokenIndexForPos(buffer, pos);
-    Token *token = &buffer->tokens[index];
-    return token;
-}
-
-function TokenIterator
-IterateTokens(Buffer *buffer, int64_t pos = 0)
-{
-    pos = ClampToBufferRange(buffer, pos);
-
-    TokenIterator result = {};
-    result.tokens     = buffer->tokens.data;
-    result.tokens_end = result.tokens + buffer->tokens.count;
-    result.token      = &buffer->tokens[FindTokenIndexForPos(buffer, pos)];
-
-    return result;
-}
-
-function TokenIterator
-IterateLineTokens(Buffer *buffer, int64_t line)
-{
-    LineData *line_data = GetLineData(buffer, line);
-
-    TokenIterator result = {};
-    result.tokens     = &buffer->tokens[line_data->token_index];
-    result.tokens_end = result.tokens + line_data->token_count;
-    result.token      = result.tokens;
-
-    return result;
+    return GetLineCount(&buffer->line_index);
 }
 
 #endif /* TEXTIT_BUFFER_HPP */
