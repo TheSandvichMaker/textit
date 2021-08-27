@@ -77,15 +77,15 @@ ZeroSize(size_t size_init, void *data_init)
 #define ZeroArray(Count, Data) ZeroSize(sizeof(*(Data))*(Count), Data)
 
 function bool
-MemoryIsEqual(size_t Count, void *AInit, void *BInit)
+MemoryIsEqual(size_t count, void *a_init, void *b_init)
 {
-    char *A = (char *)AInit;
-    char *B = (char *)BInit;
+    char *a = (char *)a_init;
+    char *b = (char *)b_init;
 
     bool Result = true;
-    while (Count--)
+    while (count--)
     {
-        if (*A++ != *B++)
+        if (*a++ != *b++)
         {
             Result = false;
             break;
@@ -97,18 +97,23 @@ MemoryIsEqual(size_t Count, void *AInit, void *BInit)
 #define StructsAreEqual(A, B) (Assert(sizeof(*(A)) == sizeof(*(B))), MemoryIsEqual(sizeof(*(A)), A, B))
 
 function void
-CopySize(size_t Size, const void *SourceInit, void *DestInit)
+CopySize(size_t size, const void *source_init, void *dest_init)
 {
-    const unsigned char *Source = (const unsigned char *)SourceInit;
-    unsigned char *Dest = (unsigned char *)DestInit;
+    if (source_init == dest_init) return;
+
+    const unsigned char *source = (const unsigned char *)source_init;
+    unsigned char *dest = (unsigned char *)dest_init;
+
+    AssertSlow(dest + size <= source || dest >= source + size);
+
 #if COMPILER_MSVC
-    __movsb(Dest, Source, Size);
+    __movsb(dest, source, size);
 #elif defined(__i386__) || defined(__x86_64__)
-    __asm__ __volatile__("rep movsb" : "+c"(Size), "+S"(Source), "+D"(Dest): : "memory");
+    __asm__ __volatile__("rep movsb" : "+c"(size), "+S"(source), "+D"(dest): : "memory");
 #else
-    while (--Size)
+    while (--size)
     {
-        *Dest++ = *Source++;
+        *dest++ = *source++;
     }
 #endif
 }

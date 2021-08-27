@@ -1,18 +1,9 @@
 function void
-TokenizeCpp(Tokenizer *tok)
+TokenizeCpp(Tokenizer *tok, Token *t)
 {
-    ParseWhitespace(tok);
-    if (!CharsLeft(tok))
-    {
-        return;
-    }
-
-    Token t;
-    BeginToken(tok, &t);
-
     Token *prev_t = tok->prev_token;
 
-    if ((t.flags & TokenFlag_FirstInLine) &&
+    if ((t->flags & TokenFlag_FirstInLine) &&
         (tok->user_state & TokenizeState_C_InPreprocessor) &&
         (prev_t->kind != Token_LineContinue))
     {
@@ -40,19 +31,19 @@ parse_default:
 
             if (parse_string)
             {
-                ParseString(tok, &t, string_end_char);
+                ParseString(tok, t, string_end_char);
                 break;
             }
 
-            Revert(tok, &t);
-            ParseStandardToken(tok, &t);
+            Revert(tok, t);
+            ParseStandardToken(tok, t);
         } break;
 
         case '_':
         {
             if (prev_t->kind == Token_String)
             {
-                t.kind = Token_Operator;
+                t->kind = Token_Operator;
                 while (IsValidIdentifierAscii(Peek(tok))) Advance(tok);
             }
             else
@@ -63,9 +54,9 @@ parse_default:
 
         case '#':
         {
-            if (t.flags & TokenFlag_FirstInLine)
+            if (t->flags & TokenFlag_FirstInLine)
             {
-                t.kind = Token_Preprocessor;
+                t->kind = Token_Preprocessor;
                 tok->user_state |= TokenizeState_C_InPreprocessor;
                 tok->state      |= TokenizeState_ImplicitStatementEndings;
             }
@@ -91,7 +82,7 @@ parse_default:
                     tok->at++;
                     if (Match(tok, '\''))
                     {
-                        t.kind = Token_CharacterLiteral;
+                        t->kind = Token_CharacterLiteral;
                         break;
                     }
                 }
@@ -112,10 +103,8 @@ parse_default:
 
     if (tok->user_state & TokenizeState_C_InPreprocessor)
     {
-        t.flags |= TokenFlag_IsPreprocessor;
+        t->flags |= TokenFlag_IsPreprocessor;
     }
-
-    EndToken(tok, &t);
 }
 
 function bool

@@ -1,6 +1,8 @@
 #ifndef TEXTIT_LINE_INDEX_HPP
 #define TEXTIT_LINE_INDEX_HPP
 
+#define VALIDATE_LINE_INDEX_TREE_INTEGRITY_AGGRESSIVELY 1
+
 enum_flags(uint8_t, LineFlags)
 {
     Line_Empty = 0x1,
@@ -53,15 +55,16 @@ struct LineIndexNode
 
     union
     {
-        LineIndexNode *children[2*LINE_INDEX_ORDER + 2];
+        // NOTE: The + 1 is pure slop. It lets me overflow the node and _then_ split it without having
+        // extra logic to insert the new entry into the right node post split
+        LineIndexNode *children[2*LINE_INDEX_ORDER + 1];
         LineData data;
     };
 };
 
 struct LineIndexIterator
 {
-    LineIndexNode *leaf, *record;
-    int            index;
+    LineIndexNode *record;
     Range          range;
     int64_t        line; 
 };
@@ -74,7 +77,7 @@ struct TokenIterator
 };
 
 function int64_t GetLineCount(struct Buffer *buffer);
-function bool ValidateLineIndex(Buffer *buffer);
-function bool ValidateLineIndex(LineIndexNode *root, Buffer *buffer);
+function bool ValidateLineIndexFull(Buffer *buffer);
+function bool ValidateLineIndexTreeIntegrity(LineIndexNode *root);
 
 #endif /* TEXTIT_LINE_INDEX_HPP */

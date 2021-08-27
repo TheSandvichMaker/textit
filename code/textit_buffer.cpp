@@ -659,12 +659,10 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     FindLineInfoByPos(buffer, range.end, &end_info);
 
     LineData null_line_data = {};
-    TokenBlock null_token_block = {};
     LineData *prev_line_data = &null_line_data;
-    prev_line_data->first_token_block = &null_token_block;
     if (start_info.line > 0)
     {
-        // NOTE: Wasteful lookup
+        // NOTE: Wasteful lookup, could get from the node looked up for start_info directly
         LineInfo prev_line_info;
         FindLineInfoByLine(buffer, start_info.line - 1, &prev_line_info);
 
@@ -680,18 +678,12 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 
     //
     // Delete lines
+    // NOTE: In the case where I modify a single line I still just delete
+    // that line and reinsert it instead of being clever with it.
     //
 
-    if (start_info.line != end_info.line)
-    {
-        Range line_range = MakeRange(start_info.line, end_info.line);
-        RemoveLinesFromIndex(buffer, line_range);
-        AssertSlow(ValidateLineIndex(buffer));
-    }
-    else
-    {
-        prev_line_data = end_info.data;
-    }
+    Range line_range = MakeRange(start_info.line, end_info.line);
+    RemoveLinesFromIndex(buffer, line_range);
 
     //
     // Tokenize new lines
@@ -712,17 +704,21 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 
     //
     // Tokenize other lines as necessary
+    // TODO: Cache multiple line states to avoid retokenization cascade
     //
 
     LineIndexIterator it = IterateLineIndexFromLine(buffer, next_retokenize_line);
     while (IsValid(&it) && it.record->data.start_tokenize_state != prev_line_data->end_tokenize_state)
     {
         LineData *next_line_data = &it.record->data;
+
         FreeTokens(buffer, it.record);
 
         TokenizeLine(buffer, it.range.start, prev_line_data->end_tokenize_state, next_line_data);
         prev_line_data = next_line_data;
     }
+
+    AssertSlow(ValidateLineIndexFull(buffer));
 
     OnBufferChanged(buffer, range.start, delta);
     ParseTags(buffer);

@@ -9,6 +9,7 @@ enum TokenKind_ENUM : TokenKind
     /* ascii */
 
     Token_Identifier = 128,
+    Token_Whitespace,
     Token_Keyword,
     Token_FlowControl,
     Token_Label,

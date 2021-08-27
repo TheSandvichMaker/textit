@@ -172,10 +172,10 @@ ParseStandardToken(Tokenizer *tok, Token *t)
     }
 }
 
-function bool
+function ParseWhitespaceResult
 ParseWhitespace(Tokenizer *tok)
 {
-    bool result = false;
+    ParseWhitespaceResult result = ParseWhitespace_None;
 
     // TODO: Handle implicit line endings
     Token *prev_t = tok->prev_token;
@@ -185,10 +185,14 @@ ParseWhitespace(Tokenizer *tok)
         CharacterClassFlags c_class = CharacterizeByte(Peek(tok));
         if (HasFlag(c_class, Character_Whitespace))
         {
+            result = ParseWhitespace_Horizontal;
+
             Advance(tok);
 
             if (HasFlag(c_class, Character_VerticalWhitespace))
             {
+                result = ParseWhitespace_Vertical;
+
                 prev_t->flags |= TokenFlag_LastInLine;
 
                 tok->new_line = true;
@@ -213,7 +217,6 @@ ParseWhitespace(Tokenizer *tok)
 
                 tok->at_line += 1;
 
-                result = true;
                 break;
             }
         }
@@ -324,12 +327,9 @@ EndToken(Tokenizer *tok, Token *t)
 }
 
 function void
-TokenizeBasic(Tokenizer *tok)
+TokenizeBasic(Tokenizer *tok, Token *t)
 {
-    Token t;
-    BeginToken(tok, &t);
-    ParseStandardToken(tok, &t);
-    EndToken(tok, &t);
+    ParseStandardToken(tok, t);
 }
 
 function void
@@ -371,11 +371,23 @@ TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state,
 
     while (CharsLeft(tok))
     {
-        if (ParseWhitespace(tok))
+        Token t;
+        BeginToken(tok, &t);
+
+        if (ParseWhitespaceResult parse_result = ParseWhitespace(tok))
         {
-            break;
+            t.kind = Token_Whitespace;
+            EndToken(tok, &t);
+            if (parse_result == ParseWhitespace_Vertical)
+            {
+                break;
+            }
         }
-        tok->language->Tokenize(tok);
+        else
+        {
+            tok->language->Tokenize(tok, &t);
+            EndToken(tok, &t);
+        }
     }
 
     EndTokenizeLine(tok, line_data);
@@ -386,6 +398,8 @@ TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state,
 function void
 TokenizeBuffer(Buffer *buffer)
 {
+    ClearLineIndex(buffer);
+
     LineData line_data = {};
     LineData *prev_line_data = &line_data;
 

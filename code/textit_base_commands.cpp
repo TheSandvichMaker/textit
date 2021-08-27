@@ -347,6 +347,7 @@ COMMAND_PROC(SetLanguage,
             {
                 Buffer *buffer = GetActiveBuffer();
                 buffer->language = language;
+                TokenizeBuffer(buffer);
                 return true;
             }
         };

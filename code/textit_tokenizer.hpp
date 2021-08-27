@@ -10,6 +10,13 @@ enum TokenizeState_ENUM : TokenizeState
 
 struct StringMap;
 
+enum ParseWhitespaceResult
+{
+    ParseWhitespace_None,
+    ParseWhitespace_Horizontal,
+    ParseWhitespace_Vertical,
+};
+
 struct Tokenizer
 {
     Token null_token;

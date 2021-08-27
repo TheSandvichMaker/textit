@@ -28,15 +28,16 @@ FreeTokens(Buffer *buffer, LineIndexNode *node)
 function void
 FreeLineIndexNode(Buffer *buffer, LineIndexNode *node)
 {
-    Assert(node->kind == LineIndexNode_Record);
-    FreeTokens(buffer, node);
+    if (node->kind == LineIndexNode_Record)
+    {
+        FreeTokens(buffer, node);
+    }
     SllStackPush(buffer->first_free_line_index_node, node);
 }
 
 struct LineIndexLocator
 {
-    LineIndexNode *parent;
-    int            child_index;
+    LineIndexNode *record;
     int64_t        pos;
     int64_t        line;
 };
@@ -79,10 +80,9 @@ LocateLineIndexNode(LineIndexNode    *node,
     if (child->kind == LineIndexNode_Record)
     {
         ZeroStruct(locator);
-        locator->parent      = node;
-        locator->child_index = next_index;
-        locator->pos         = offset;
-        locator->line        = line_offset;
+        locator->record = child;
+        locator->pos    = offset;
+        locator->line   = line_offset;
         return;
     }
 
@@ -108,7 +108,7 @@ FindLineInfo(Buffer *buffer, int64_t target, LineInfo *out_info)
     LineIndexLocator locator;
     LocateLineIndexNode<by_line>(buffer->line_index_root, target, &locator);
 
-    LineIndexNode *node = locator.parent->children[locator.child_index];
+    LineIndexNode *node = locator.record;
     Assert(node->kind == LineIndexNode_Record);
 
     LineData *data = &node->data;
@@ -132,36 +132,51 @@ FindLineInfoByLine(Buffer *buffer, int64_t line, LineInfo *out_info)
     FindLineInfo<true>(buffer, line, out_info);
 }
 
-function LineIndexNode *
-RemoveEntry(LineIndexNode *node, int entry_index)
+function void
+RemoveRecord(LineIndexNode *record)
 {
-    Assert(entry_index < node->entry_count);
-    LineIndexNode *result = node->children[entry_index];
+    Assert(record->kind == LineIndexNode_Record);
 
-    if (result->prev) result->prev->next = result->next;
-    if (result->next) result->next->prev = result->prev;
+    LineIndexNode *leaf = record->parent;
+    Assert(leaf->kind == LineIndexNode_Leaf);
 
-    for (LineIndexNode *parent = node; parent; parent = parent->parent)
+    // Find the record's index
+    int entry_index = 0;
+    for (; entry_index < leaf->entry_count && leaf->children[entry_index] != record; entry_index += 1);
+
+    Assert(entry_index < leaf->entry_count);
+    Assert(leaf->children[entry_index] == record);
+
+    if (record->prev)
     {
-        parent->span      -= result->span;
+        record->prev->next = record->next;
+        record->prev->data.last_token_block->next = record->data.first_token_block->next;
+    }
+    if (record->next)
+    {
+        record->next->prev = record->prev;
+        record->next->data.first_token_block->prev = record->data.last_token_block->prev;
+    }
+
+    for (LineIndexNode *parent = leaf; parent; parent = parent->parent)
+    {
+        parent->span      -= record->span;
         parent->line_span -= 1;
     }
 
-    for (int i = entry_index; i < node->entry_count - 1; i += 1)
+    for (int i = entry_index; i < leaf->entry_count - 1; i += 1)
     {
-        node->children[i] = node->children[i + 1];
+        leaf->children[i] = leaf->children[i + 1];
     }
-    node->entry_count -= 1;
+    leaf->entry_count -= 1;
 
 #if TEXTIT_SLOW
     {
-        LineIndexNode *root = result;
+        LineIndexNode *root = record;
         for (; root->parent; root = root->parent);
-        ValidateLineIndex(root, nullptr);
+        ValidateLineIndexTreeIntegrity(root);
     }
 #endif
-
-    return result;
 }
 
 #if 0
@@ -245,6 +260,39 @@ InsertEntry(Buffer         *buffer,
             offset += test_span;
         }
 
+        if (insert_index < node->entry_count)
+        {
+            LineIndexNode *next_child = node->children[insert_index];
+            record->prev = next_child->prev;
+            record->next = next_child;
+            record->next->prev = record;
+            if (record->prev) record->prev->next = record;
+
+            record->data.first_token_block->prev = next_child->data.last_token_block;
+            record->data.last_token_block->next = next_child->data.first_token_block;
+            record->next->data.first_token_block->prev = record->data.last_token_block;
+            if (record->prev)
+            {
+                record->prev->data.last_token_block->next = record->data.first_token_block;
+            }
+        }
+        else if (node->entry_count > 0)
+        {
+            LineIndexNode *prev_child = node->children[insert_index - 1];
+            record->prev = prev_child;
+            record->next = prev_child->next;
+            if (record->next) record->next->prev = record;
+            record->prev->next = record;
+
+            record->data.first_token_block->prev = prev_child->data.last_token_block;
+            record->data.last_token_block->next = prev_child->data.first_token_block;
+            if (record->next)
+            {
+                record->next->data.first_token_block->prev = record->data.last_token_block;
+            }
+            record->prev->data.last_token_block->next = record->data.first_token_block;
+        }
+
         for (int i = node->entry_count; i > insert_index; i -= 1)
         {
             node->children[i] = node->children[i - 1];
@@ -311,7 +359,20 @@ GetFirstLeafNode(LineIndexNode *root)
         Assert(result->entry_count > 0);
         result = result->children[0];
     }
-    Assert(result->kind == LineIndexNode_Leaf);
+    Assert(result);
+    return result;
+}
+
+function LineIndexNode *
+GetFirstRecord(LineIndexNode *root)
+{
+    LineIndexNode *result = root;
+    while (result->kind != LineIndexNode_Record)
+    {
+        Assert(result->entry_count > 0);
+        result = result->children[0];
+    }
+    Assert(result);
     return result;
 }
 
@@ -343,9 +404,29 @@ InsertLine(Buffer *buffer, Range range, LineData *data)
         buffer->line_index_root = new_root;
     }
 
-    AssertSlow(ValidateLineIndex(buffer));
+    // NOTE: I am not doing the full validation here because the buffer may be desynced with the line index temporarily
+    AssertSlow(ValidateLineIndexTreeIntegrity(buffer->line_index_root));
 
     return record;
+}
+
+function void
+ClearLineIndex(Buffer *buffer, LineIndexNode *node)
+{
+    if (!node) return;
+
+    for (int i = 0; i < node->entry_count; i += 1)
+    {
+        ClearLineIndex(buffer, node->children[i]);
+    }
+    FreeLineIndexNode(buffer, node);
+}
+
+function void
+ClearLineIndex(Buffer *buffer)
+{
+    ClearLineIndex(buffer, buffer->line_index_root);
+    buffer->line_index_root = nullptr;
 }
 
 //
@@ -356,8 +437,7 @@ function LineIndexIterator
 IterateLineIndex(Buffer *buffer)
 {
     LineIndexIterator result = {};
-    result.leaf   = GetFirstLeafNode(buffer->line_index_root);
-    result.record = result.leaf->children[0];
+    result.record = GetFirstRecord(buffer->line_index_root);
     result.range  = MakeRangeStartLength(0, result.record->span);
     result.line   = 0;
     return result;
@@ -370,9 +450,7 @@ IterateLineIndexFromPos(Buffer *buffer, int64_t pos)
     LocateLineIndexNodeByPos(buffer->line_index_root, pos, &locator);
 
     LineIndexIterator result = {};
-    result.leaf   = locator.parent;
-    result.record = locator.parent->children[locator.child_index];
-    result.index  = locator.child_index;
+    result.record = locator.record;
     result.range  = MakeRangeStartLength(locator.pos, result.record->span);
     result.line   = locator.line;
 
@@ -386,9 +464,7 @@ IterateLineIndexFromLine(Buffer *buffer, int64_t line)
     LocateLineIndexNodeByLine(buffer->line_index_root, line, &locator);
 
     LineIndexIterator result = {};
-    result.leaf   = locator.parent;
-    result.record = locator.parent->children[locator.child_index];
-    result.index  = locator.child_index;
+    result.record = locator.record;
     result.range  = MakeRangeStartLength(locator.pos, result.record->span);
     result.line   = locator.line;
 
@@ -404,69 +480,42 @@ IsValid(LineIndexIterator *it)
 function void
 Next(LineIndexIterator *it)
 {
+    if (!IsValid(it)) return;
+
+    it->record = it->record->next;
+    it->line += 1;
+
+    if (!IsValid(it)) return;
+
     it->range.start = it->range.end;
-
-    it->index += 1;
-    while (it->leaf && it->index >= it->leaf->entry_count)
-    {
-        it->leaf  = it->leaf->next;
-        it->index = 0;
-    }
-
-    if (it->leaf)
-    {
-        it->record = it->leaf->children[it->index];
-
-        it->range.end = it->range.start + it->record->span;
-        it->line += 1;
-    }
-    else
-    {
-        it->record = nullptr;
-    }
+    it->range.end   = it->range.start + it->record->span;
 }
 
 function void
 Prev(LineIndexIterator *it)
 {
-    it->range.end = it->range.start;
+    if (!IsValid(it)) return;
 
-    it->index -= 1;
-    while (it->leaf && it->index < 0)
-    {
-        it->leaf = it->leaf->prev;
-        if (it->leaf)
-        {
-            it->index = it->leaf->entry_count - 1;
-        }
-    }
+    it->record = it->record->prev;
+    it->line -= 1;
 
-    if (it->leaf)
-    {
-        it->record = it->leaf->children[it->index];
+    if (!IsValid(it)) return;
 
-        it->range.start = it->range.end - it->record->span;
-        it->line -= 1;
-    }
-    else
-    {
-        it->record = nullptr;
-    }
+    it->range.end   = it->range.start;
+    it->range.start = it->range.end - it->record->span;
 }
 
 function LineIndexNode *
 RemoveCurrent(LineIndexIterator *it)
 {
-    LineIndexNode *result = RemoveEntry(it->leaf, it->index);
-    if (it->index >= it->leaf->entry_count)
-    {
-        it->leaf  = it->leaf->next;
-        it->index = 0;
-    }
-    it->record = it->leaf->children[it->index];
+    LineIndexNode *to_remove = it->record;
 
-    it->range.end = it->range.start + it->record->span;
-    return result;
+    // Fix up the iterator to account for the removed record
+    it->range.end = it->range.start + to_remove->span;
+    it->record = it->record->next;
+
+    RemoveRecord(to_remove);
+    return to_remove;
 }
 
 function void
@@ -709,13 +758,16 @@ RemoveLinesFromIndex(Buffer *buffer, Range line_range)
     LineIndexIterator it = IterateLineIndexFromLine(buffer, line_range.start);
 
     int64_t line_count = RangeSize(line_range);
+    if (line_count == 0) line_count = 1;
+
     for (int64_t i = 0; i < line_count; i += 1)
     {
         LineIndexNode *node = RemoveCurrent(&it);
         FreeLineIndexNode(buffer, node);
     }
 
-    AssertSlow(ValidateLineIndex(buffer));
+    // NOTE: I am not doing the full validation here because the buffer may be desynced with the line index temporarily
+    AssertSlow(ValidateLineIndexTreeIntegrity(buffer->line_index_root));
 }
 
 function void
@@ -760,17 +812,12 @@ MergeLines(Buffer *buffer, Range range)
         }
     }
 
-    AssertSlow(ValidateLineIndex(buffer));
+    // NOTE: I am not doing the full validation here because the buffer may be desynced with the line index temporarily
+    AssertSlow(ValidateLineIndexTreeIntegrity(buffer->line_index_root));
 }
 
 function bool
-ValidateLineIndex(Buffer *buffer)
-{
-    return ValidateLineIndex(buffer->line_index_root, buffer);
-}
-
-function bool
-ValidateLineIndex(LineIndexNode *root, Buffer *buffer)
+ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
 {
     //
     // validate all spans sum up correctly
@@ -797,6 +844,11 @@ ValidateLineIndex(LineIndexNode *root, Buffer *buffer)
 
                 if (buffer)
                 {
+                    for (int64_t i = 0; i < node->span - newline_size; i += 1)
+                    {
+                        Assert(!IsVerticalWhitespaceAscii(ReadBufferByte(buffer, pos + i)));
+                    }
+
                     if (newline_size == 2)
                     {
                         Assert(ReadBufferByte(buffer, pos + data->newline_col)     == '\r');
@@ -843,24 +895,36 @@ ValidateLineIndex(LineIndexNode *root, Buffer *buffer)
     // validate the linked list of nodes links up properly
     //
     {
-        int64_t root_span      = root->span;
-        int64_t root_line_span = root->line_span;
-        int64_t sum            = 0;
-        int64_t line_sum       = 0;
-        for (LineIndexNode *node = GetFirstLeafNode(root);
-             node;
-             node = node->next)
+        for (LineIndexNode *level = root;
+             level->entry_count > 0;
+             level = level->children[0])
         {
-            Assert(node->kind      == LineIndexNode_Leaf);
-            Assert(node->line_span == node->entry_count);
-            if (node->prev) Assert(node->prev->next == node);
-            if (node->next) Assert(node->next->prev == node);
-            sum      += node->span;
-            line_sum += node->line_span;
+            for (LineIndexNode *node = level;
+                 node;
+                 node = node->next)
+            {
+                Assert(node->kind == level->kind);
+                if (node->prev) Assert(node->prev->next == node);
+                if (node->next) Assert(node->next->prev == node);
+            }
         }
-        Assert(root_span      == sum);
-        Assert(root_line_span == line_sum);
     }
 
     return true;
+}
+
+function bool
+ValidateLineIndexFull(Buffer *buffer)
+{
+    return ValidateLineIndexInternal(buffer->line_index_root, buffer);
+}
+
+function bool
+ValidateLineIndexTreeIntegrity(LineIndexNode *root)
+{
+#if VALIDATE_LINE_INDEX_TREE_INTEGRITY_AGGRESSIVELY
+    return ValidateLineIndexInternal(root, nullptr);
+#else
+    return true;
+#endif
 }

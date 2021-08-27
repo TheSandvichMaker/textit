@@ -127,7 +127,11 @@ Advance(TagParser *parser)
 {
     parser->parse_index += 1;
     parser->pushed_text = false;
-    Next(&parser->it);
+    do
+    {
+        Next(&parser->it);
+    }
+    while (parser->it.token.kind == Token_Whitespace);
 }
 
 function TokenLocator
@@ -155,6 +159,11 @@ InitializeTagParser(TagParser *parser, Buffer *buffer)
     parser->buffer         = buffer;
     parser->it             = IterateTokens(buffer);
     parser->text_container = MakeStringContainer(ArrayCount(parser->text_container_storage), parser->text_container_storage);
+
+    while (parser->it.token.kind == Token_Whitespace)
+    {
+        Next(&parser->it);
+    }
 }
 
 function void

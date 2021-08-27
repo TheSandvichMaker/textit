@@ -31,7 +31,7 @@ struct LanguageSpec
     int associated_extension_count;
     String associated_extensions[16];
 
-    void (*Tokenize)(Tokenizer *tok); // tokenizes one token
+    void (*Tokenize)(Tokenizer *tok, Token *t); // tokenizes one token
     void (*ParseTags)(Buffer *buffer);
 
     StringID    sub_token_kind_to_theme_id[256];
@@ -43,7 +43,7 @@ struct LanguageSpec
     OperatorSlot operators[256];
 };
 
-function void TokenizeBasic(Tokenizer *tok);
+function void TokenizeBasic(Tokenizer *tok, Token *t);
 
 struct LanguageRegistry
 {
