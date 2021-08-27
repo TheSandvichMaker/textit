@@ -544,32 +544,36 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
-    int64_t at_line = Clamp(view->scroll_at, 0, GetLineCount(buffer));
-    for (int64_t y = bounds.min.y; y < bounds.max.y; y += 1)
+    if (core_config->debug_show_line_index)
     {
-        LineInfo info;
-        FindLineInfoByLine(buffer, at_line, &info);
+        int64_t at_line = Clamp(view->scroll_at, 0, GetLineCount(buffer));
+        for (int64_t y = bounds.min.y; y < bounds.max.y; y += 1)
+        {
+            LineInfo info;
+            FindLineInfoByLine(buffer, at_line, &info);
 
-        at_line += 1;
+            at_line += 1;
 
-        DrawText(MakeV2i(bounds.max.x - 32, y), 
-                 PushTempStringF("%lld: { %lld, %lld }", info.line, info.range.start, info.range.end),
+            DrawText(MakeV2i(bounds.max.x - 32, y), 
+                     PushTempStringF("%lld: { %lld, %lld }", info.line, info.range.start, info.range.end),
+                     COLOR_WHITE, COLOR_BLACK);
+        }
+    }
+
+    if (core_config->debug_show_jump_history)
+    {
+        DrawText(MakeV2i(bounds.max.x - 32, bounds.min.x),
+                 PushTempStringF("jump at: %d, jump top: %d", view->jump_at, view->jump_top),
                  COLOR_WHITE, COLOR_BLACK);
+        for (uint32_t i = OldestJumpIndex(view); i < view->jump_top; i += 1)
+        {
+            Jump *jump = GetJump(view, i);
+            V2i p = MakeV2i(bounds.max.x - 32, bounds.min.x + i + 1);
+            Color color = COLOR_WHITE;
+            if (view->jump_at == i) color = MakeColor(255, 0, 0);
+            DrawText(p, PushTempStringF("[%d] buffer: %d, pos: %lld", i, jump->buffer.index, jump->pos), color, COLOR_BLACK);
+        }
     }
-
-#if 0
-    DrawText(MakeV2i(bounds.max.x - 32, bounds.min.x),
-             PushTempStringF("jump at: %d, jump top: %d", view->jump_at, view->jump_top),
-             COLOR_WHITE, COLOR_BLACK);
-    for (uint32_t i = OldestJumpIndex(view); i < view->jump_top; i += 1)
-    {
-        Jump *jump = GetJump(view, i);
-        V2i p = MakeV2i(bounds.max.x - 32, bounds.min.x + i + 1);
-        Color color = COLOR_WHITE;
-        if (view->jump_at == i) color = MakeColor(255, 0, 0);
-        DrawText(p, PushTempStringF("[%d] buffer: %d, pos: %lld", i, jump->buffer.index, jump->pos), color, COLOR_BLACK);
-    }
-#endif
 
     return actual_line_height;
 }

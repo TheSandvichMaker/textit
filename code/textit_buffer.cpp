@@ -280,12 +280,12 @@ FindLineEnd(Buffer *buffer, int64_t pos)
     int64_t inner = pos;
     int64_t outer = pos;
 
-    while (IsInBufferRange(buffer, inner + 1))
+    while (IsInBufferRange(buffer, inner))
     {
-        int64_t newline_length = PeekNewline(buffer, inner + 1);
+        int64_t newline_length = PeekNewline(buffer, inner);
         if (newline_length)
         {
-            outer = inner + newline_length + 1;
+            outer = inner + newline_length;
             break;
         }
         else
@@ -652,6 +652,8 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
         return range.start;
     }
 
+    buffer->dirty = true;
+
     LineInfo start_info;
     FindLineInfoByPos(buffer, range.start, &start_info);
 
@@ -669,16 +671,9 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
         prev_line_data = prev_line_info.data;
     }
 
-    int64_t result = TextStorageReplaceRange(buffer, range, text);
-    int64_t delta  = range.start - range.end + (int64_t)text.size;
-
-    int64_t next_retokenize_line = start_info.line;
-    int64_t      end_pos = range.start + delta;
-    int64_t tokenize_pos = start_info.range.start;
-
     //
     // Delete lines
-    // NOTE: In the case where I modify a single line I still just delete
+    // In the case where I modify a single line I still just delete
     // that line and reinsert it instead of being clever with it.
     //
 
@@ -686,10 +681,21 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     RemoveLinesFromIndex(buffer, line_range);
 
     //
+    // Replace text
+    //
+
+    int64_t result = TextStorageReplaceRange(buffer, range, text);
+    int64_t delta  = range.start - range.end + (int64_t)text.size;
+
+    int64_t next_retokenize_line = start_info.line;
+    int64_t tokenize_pos = start_info.range.start;
+    int64_t      end_pos = range.start + delta;
+
+    //
     // Tokenize new lines
     //
 
-    while (tokenize_pos < end_pos)
+    while (tokenize_pos <= end_pos)
     {
         int64_t this_line_start = tokenize_pos;
 
@@ -721,7 +727,6 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     AssertSlow(ValidateLineIndexFull(buffer));
 
     OnBufferChanged(buffer, range.start, delta);
-    ParseTags(buffer);
 
     return result;
 }

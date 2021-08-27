@@ -64,6 +64,8 @@ struct Buffer : TextStorage
     BufferID id;
     BufferFlags flags;
 
+    bool dirty;
+
     bool bulk_edit;
     uint64_t undo_batch_ordinal;
 

@@ -62,10 +62,10 @@ LoadDefaultBindings()
 
     BindCommand(command, 'V',                      Modifier_Ctrl,  "SplitWindowVertical"_str);
     BindCommand(command, 'S',                      Modifier_Ctrl,  "SplitWindowHorizontal"_str);
-    // BindCommand(command, 'H',                      Modifier_Ctrl,  "FocusWindowLeft"_str);
-    // BindCommand(command, 'J',                      Modifier_Ctrl,  "FocusWindowDown"_str);
-    // BindCommand(command, 'K',                      Modifier_Ctrl,  "FocusWindowUp"_str);
-    // BindCommand(command, 'L',                      Modifier_Ctrl,  "FocusWindowRight"_str);
+    BindCommand(command, 'H',                      Modifier_Shift|Modifier_Ctrl,  "FocusWindowLeft"_str);
+    BindCommand(command, 'J',                      Modifier_Shift|Modifier_Ctrl,  "FocusWindowDown"_str);
+    BindCommand(command, 'K',                      Modifier_Shift|Modifier_Ctrl,  "FocusWindowUp"_str);
+    BindCommand(command, 'L',                      Modifier_Shift|Modifier_Ctrl,  "FocusWindowRight"_str);
     BindCommand(command, 'Q',                      Modifier_Ctrl,  "DestroyWindow"_str);
 
     BindCommand(command, 'O',                      Modifier_Ctrl,  "PreviousJump"_str);

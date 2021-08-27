@@ -82,6 +82,8 @@ function void DestroyWindow(Window *window);
     X(_, int,    indent_width                    = 4)              \
     X(_, bool,   syntax_highlighting             = true)           \
     X(_, bool,   debug_show_glyph_cache          = false)          \
+    X(_, bool,   debug_show_line_index           = false)          \
+    X(_, bool,   debug_show_jump_history         = false)          \
     X(_, String, font_name                       = "Consolas"_str) \
     X(_, int,    font_size                       = 15)             \
     X(_, bool,   use_cached_cleartype_blend      = true)           \

@@ -6,6 +6,12 @@ COMMAND_PROC(ResetGlyphCache,
     ResizeGlyphCache(&render_state->glyph_cache, size);
 }
 
+COMMAND_PROC(ValidateLineIndex,
+             "Run validation tests on the line index of the current buffer"_str)
+{
+    ValidateLineIndexFull(GetActiveBuffer());
+}
+
 COMMAND_PROC(LoadDefaultIndentRules,
              "Load the default indent rules for the current buffer"_str)
 {
@@ -1246,46 +1252,50 @@ COMMAND_PROC(BackspaceChar)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    int64_t newline_length = PeekNewlineBackward(buffer, pos - 1);
-    int64_t to_delete = 1;
-    if (newline_length)
+    for (Cursor *cursor = IterateCursors(view);
+         cursor;
+         cursor = cursor->next)
     {
-        to_delete = newline_length;
-    }
-    else
-    {
-        while (IsTrailingUtf8Byte(ReadBufferByte(buffer, pos - to_delete)))
+        int64_t pos = cursor->pos;
+        int64_t newline_length = PeekNewlineBackward(buffer, pos - 1);
+        int64_t to_delete = 1;
+        if (newline_length)
         {
-            to_delete += 1;
+            to_delete = newline_length;
         }
-
-        if (ReadBufferByte(buffer, pos - 1) == ' ')
+        else
         {
-            int64_t line_start = FindLineStart(buffer, pos);
-            int64_t space_indent_end = line_start;
-            while ((space_indent_end < pos) &&
-                   (ReadBufferByte(buffer, space_indent_end) == ' '))
+            while (IsTrailingUtf8Byte(ReadBufferByte(buffer, pos - to_delete)))
             {
-                space_indent_end += 1;
+                to_delete += 1;
             }
-            if (space_indent_end == pos)
+
+            if (ReadBufferByte(buffer, pos - 1) == ' ')
             {
-                int64_t space_indent = space_indent_end - line_start;
-                if (space_indent > 0 &&
-                    space_indent % core_config->indent_width == 0) // TODO: This is kind of a band-aid, really I want to actually check the auto indent to see whether this looks like an indent or alignment
+                int64_t line_start = FindLineStart(buffer, pos);
+                int64_t space_indent_end = line_start;
+                while ((space_indent_end < pos) &&
+                       (ReadBufferByte(buffer, space_indent_end) == ' '))
                 {
-                    int64_t next_indent = RoundDownNextTabStop(space_indent, core_config->indent_width);
-                    to_delete = space_indent - next_indent;
+                    space_indent_end += 1;
+                }
+                if (space_indent_end == pos)
+                {
+                    int64_t space_indent = space_indent_end - line_start;
+                    if (space_indent > 0 &&
+                        space_indent % core_config->indent_width == 0) // TODO: This is kind of a band-aid, really I want to actually check the auto indent to see whether this looks like an indent or alignment
+                    {
+                        int64_t next_indent = RoundDownNextTabStop(space_indent, core_config->indent_width);
+                        to_delete = space_indent - next_indent;
+                    }
                 }
             }
         }
-    }
 
-    pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos - to_delete, to_delete), ""_str);
-    SetCursor(view, pos);
+        pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos - to_delete, to_delete), ""_str);
+        SetCursor(cursor, pos);
+    }
 }
 
 COMMAND_PROC(BackspaceWord)
@@ -1746,7 +1756,7 @@ COMMAND_PROC(OpenNewLineBelow)
 
     CMD_EnterTextMode();
 
-    int64_t insert_pos = FindLineEnd(buffer, cursor->pos).inner + 1;
+    int64_t insert_pos = FindLineEnd(buffer, cursor->pos).inner;
     SetCursor(cursor, insert_pos);
     CMD_WriteText("\n"_str); // NOTE: CRLF line endings are correctly expanded in WriteText
 }

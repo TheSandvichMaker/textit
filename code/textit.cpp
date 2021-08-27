@@ -1171,6 +1171,16 @@ AppUpdateAndRender(Platform *platform_)
     }
 #endif
 
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (buffer->dirty)
+        {
+            buffer->dirty = false;
+            ParseTags(buffer);
+        }
+    }
+
     {
         Buffer *active_buffer = GetActiveBuffer();
         Project *project = active_buffer->project;

@@ -61,8 +61,6 @@ Win32_NextEvent(PlatformEventIterator *it, PlatformEvent *out_event)
     uint32_t write_index = win32_state.working_write_index;
     while (it->index != write_index)
     {
-        platform->DebugPrint("reading event index %u\n", it->index);
-
         int event_index = it->index % ArrayCount(win32_state.events);
         it->index += 1;
 
