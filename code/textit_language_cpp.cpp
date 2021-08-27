@@ -204,6 +204,9 @@ ParseTagsCpp(Buffer *buffer)
 
         TokenLocator rewind = GetLocator(parser);
 
+        Token garghal = PeekToken(parser);
+        String gargh = PushTokenString(temp, buffer, &garghal); (void)gargh;
+
         SetFlags(parser, 0, TokenFlag_IsComment|TokenFlag_IsPreprocessor);
         TagSubKind match_kind = Tag_C_None;
         if      (ConsumeToken(parser, Token_Keyword, "struct"_str)) match_kind = Tag_C_Struct;

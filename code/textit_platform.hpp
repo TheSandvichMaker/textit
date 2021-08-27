@@ -18,7 +18,7 @@
                                   "Assertion Failed: " #x " at file %s, line %d", __FILE__, __LINE__), 0))
 */
 
-#ifdef TEXTIT_SLOW
+#if TEXTIT_SLOW
 #define AssertSlow(x) Assert(x)
 #else
 #define AssertSlow(x) 

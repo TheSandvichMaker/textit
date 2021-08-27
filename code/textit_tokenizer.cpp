@@ -238,7 +238,6 @@ PushToken(Tokenizer *tok, Token *t)
         tok->first_token_block->token_count >= ArrayCount(tok->first_token_block->tokens))
     {
         TokenBlock *block = AllocateTokenBlock(buffer);
-        block->prev = tok->last_token_block;
 
         if (tok->first_token_block)
         {
@@ -255,7 +254,7 @@ PushToken(Tokenizer *tok, Token *t)
     Token *dest = &block->tokens[block->token_count++];
     CopyStruct(t, dest);
 
-    dest->pos = 0;
+    dest->pos -= tok->line_start;
     return dest;
 }
 

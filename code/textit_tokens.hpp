@@ -93,6 +93,8 @@ struct Token
     operator bool() { return !!kind; }
 };
 
+#define TOKEN_BLOCK_FREE_TAG -1
+
 struct TokenBlock
 {
     TokenBlock *next;

@@ -22,6 +22,10 @@ FreeTokens(Buffer *buffer, LineIndexNode *node)
     {
         node->data.first_token_block = block->next;
         FreeTokenBlock(buffer, block);
+        if (block == node->data.last_token_block)
+        {
+            break;
+        }
     }
 }
 
@@ -32,6 +36,7 @@ FreeLineIndexNode(Buffer *buffer, LineIndexNode *node)
     {
         FreeTokens(buffer, node);
     }
+    node->kind = LineIndexNode_FREE;
     SllStackPush(buffer->first_free_line_index_node, node);
 }
 
@@ -150,13 +155,18 @@ RemoveRecord(LineIndexNode *record)
     if (record->prev)
     {
         record->prev->next = record->next;
-        record->prev->data.last_token_block->next = record->data.first_token_block->next;
+        record->prev->data.last_token_block->next = record->data.last_token_block->next;
     }
+
     if (record->next)
     {
         record->next->prev = record->prev;
-        record->next->data.first_token_block->prev = record->data.last_token_block->prev;
+        record->next->data.first_token_block->prev = record->data.first_token_block->prev;
     }
+
+#if VALIDATE_LINE_INDEX_EXTRA_SLOW
+    ValidateTokenBlockChain(record);
+#endif
 
     for (LineIndexNode *parent = leaf; parent; parent = parent->parent)
     {
@@ -265,33 +275,29 @@ InsertEntry(Buffer         *buffer,
             LineIndexNode *next_child = node->children[insert_index];
             record->prev = next_child->prev;
             record->next = next_child;
-            record->next->prev = record;
-            if (record->prev) record->prev->next = record;
 
-            record->data.first_token_block->prev = next_child->data.last_token_block;
+            record->data.first_token_block->prev = next_child->data.first_token_block->prev;
             record->data.last_token_block->next = next_child->data.first_token_block;
-            record->next->data.first_token_block->prev = record->data.last_token_block;
-            if (record->prev)
-            {
-                record->prev->data.last_token_block->next = record->data.first_token_block;
-            }
         }
         else if (node->entry_count > 0)
         {
             LineIndexNode *prev_child = node->children[insert_index - 1];
             record->prev = prev_child;
             record->next = prev_child->next;
-            if (record->next) record->next->prev = record;
-            record->prev->next = record;
 
             record->data.first_token_block->prev = prev_child->data.last_token_block;
-            record->data.last_token_block->next = prev_child->data.first_token_block;
-            if (record->next)
-            {
-                record->next->data.first_token_block->prev = record->data.last_token_block;
-            }
-            record->prev->data.last_token_block->next = record->data.first_token_block;
+            record->data.last_token_block->next = prev_child->data.last_token_block->next;
         }
+
+        if (record->next) record->next->prev = record;
+        if (record->prev) record->prev->next = record;
+
+        if (record->next) record->next->data.first_token_block->prev = record->data.last_token_block;
+        if (record->prev) record->prev->data.last_token_block->next = record->data.first_token_block;
+
+#if VALIDATE_LINE_INDEX_EXTRA_SLOW
+        ValidateTokenBlockChain(record);
+#endif
 
         for (int i = node->entry_count; i > insert_index; i -= 1)
         {
@@ -305,6 +311,10 @@ InsertEntry(Buffer         *buffer,
         if (node->entry_count > 2*LINE_INDEX_ORDER)
         {
             result = SplitNode(buffer, node);
+
+#if VALIDATE_LINE_INDEX_EXTRA_SLOW
+            ValidateTokenBlockChain(record);
+#endif
         }
     }
     else
@@ -554,7 +564,7 @@ LocateTokenAtPos(LineInfo *info, int64_t pos)
         for (int64_t index = 0; index < block->token_count; index += 1)
         {
             Token *token = &block->tokens[index];
-            if (at_pos + token->length > pos)
+            if (token->kind != Token_Whitespace && (at_pos + token->length > pos))
             {
                 result.block = block;
                 result.index = index;
@@ -635,8 +645,10 @@ LocateNext(TokenIterator *it, int offset = 1)
     int64_t     pos    = it->token.pos;
     int64_t     length = it->token.length;
 
-    while (it->block && offset > 0)
+    while (it->block)
     {
+        Assert(it->block->token_count != TOKEN_BLOCK_FREE_TAG);
+
         pos += length;
 
         offset -= 1;
@@ -651,6 +663,15 @@ LocateNext(TokenIterator *it, int offset = 1)
         {
             Token *t = &block->tokens[index];
             length = t->length;
+
+            if (offset <= 0 && t->kind != Token_Whitespace)
+            {
+                break;
+            }
+        }
+        else
+        {
+            break;
         }
     }
 
@@ -691,8 +712,10 @@ LocatePrev(TokenIterator *it, int offset = 1)
     int64_t     pos    = it->token.pos;
     int64_t     length = it->token.length;
 
-    while (it->block && offset > 0)
+    while (it->block)
     {
+        Assert(it->block->token_count != TOKEN_BLOCK_FREE_TAG);
+
         pos -= length;
 
         offset -= 1;
@@ -707,6 +730,15 @@ LocatePrev(TokenIterator *it, int offset = 1)
         {
             Token *t = &block->tokens[index];
             length = t->length;
+
+            if (offset <= 0 && t->kind != Token_Whitespace)
+            {
+                break;
+            }
+        }
+        else
+        {
+            break;
         }
     }
 
@@ -817,6 +849,41 @@ MergeLines(Buffer *buffer, Range range)
 }
 
 function bool
+ValidateTokenBlockChain(LineIndexNode *record)
+{
+    int visited_block_count = 0;
+
+    ScopedMemory temp;
+    TokenBlock **big_horrid_stack = PushArrayNoClear(temp, 10'000, TokenBlock *);
+
+    TokenBlock *first = record->data.first_token_block;
+    TokenBlock *block = first;
+    for (; block; block = block->prev)
+    {
+        Assert(block->token_count != TOKEN_BLOCK_FREE_TAG);
+        for (int i = 0; i < visited_block_count; i += 1)
+        {
+            Assert(big_horrid_stack[i] != block);
+        }
+        big_horrid_stack[visited_block_count++] = block;
+    }
+
+    visited_block_count = 0;
+
+    for (; block; block = block->next)
+    {
+        Assert(block->token_count != TOKEN_BLOCK_FREE_TAG);
+        for (int i = 0; i < visited_block_count; i += 1)
+        {
+            Assert(big_horrid_stack[i] != block);
+        }
+        big_horrid_stack[visited_block_count++] = block;
+    }
+
+    return true;
+}
+
+function bool
 ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
 {
     //
@@ -834,6 +901,7 @@ ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
         while (stack_at > 0)
         {
             LineIndexNode *node = stack[--stack_at];
+            Assert(node->kind != LineIndexNode_FREE);
 
             if (node->kind == LineIndexNode_Record)
             {
@@ -862,6 +930,17 @@ ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
                     else
                     {
                         INVALID_CODE_PATH;
+                    }
+                }
+
+                for (TokenBlock *block = data->first_token_block;
+                     block;
+                     block = block->next)
+                {
+                    Assert(block->token_count != TOKEN_BLOCK_FREE_TAG);
+                    if (block == data->last_token_block)
+                    {
+                        break;
                     }
                 }
 
@@ -899,15 +978,25 @@ ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
              level->entry_count > 0;
              level = level->children[0])
         {
-            for (LineIndexNode *node = level;
+            int64_t sum      = 0;
+            int64_t line_sum = 0;
+            LineIndexNode *first = level->children[0];
+            for (LineIndexNode *node = first;
                  node;
                  node = node->next)
             {
-                Assert(node->kind == level->kind);
+                Assert(node->kind == first->kind);
                 if (node->prev) Assert(node->prev->next == node);
                 if (node->next) Assert(node->next->prev == node);
+                sum      += node->span;
+                line_sum += node->line_span;
             }
+            Assert(sum      == root->span);
+            Assert(line_sum == root->line_span);
         }
+
+        LineIndexNode *record = GetFirstRecord(root);
+        ValidateTokenBlockChain(record);
     }
 
     return true;
@@ -925,6 +1014,7 @@ ValidateLineIndexTreeIntegrity(LineIndexNode *root)
 #if VALIDATE_LINE_INDEX_TREE_INTEGRITY_AGGRESSIVELY
     return ValidateLineIndexInternal(root, nullptr);
 #else
+    (void)root;
     return true;
 #endif
 }

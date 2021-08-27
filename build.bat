@@ -5,7 +5,7 @@ set MSVC_FLAGS=-DCOMPILER_MSVC=1
 set LLVM_FLAGS=-Wno-missing-field-initializers -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-writable-strings -Wno-missing-field-initializers -Wno-missing-braces -Wno-char-subscripts -Wno-invalid-offsetof -DCOMPILER_LLVM=1 -maes
 set SANITIZE_FLAGS=/Od /MT -DTEXTIT_INTERNAL=1 -DTEXTIT_SLOW=1 -fsanitize=address
 set DEBUG_FLAGS=/Od /MTd -DTEXTIT_INTERNAL=1 -DTEXTIT_SLOW=1 
-set RELEASE_FLAGS=/O2 /MT
+set RELEASE_FLAGS=/O2 /MT -DTEXTIT_INTERNAL=0 -DTEXTIT_SLOW=0
 set LINKER_FLAGS=/opt:ref /incremental:no
 set LINKER_LIBRARIES=user32.lib gdi32.lib dwmapi.lib d3d11.lib d3dcompiler.lib
 

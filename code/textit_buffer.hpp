@@ -111,6 +111,7 @@ AllocateTokenBlock(Buffer *buffer)
 function void
 FreeTokenBlock(Buffer *buffer, TokenBlock *block)
 {
+    block->token_count = TOKEN_BLOCK_FREE_TAG;
     SllStackPush(buffer->first_free_token_block, block);
 }
 
