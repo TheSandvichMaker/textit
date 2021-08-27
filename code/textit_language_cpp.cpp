@@ -1,123 +1,121 @@
 function void
 TokenizeCpp(Tokenizer *tok)
 {
-    while (CharsLeft(tok))
+    ParseWhitespace(tok);
+    if (!CharsLeft(tok))
     {
-        if (ParseWhitespace(tok))
+        return;
+    }
+
+    Token t;
+    BeginToken(tok, &t);
+
+    Token *prev_t = tok->prev_token;
+
+    if ((t.flags & TokenFlag_FirstInLine) &&
+        (tok->user_state & TokenizeState_C_InPreprocessor) &&
+        (prev_t->kind != Token_LineContinue))
+    {
+        tok->user_state &= ~TokenizeState_C_InPreprocessor;
+        tok->state      &= ~TokenizeState_ImplicitStatementEndings;
+    }
+
+    uint8_t c = Advance(tok);
+    switch (c)
+    {
+        default:
         {
-            break;
-        }
-
-        Token t;
-        BeginToken(tok, &t);
-
-        Token *prev_t = tok->prev_token;
-
-        if ((t.flags & TokenFlag_FirstInLine) &&
-            (tok->user_state & TokenizeState_C_InPreprocessor) &&
-            (prev_t->kind != Token_LineContinue))
-        {
-            tok->user_state &= ~TokenizeState_C_InPreprocessor;
-            tok->state      &= ~TokenizeState_ImplicitStatementEndings;
-        }
-
-        uint8_t c = Advance(tok);
-        switch (c)
-        {
-            default:
-            {
 parse_default:
-                bool parse_string = false;
-                char string_end_char = '"';
-                if (c == 'L' && Match(tok, '"'))       { parse_string = true; } 
-                if (c == 'u' && Match(tok, '"'))       { parse_string = true; }
-                if (c == 'U' && Match(tok, '"'))       { parse_string = true; }
-                if (c == 'u' && Match(tok, "8\""_str)) { parse_string = true; }
-                if (tok->user_state & TokenizeState_C_InPreprocessor && Match(tok, '<'))
-                {
-                    parse_string = true;
-                    string_end_char = '>';
-                }
-
-                if (parse_string)
-                {
-                    ParseString(tok, &t, string_end_char);
-                    break;
-                }
-
-                Revert(tok, &t);
-                ParseStandardToken(tok, &t);
-            } break;
-
-            case '_':
+            bool parse_string = false;
+            char string_end_char = '"';
+            if (c == 'L' && Match(tok, '"'))       { parse_string = true; } 
+            if (c == 'u' && Match(tok, '"'))       { parse_string = true; }
+            if (c == 'U' && Match(tok, '"'))       { parse_string = true; }
+            if (c == 'u' && Match(tok, "8\""_str)) { parse_string = true; }
+            if (tok->user_state & TokenizeState_C_InPreprocessor && Match(tok, '<'))
             {
-                if (prev_t->kind == Token_String)
-                {
-                    t.kind = Token_Operator;
-                    while (IsValidIdentifierAscii(Peek(tok))) Advance(tok);
-                }
-                else
-                {
-                    goto parse_default;
-                }
-            } break;
+                parse_string = true;
+                string_end_char = '>';
+            }
 
-            case '#':
+            if (parse_string)
             {
-                if (t.flags & TokenFlag_FirstInLine)
-                {
-                    t.kind = Token_Preprocessor;
-                    tok->user_state |= TokenizeState_C_InPreprocessor;
-                    tok->state      |= TokenizeState_ImplicitStatementEndings;
-                }
-            } break;
+                ParseString(tok, &t, string_end_char);
+                break;
+            }
 
-            case ':':
+            Revert(tok, &t);
+            ParseStandardToken(tok, &t);
+        } break;
+
+        case '_':
+        {
+            if (prev_t->kind == Token_String)
             {
-                if ((prev_t->kind == Token_Identifier) &&
-                    (prev_t->flags & TokenFlag_FirstInLine))
-                {
-                    prev_t->kind = Token_Label;
-                }
+                t.kind = Token_Operator;
+                while (IsValidIdentifierAscii(Peek(tok))) Advance(tok);
+            }
+            else
+            {
                 goto parse_default;
-            } break;
+            }
+        } break;
 
-            case '\'':
+        case '#':
+        {
+            if (t.flags & TokenFlag_FirstInLine)
             {
-                if (Peek(tok) != '\'')
+                t.kind = Token_Preprocessor;
+                tok->user_state |= TokenizeState_C_InPreprocessor;
+                tok->state      |= TokenizeState_ImplicitStatementEndings;
+            }
+        } break;
+
+        case ':':
+        {
+            if ((prev_t->kind == Token_Identifier) &&
+                (prev_t->flags & TokenFlag_FirstInLine))
+            {
+                prev_t->kind = Token_Label;
+            }
+            goto parse_default;
+        } break;
+
+        case '\'':
+        {
+            if (Peek(tok) != '\'')
+            {
+                if (Match(tok, '\\') ||
+                    Peek(tok) != '\'')
                 {
-                    if (Match(tok, '\\') ||
-                        Peek(tok) != '\'')
+                    tok->at++;
+                    if (Match(tok, '\''))
                     {
-                        tok->at++;
-                        if (Match(tok, '\''))
-                        {
-                            t.kind = Token_CharacterLiteral;
-                            break;
-                        }
+                        t.kind = Token_CharacterLiteral;
+                        break;
                     }
                 }
+            }
 
-                goto parse_default;
-            } break;
+            goto parse_default;
+        } break;
 
-            case '(':
-            {
-                if (prev_t->kind == Token_Identifier && !(prev_t->flags & TokenFlag_IsPreprocessor))
-                {
-                    prev_t->kind = Token_Function;
-                }
-                goto parse_default;
-            } break;
-        }
-
-        if (tok->user_state & TokenizeState_C_InPreprocessor)
+        case '(':
         {
-            t.flags |= TokenFlag_IsPreprocessor;
-        }
-
-        EndToken(tok, &t);
+            if (prev_t->kind == Token_Identifier && !(prev_t->flags & TokenFlag_IsPreprocessor))
+            {
+                prev_t->kind = Token_Function;
+            }
+            goto parse_default;
+        } break;
     }
+
+    if (tok->user_state & TokenizeState_C_InPreprocessor)
+    {
+        t.flags |= TokenFlag_IsPreprocessor;
+    }
+
+    EndToken(tok, &t);
 }
 
 function bool
@@ -125,7 +123,7 @@ ConsumeCppType(TagParser *parser)
 {
     bool result = false;
 
-    Token *rewind_point = PeekToken(parser);
+    TokenLocator rewind_point = GetLocator(parser);
 
     while (ConsumeToken(parser, Token_Keyword, "const"_str) ||
            ConsumeToken(parser, Token_Keyword, "volatile"_str));
@@ -188,7 +186,7 @@ bail:
 function bool
 ConsumeCppIf0(TagParser *parser)
 {
-    Token *rewind = PeekToken(parser);
+    TokenLocator rewind = GetLocator(parser);
     if (ConsumeToken(parser, Token_Preprocessor) &&
         ConsumeToken(parser, Token_FlowControl, "if"_str) &&
         (ConsumeToken(parser, Token_Number, "0"_str) ||
@@ -215,7 +213,7 @@ ParseTagsCpp(Buffer *buffer)
     {
         ScopedMemory temp;
 
-        Token *rewind_point = PeekToken(parser);
+        TokenLocator rewind = GetLocator(parser);
 
         SetFlags(parser, 0, TokenFlag_IsComment|TokenFlag_IsPreprocessor);
         TagSubKind match_kind = Tag_C_None;
@@ -225,25 +223,25 @@ ParseTagsCpp(Buffer *buffer)
         else if (ConsumeToken(parser, Token_Keyword, "class"_str))  match_kind = Tag_Cpp_Class;
         if (match_kind)
         {
-            if (Token *ident = ConsumeToken(parser, Token_Identifier))
+            if (Token ident = ConsumeToken(parser, Token_Identifier))
             {
-                Tag *tag = AddTag(buffer, ident);
+                Tag *tag = AddTag(buffer, &ident);
                 tag->kind     = Tag_Declaration;
                 tag->sub_kind = match_kind;
                 if (ConsumeToken(parser, ':'))
                 {
                     ConsumeToken(parser, Token_Identifier);
                 }
-                if (Token *opening_brace = ConsumeToken(parser, Token_LeftScope))
+                if (Token opening_brace = ConsumeToken(parser, Token_LeftScope))
                 {
                     tag->kind = Tag_Definition;
                     if (match_kind == Tag_C_Enum)
                     {
                         while (TokensLeft(parser) && !ConsumeToken(parser, Token_RightScope))
                         {
-                            if (Token *enum_value = ConsumeToken(parser, Token_Identifier))
+                            if (Token enum_value = ConsumeToken(parser, Token_Identifier))
                             {
-                                Tag *child_tag = AddTag(buffer, enum_value);
+                                Tag *child_tag = AddTag(buffer, &enum_value);
                                 child_tag->parent   = tag;
                                 child_tag->kind     = Tag_Declaration;
                                 child_tag->sub_kind = Tag_C_EnumValue;
@@ -260,18 +258,18 @@ ParseTagsCpp(Buffer *buffer)
         else if (ConsumeToken(parser, Token_Keyword, "typedef"_str))
         {
             ConsumeCppType(parser);
-            if (Token *t = ConsumeToken(parser, Token_Identifier))
+            if (Token t = ConsumeToken(parser, Token_Identifier))
             {
-                Tag *tag = AddTag(buffer, t);
+                Tag *tag = AddTag(buffer, &t);
                 tag->kind     = Tag_Declaration;
                 tag->sub_kind = Tag_C_Typedef;
             }
         }
         else if (ConsumeCppType(parser)) // TODO: More robust function parsing
         {
-            if (Token *t = ConsumeToken(parser, Token_Function))
+            if (Token t = ConsumeToken(parser, Token_Function))
             {
-                Tag *tag = AddTag(buffer, t);
+                Tag *tag = AddTag(buffer, &t);
                 tag->kind     = Tag_Declaration;
                 tag->sub_kind = Tag_C_Function;
                 if (ConsumeBalancedPair(parser, Token_LeftParen) &&
@@ -282,7 +280,7 @@ ParseTagsCpp(Buffer *buffer)
             }
             else
             {
-                Rewind(parser, rewind_point);
+                Rewind(parser, rewind);
                 Advance(parser);
             }
         }
@@ -290,9 +288,9 @@ ParseTagsCpp(Buffer *buffer)
         {
             if (ConsumeToken(parser, Token_Identifier, "define"_str))
             {
-                if (Token *t = ConsumeToken(parser, Token_Identifier))
+                if (Token t = ConsumeToken(parser, Token_Identifier))
                 {
-                    Tag *tag = AddTag(buffer, t);
+                    Tag *tag = AddTag(buffer, &t);
                     tag->kind     = Tag_Definition;
                     tag->sub_kind = Tag_C_Macro;
                     if (ConsumeToken(parser, Token_LeftParen))
@@ -305,7 +303,17 @@ ParseTagsCpp(Buffer *buffer)
         }
         else
         {
+            if (parser->parse_index == 1072)
+            {
+                int y = 0; (void)y;
+            }
+
             Advance(parser);
+
+            if (parser->it.token.pos == 11404)
+            {
+                int y = 0; (void)y;
+            }
         }
     }
 

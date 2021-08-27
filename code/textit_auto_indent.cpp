@@ -57,7 +57,7 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
     IndentRules *rules = buffer->indent_rules;
 
     LineInfo info;
-    FindLineInfoByLine(&buffer->line_index, line, &info);
+    FindLineInfoByLine(buffer, line, &info);
 
     int64_t line_start           = info.range.start;
     int64_t line_end             = info.range.end;
@@ -67,14 +67,14 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
 
     bool force_left = false;
 
-    Token *first_token = it.token;
-    if (first_token->pos < line_end)
+    Token first_token = it.token;
+    if (first_token.pos < line_end)
     {
-        force_left = !!(rules->table[first_token->kind] & IndentRule_ForceLeft);
+        force_left = !!(rules->table[first_token.kind] & IndentRule_ForceLeft);
     }
     else
     {
-        first_token = nullptr;
+        first_token.kind = Token_None;
     }
 
     Arena *arena = platform->GetTempArena();
@@ -83,21 +83,21 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
     int nest_stack_at = 0;
     TokenKind *nest_stack = PushArrayNoClear(arena, 257, TokenKind) + 1;
 
-    Token *anchor = nullptr;
-    Token *t      = Prev(&it);
+    Token anchor = {};
+    Token t      = Prev(&it);
 
-    while (t)
+    while (t.kind)
     {
-        if (t->pos >= line_end) goto next;
-        if (t->pos >= line_start) goto next;
-        if (t->flags & TokenFlag_IsComment) goto next;
+        if (t.pos >= line_end) goto next;
+        if (t.pos >= line_start) goto next;
+        if (t.flags & TokenFlag_IsComment) goto next;
 
-        IndentRule rule = rules->table[t->kind];
+        IndentRule rule = rules->table[t.kind];
         if (rule & IndentRule_PopIndent)
         {
             if (nest_stack_at < 256)
             {
-                nest_stack[nest_stack_at++] = GetOtherNestTokenKind(t->kind);
+                nest_stack[nest_stack_at++] = GetOtherNestTokenKind(t.kind);
             }
             else
             {
@@ -106,7 +106,7 @@ GetIndentationForLine(Buffer *buffer, int64_t line, IndentationResult *result)
         }
         else if (rule & IndentRule_PushIndent)
         {
-            if (nest_stack[nest_stack_at - 1] == t->kind)
+            if (nest_stack[nest_stack_at - 1] == t.kind)
             {
                 nest_stack_at -= 1;
             }
@@ -121,7 +121,7 @@ next:
         t = Prev(&it);
     }
 
-    Token *override_anchor = nullptr;
+    Token override_anchor = {};
     IndentRule override_rule = 0;
 
     // now we have the anchor to start with, do a forward pass for refinement,
@@ -130,14 +130,14 @@ next:
     for (;;)
     {
         t = Next(&it);
-        if (!t) break;
+        if (!t.kind) break;
 
-        if (t->pos >= line_start) break;
+        if (t.pos >= line_start) break;
 
-        IndentRule rule = rules->table[t->kind];
-        if (!override_anchor &&
-            (t->flags & TokenFlag_LastInLine) &&
-            !(t->flags & TokenFlag_IsComment) &&
+        IndentRule rule = rules->table[t.kind];
+        if (!override_anchor.kind &&
+            (t.flags & TokenFlag_LastInLine) &&
+            !(t.flags & TokenFlag_IsComment) &&
             !(rule & IndentRule_StatementEnd) &&
             !(rule & IndentRule_AffectsIndent))
         {
@@ -147,25 +147,25 @@ next:
 
         if (rule & IndentRule_StatementEnd)
         {
-            override_anchor = nullptr;
+            override_anchor.kind = Token_None;
         }
     }
 
-    if (override_anchor) anchor = override_anchor;
+    if (override_anchor.kind) anchor = override_anchor;
 
     int64_t indent_width = core_config->indent_width;
     int64_t indent       = 0;
     int64_t align        = 0;
 
-    if (anchor)
+    if (anchor.kind)
     {
-        int64_t start = FindLineStart(buffer, anchor->pos);
+        int64_t start = FindLineStart(buffer, anchor.pos);
 
         int64_t anchor_depth = 0;
         int64_t indent_depth = 0;
         bool finished_counting_indent = false;
 
-        for (int64_t at = start; at < anchor->pos && IsInBufferRange(buffer, at); at += 1)
+        for (int64_t at = start; at < anchor.pos && IsInBufferRange(buffer, at); at += 1)
         {
             uint8_t c = ReadBufferByte(buffer, at);
             if (c == ' ')
@@ -196,8 +196,8 @@ next:
 
         indent = indent_depth;
 
-        IndentRule anchor_rule = rules->table[anchor->kind];
-        if (override_anchor)
+        IndentRule anchor_rule = rules->table[anchor.kind];
+        if (override_anchor.kind)
         {
             anchor_rule = override_rule;
         }
@@ -206,7 +206,7 @@ next:
         {
             if (anchor_rule & IndentRule_Hanging)
             {
-                align = anchor_delta + anchor->length;
+                align = anchor_delta + anchor.length;
             }
             else
             {
@@ -221,8 +221,8 @@ next:
                 }
             }
 
-            if (first_token &&
-                (first_token->kind == GetOtherNestTokenKind(anchor->kind)))
+            if (first_token.kind &&
+                first_token.kind == GetOtherNestTokenKind(anchor.kind))
             {
                 if (anchor_rule & IndentRule_Hanging)
                 {

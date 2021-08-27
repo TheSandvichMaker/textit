@@ -191,9 +191,6 @@ struct EditorState
 
     IndentRules default_indent_rules;
 
-    TextStorage default_register;
-    TextStorage registers[26];
-
     Project *first_project;
     Tag *first_free_tag;
 

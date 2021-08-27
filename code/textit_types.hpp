@@ -20,6 +20,19 @@ struct String
 {
     size_t size;
     uint8_t *data;
+
+    uint8_t
+    operator[](size_t index)
+    {
+        if (index < size)
+        {
+            return data[index];
+        }
+        else
+        {
+            return 0;
+        }
+    }
 };
 
 constexpr String

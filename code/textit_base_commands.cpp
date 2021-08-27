@@ -456,11 +456,11 @@ COMMAND_PROC(GoToFileUnderCursor,
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    Token *token = GetTokenAt(buffer, cursor->pos);
-    if (token->kind == Token_String)
+    Token token = GetTokenAt(buffer, cursor->pos);
+    if (token.kind == Token_String)
     {
         ScopedMemory temp;
-        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token->pos + 1, token->length - 2));
+        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token.pos + 1, token.length - 2));
 
         for (PlatformFileIterator *it = platform->FindFiles(temp, string);
              platform->FileIteratorIsValid(it);
@@ -577,19 +577,19 @@ COMMAND_PROC(GoToDefinitionUnderCursor,
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    Token *token = GetTokenAt(buffer, cursor->pos);
-    if (token->kind == Token_Identifier ||
-        token->kind == Token_Function)
+    Token token = GetTokenAt(buffer, cursor->pos);
+    if (token.kind == Token_Identifier ||
+        token.kind == Token_Function)
     {
         ScopedMemory temp;
-        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token->pos, token->length));
+        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token.pos, token.length));
 
         if (Tag *tags = PushTagsWithName(temp, buffer->project, string))
         {
             Tag *best_tag = tags;
             for (Tag *tag = tags; tag; tag = tag->next)
             {
-                if ((tag->related_token_kind == token->kind) &&
+                if ((tag->related_token_kind == token.kind) &&
                     (tag->kind > best_tag->kind))
                 {
                     best_tag = tag;
@@ -599,10 +599,10 @@ COMMAND_PROC(GoToDefinitionUnderCursor,
             view->center_view_next_time_we_calculate_scroll = true; // this is terrible
         }
     }
-    else if (token->kind == Token_String)
+    else if (token.kind == Token_String)
     {
         ScopedMemory temp;
-        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token->pos + 1, token->length - 2));
+        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token.pos + 1, token.length - 2));
 
         if (Buffer *found = FindOrOpenBuffer(buffer->project, string))
         {
@@ -657,6 +657,7 @@ CreateNewCursorOnNextLine(View *view, Direction direction)
         if (!line_empty)
         {
             Cursor *new_cursor = CreateCursor(view);
+            new_cursor->sticky_col = relevant_cursor->sticky_col;
             SetCursor(new_cursor, CalculateBufferLocationFromLineCol(buffer, line, col).pos);
             break;
         }
@@ -936,13 +937,13 @@ MOVEMENT_PROC(EncloseNextScope)
     int depth = 0;
     while (IsValid(&it))
     {
-        Token *t = Next(&it);
-        if ((t->kind == Token_LeftParen) ||
-            (t->kind == Token_LeftScope) ||
-            (t->kind == Token_RightParen) ||
-            (t->kind == Token_RightScope))
+        Token t = Next(&it);
+        if ((t.kind == Token_LeftParen) ||
+            (t.kind == Token_LeftScope) ||
+            (t.kind == Token_RightParen) ||
+            (t.kind == Token_RightScope))
         {
-            opening_kind = t->kind;
+            opening_kind = t.kind;
             if (opening_kind == Token_LeftParen)  { seek_forward = true;  closing_kind = Token_RightParen; }
             if (opening_kind == Token_LeftScope)  { seek_forward = true;  closing_kind = Token_RightScope; }
             if (opening_kind == Token_RightParen) { seek_forward = false; closing_kind = Token_LeftParen; Prev(&it); }
@@ -956,17 +957,17 @@ MOVEMENT_PROC(EncloseNextScope)
     {
         while (IsValid(&it))
         {
-            Token *t = (seek_forward ? Next(&it) : Prev(&it));
-            if (t->kind == opening_kind)
+            Token t = (seek_forward ? Next(&it) : Prev(&it));
+            if (t.kind == opening_kind)
             {
                 depth += 1;
             }
-            else if (t->kind == closing_kind)
+            else if (t.kind == closing_kind)
             {
                 depth -= 1;
                 if (depth <= 0)
                 {
-                    result.end = (seek_forward ? t->pos + t->length : t->pos);
+                    result.end = (seek_forward ? t.pos + t.length : t.pos);
                     break;
                 }
             }
@@ -999,20 +1000,20 @@ SelectSurroundingNest(View *view,
     int depth = 0;
     while (IsValid(&it))
     {
-        Token *t = Prev(&it);
-        if (!t) break;
+        Token t = Prev(&it);
+        if (!t.kind) break;
 
-        if (t->kind == close_nest)
+        if (t.kind == close_nest)
         {
             depth += 1;
         }
-        if (t->kind == open_nest)
+        if (t.kind == open_nest)
         {
             depth -= 1;
             if (depth < 0)
             {
-                start_pos = t->pos;
-                inner_start_pos = t->pos + t->length;
+                start_pos = t.pos;
+                inner_start_pos = t.pos + t.length;
                 break;
             }
         }
@@ -1022,20 +1023,20 @@ SelectSurroundingNest(View *view,
     {
         while (IsValid(&it))
         {
-            Token *t = Next(&it);
-            if (!t) break;
+            Token t = Next(&it);
+            if (!t.kind) break;
 
-            if (t->kind == open_nest)
+            if (t.kind == open_nest)
             {
                 depth += 1;
             }
-            else if (t->kind == close_nest)
+            else if (t.kind == close_nest)
             {
                 depth -= 1;
                 if (depth < 0)
                 {
-                    int64_t end_pos       = t->pos + t->length;
-                    int64_t inner_end_pos = t->pos;
+                    int64_t end_pos       = t.pos + t.length;
+                    int64_t inner_end_pos = t.pos;
 
                     result.selection.inner.start = inner_start_pos;
                     result.selection.inner.end   = inner_end_pos;
@@ -1097,7 +1098,6 @@ MOVEMENT_PROC(EncloseParameter)
     
     int64_t pos = cursor->pos;
 
-    Token *alternative_start = nullptr;
     TokenKind end_kind      = 0;
     int64_t   end_pos       = -1;
     int64_t   inner_end_pos = -1;
@@ -1107,50 +1107,41 @@ MOVEMENT_PROC(EncloseParameter)
 
     TokenKind open_token = 0;
 
-    while (IsValid(&it) || alternative_start)
+    while (IsValid(&it))
     {
-        if (!IsValid(&it) && alternative_start)
-        {
-            Clear(&nests);
-            Rewind(&it, alternative_start);
-            alternative_start = nullptr;
-        }
+        Token t = Next(&it);
+        if (!t.kind) break;
 
-        Token *t = Next(&it);
-        if (!t) break;
-
-        if (!alternative_start &&
-            t->kind == Token_LeftParen)
-        {
-            alternative_start = PeekNext(&it);
-        }
-
-        if (IsInNest(&nests, t->kind, Direction_Forward))
+        if (IsInNest(&nests, t.kind, Direction_Forward))
         {
             continue;
         }
 
-        if (t->kind == Token_RightParen ||
-            t->kind == Token_RightScope ||
-            t->kind == ';' ||
-            t->kind == ',')
+        if (t.kind == Token_RightParen ||
+            t.kind == Token_RightScope ||
+            t.kind == ';' ||
+            t.kind == ',')
         {
-            end_kind      = t->kind;
-            inner_end_pos = t->pos;
-            end_pos       = t->pos;
-            if (t->kind == ',' ||
-                t->kind == ';')
+            end_kind      = t.kind;
+            inner_end_pos = t.pos;
+            end_pos       = t.pos;
+            if (t.kind == ',' ||
+                t.kind == ';')
             {
-                end_pos = t->pos + t->length;
-                Token *next = PeekNext(&it);
+                end_pos = t.pos + t.length;
+
+                // kill me
+                Token next = Next(&it);
+                Prev(&it);
+
                 if (next)
                 {
-                    end_pos = next->pos;
+                    end_pos = next.pos;
                 }
             }
             else
             {
-                open_token = GetOtherNestTokenKind(t->kind);
+                open_token = GetOtherNestTokenKind(t.kind);
             }
             break;
         }
@@ -1161,33 +1152,36 @@ MOVEMENT_PROC(EncloseParameter)
         Prev(&it); // skip the end token we were on
         while (IsValid(&it))
         {
-            Token *t = Prev(&it);
+            Token t = Prev(&it);
             if (!t) break;
 
-            if (IsInNest(&nests, t->kind, Direction_Backward))
+            if (IsInNest(&nests, t.kind, Direction_Backward))
             {
                 continue;
             }
 
             if ((!open_token &&
-                 (t->kind == Token_LeftParen   ||
-                  t->kind == Token_LeftScope)) ||
-                t->kind == open_token          ||
-                t->kind == ',' ||
-                t->kind == ';')
+                 (t.kind == Token_LeftParen   ||
+                  t.kind == Token_LeftScope)) ||
+                t.kind == open_token          ||
+                t.kind == ',' ||
+                t.kind == ';')
             {
-                int64_t inner_start_pos = t->pos + t->length;
+                int64_t inner_start_pos = t.pos + t.length;
 
-                Token *next = PeekNext(&it, 1);
+                // kill me
+                Token next = Next(&it);
+                Prev(&it);
+
                 if (next)
                 {
-                    inner_start_pos = next->pos;
+                    inner_start_pos = next.pos;
                 }
 
                 int64_t start_pos = inner_start_pos;
-                if ((t->kind == ',' || t->kind == ';') && end_kind != t->kind)
+                if ((t.kind == ',' || t.kind == ';') && end_kind != t.kind)
                 {
-                    start_pos = t->pos;
+                    start_pos = t.pos;
                 }
 
                 result.selection.inner.start = inner_start_pos;
@@ -1709,10 +1703,12 @@ TEXT_COMMAND_PROC(WriteText)
         if (newline && core_config->auto_line_comments)
         {
             LineInfo info;
-            FindLineInfoByPos(&buffer->line_index, insert_pos, &info);
+            FindLineInfoByPos(buffer, insert_pos, &info);
 
-            Token *t = &buffer->tokens[info.token_index];
-            if (t->kind == Token_LineComment)
+            TokenIterator it = IterateLineTokens(&info);
+            Token t = it.token;
+
+            if (t.kind == Token_LineComment)
             {
                 String line_comment_string = GetOperatorAsString(buffer->language, Token_LineComment);
                 Append(&buf, line_comment_string);
@@ -1726,8 +1722,8 @@ TEXT_COMMAND_PROC(WriteText)
         {
             IndentRules *indent_rules = buffer->indent_rules;
 
-            Token *t = GetTokenAt(buffer, insert_pos);
-            IndentRule rule = indent_rules->table[t->kind];
+            Token t = GetTokenAt(buffer, insert_pos);
+            IndentRule rule = indent_rules->table[t.kind];
             if (rule & IndentRule_RequiresReindent)
             {
                 should_auto_indent = true;

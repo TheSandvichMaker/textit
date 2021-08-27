@@ -14,10 +14,10 @@ struct Tokenizer
 {
     Token null_token;
     Token *prev_token;
-    VirtualArray<Token> *tokens;
+    TokenBlock *first_token_block;
+    TokenBlock *last_token_block;
 
-    LineIndex *line_index;
-
+    Buffer *buffer;
     LanguageSpec *language;
 
     TokenizeState     state;
@@ -29,11 +29,11 @@ struct Tokenizer
     bool allow_nested_block_comments;
     int  block_comment_count;
 
-    int64_t  line_start;
-    uint32_t line_start_token_count;
-
+    int64_t line_start;
+    int64_t newline_pos;
     int64_t at_line;
     bool    new_line;
+    LineTokenizeState start_line_state;
 
     int64_t base;
     uint8_t *start;
@@ -41,7 +41,6 @@ struct Tokenizer
     uint8_t *end;
 };
 
-function void TokenizeBuffer(Buffer *buffer);
-function void RetokenizeRange(Buffer *buffer, int64_t pos, int64_t delta);
+function int64_t TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data);
 
 #endif /* TEXTIT_TOKENIZER_HPP */

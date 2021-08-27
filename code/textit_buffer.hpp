@@ -89,9 +89,30 @@ struct Buffer : TextStorage
     struct IndentRules  *indent_rules;
     struct Tags         *tags;
 
-    LineIndex line_index;
-    VirtualArray<Token> tokens;
+    TokenBlock *first_free_token_block;
+
+    LineIndexNode *line_index_root;
+    LineIndexNode *first_free_line_index_node;
 };
+
+function TokenBlock *
+AllocateTokenBlock(Buffer *buffer)
+{
+    if (!buffer->first_free_token_block)
+    {
+        buffer->first_free_token_block = PushStructNoClear(&buffer->arena, TokenBlock);
+        buffer->first_free_token_block->next = nullptr;
+    }
+    TokenBlock *result = SllStackPop(buffer->first_free_token_block);
+    ZeroStruct(result);
+    return result;
+}
+
+function void
+FreeTokenBlock(Buffer *buffer, TokenBlock *block)
+{
+    SllStackPush(buffer->first_free_token_block, block);
+}
 
 function Buffer *GetBuffer(BufferID id);
 function Range GetLineRange(Buffer *buffer, int64_t line);
@@ -106,7 +127,7 @@ IsInBufferRange(Buffer *buffer, int64_t pos)
 function bool
 LineIsInBuffer(Buffer *buffer, int64_t line)
 {
-    return ((line >= 0) && (line < GetLineCount(&buffer->line_index)));
+    return ((line >= 0) && (line < GetLineCount(buffer)));
 }
 
 function int64_t
@@ -123,10 +144,6 @@ BufferRange(Buffer *buffer)
     return MakeRange(0, buffer->count);
 }
 
-function int64_t
-GetLineCount(Buffer *buffer)
-{
-    return GetLineCount(&buffer->line_index);
-}
+function uint8_t ReadBufferByte(Buffer *buffer, int64_t pos);
 
 #endif /* TEXTIT_BUFFER_HPP */

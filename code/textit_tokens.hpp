@@ -88,84 +88,39 @@ struct Token
     int16_t      length;   // 6
     int16_t      pad1;     // 8
     int64_t      pos;      // 16
+
+    operator bool() { return !!kind; }
 };
 
-struct TokenIterator
+struct TokenBlock
 {
-    Token *token;
-    Token *tokens;
-    Token *tokens_end;
+    TokenBlock *next;
+    TokenBlock *prev;
+    int64_t token_count;
+    Token tokens[32];
 };
 
-function bool
-IsValid(TokenIterator *it)
+struct TokenLocator
 {
-    return !!it->token;
-}
+    TokenBlock *block;
+    int64_t     index;
+    int64_t     pos;
 
-function void
-Rewind(TokenIterator *it, Token *t)
+    operator bool() { return block; }
+};
+
+function Token
+GetToken(TokenLocator locator)
 {
-    Assert(t >= it->tokens && t < it->tokens_end);
-    it->token = t;
-}
+    TokenBlock *block = locator.block;
+    int64_t     index = locator.index;
+    int64_t     pos   = locator.pos;
 
-function Token *
-PeekNext(TokenIterator *it, int offset = 0)
-{
-    if (!it->token) return nullptr;
-
-    Token *result = nullptr;
-    if ((it->token + offset) < it->tokens_end)
+    Token result = {};
+    if (block && index < block->token_count)
     {
-        result = it->token + offset;
-    }
-    return result;
-}
-
-function Token *
-Next(TokenIterator *it)
-{
-    if (!it->token) return nullptr;
-
-    Token *result = nullptr;
-    if (it->token < it->tokens_end)
-    {
-        result = it->token++;
-    }
-    if (it->token >= it->tokens_end)
-    {
-        it->token = nullptr;
-    }
-    return result;
-}
-
-function Token *
-PeekPrev(TokenIterator *it, int offset = 0)
-{
-    if (!it->token) return nullptr;
-
-    Token *result = nullptr;
-    if ((it->token - offset - 1) >= it->tokens)
-    {
-        result = it->token - offset - 1;
-    }
-    return result;
-}
-
-function Token *
-Prev(TokenIterator *it)
-{
-    if (!it->token) return nullptr;
-
-    Token *result = nullptr;
-    if (it->token > it->tokens)
-    {
-        result = --it->token;
-    }
-    if (it->token <= it->tokens)
-    {
-        it->token = nullptr;
+        result = block->tokens[index];
+        result.pos = pos;
     }
     return result;
 }

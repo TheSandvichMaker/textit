@@ -100,7 +100,6 @@ PushTagsWithName(Arena *arena, Project *project, String name)
         if (tag->hash == hash)
         {
             Buffer *buffer = GetBuffer(tag->buffer);
-
             String tag_name = PushBufferRange(arena, buffer, MakeRangeStartLength(tag->pos, tag->length));
             if (AreEqual(name, tag_name))
             {
@@ -123,38 +122,30 @@ PushTagsWithName(Arena *arena, Project *project, String name)
 // Tag Parser
 //
 
-function Token *
+function void
 Advance(TagParser *parser)
 {
+    parser->parse_index += 1;
     parser->pushed_text = false;
-    Token *result = parser->t;
-    Token *t = Next(&parser->it);
-    while (t && (t->flags & TokenFlag_IsComment))
-    {
-        t = Next(&parser->it);
-    }
-    if (t)
-    {
-        parser->t = t;
-    }
-    else
-    {
-        parser->t = &parser->null_token;
-    }
-    return result;
+    Next(&parser->it);
+}
+
+function TokenLocator
+GetLocator(TagParser *parser)
+{
+    return GetLocator(&parser->it);
 }
 
 function void
-Rewind(TagParser *parser, Token *t)
+Rewind(TagParser *parser, TokenLocator locator)
 {
-    Rewind(&parser->it, t);
-    Advance(parser);
+    Rewind(&parser->it, locator);
 }
 
 function bool
 TokensLeft(TagParser *parser)
 {
-    return parser->t != &parser->null_token;
+    return IsValid(&parser->it);
 }
 
 function void
@@ -163,9 +154,7 @@ InitializeTagParser(TagParser *parser, Buffer *buffer)
     ZeroStruct(parser);
     parser->buffer         = buffer;
     parser->it             = IterateTokens(buffer);
-    parser->t              = &parser->null_token;
     parser->text_container = MakeStringContainer(ArrayCount(parser->text_container_storage), parser->text_container_storage);
-    Advance(parser); // warm up first token
 }
 
 function void
@@ -182,100 +171,74 @@ GetTokenText(TagParser *parser)
     {
         parser->pushed_text = true;
         Clear(&parser->text_container);
-        PushTokenString(&parser->text_container, parser->buffer, parser->t);
+        PushTokenString(&parser->text_container, parser->buffer, &parser->it.token);
     }
     String result = parser->text_container.as_string;
     return result;
 }
 
-function Token *
+function Token
 PeekToken(TagParser *parser)
 {
-    return parser->t;
+    return parser->it.token;
 }
 
-function Token *
-MatchNextToken(TagParser *parser, TokenKind kind, String match_text = {}, int offset = 0)
+function bool
+AcceptToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, Token *t)
 {
-    Token *result = nullptr;
-    Token *t = PeekNext(&parser->it, offset);
-    if (t && t->kind == kind)
+    bool result = t->kind == kind && (!sub_kind || t->sub_kind == sub_kind);
+    if (((t->flags & parser->require_flags) != parser->require_flags ||
+         (t->flags & parser->reject_flags)))
     {
-        result = t;
-        if (match_text.size > 0)
-        {
-            ScopedMemory temp;
-            String text = PushTokenString(temp, parser->buffer, t);
-            if (!AreEqual(match_text, text))
-            {
-                result = nullptr;
-            }
-        }
-    }
-    if (result)
-    {
-        if (((result->flags & parser->require_flags) != parser->require_flags) ||
-            (result->flags & parser->reject_flags))
-        {
-            result = nullptr;
-        }
+        result = false;
     }
     return result;
 }
 
-function Token *
+function Token
 MatchToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, String match_text = {})
 {
-    Token *result = nullptr;
-    if (parser->t->kind == kind &&
-        (!sub_kind || parser->t->sub_kind == sub_kind))
+    Token t = parser->it.token;
+    if (AcceptToken(parser, kind, sub_kind, &t))
     {
         if (match_text.size > 0)
         {
             String text = GetTokenText(parser);
             if (AreEqual(match_text, text))
             {
-                result = parser->t;
+                return t;
             }
         }
         else
         {
-            result = parser->t;
+            return t;
         }
     }
-    if (result)
-    {
-        if (((result->flags & parser->require_flags) != parser->require_flags) ||
-            (result->flags & parser->reject_flags))
-        {
-            result = nullptr;
-        }
-    }
-    return result;
+    return {};
 }
 
-function Token *
+function Token
 MatchToken(TagParser *parser, TokenKind kind, String match_text = {})
 {
     return MatchToken(parser, kind, 0, match_text);
 }
 
-function Token *
+function Token
 ConsumeToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, String match_text = {})
 {
-    Token *result = MatchToken(parser, kind, sub_kind, match_text);
-    if (result)
+    Token result = MatchToken(parser, kind, sub_kind, match_text);
+    if (result.kind)
     {
         Advance(parser);
     }
     return result;
 }
 
-function Token *
+function Token
 ConsumeToken(TagParser *parser, TokenKind kind, String match_text = {})
 {
-    Token *result = MatchToken(parser, kind, match_text);
-    if (result)
+    Token result = MatchToken(parser, kind, match_text);
+    if (result.kind)
     {
         Advance(parser);
     }
@@ -285,12 +248,13 @@ ConsumeToken(TagParser *parser, TokenKind kind, String match_text = {})
 function bool
 ConsumeBalancedPair(TagParser *parser, TokenKind left_kind)
 {
-    Token *rewind = parser->t;
+    TokenLocator rewind = GetLocator(parser);
 
-    if (Token *t = MatchToken(parser, left_kind))
+    Token t = MatchToken(parser, left_kind);
+    if (t.kind)
     {
         NestHelper helper = {};
-        while (IsInNest(&helper, PeekToken(parser)->kind, Direction_Forward))
+        while (IsInNest(&helper, parser->it.token.kind, Direction_Forward))
         {
             Advance(parser);
             if (!TokensLeft(parser))

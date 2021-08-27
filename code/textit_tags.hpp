@@ -38,14 +38,17 @@ struct Tags
 struct TagParser
 {
     Buffer *buffer;
+
     TokenIterator it;
-    Token null_token;
-    Token *t;
-    bool pushed_text;
-    uint8_t text_container_storage[512];
+
+    bool            pushed_text;
+    uint8_t         text_container_storage[512];
     StringContainer text_container;
+
     TokenFlags require_flags;
     TokenFlags reject_flags;
+
+    int parse_index;
 };
 
 function void ParseTags(Buffer *buffer);

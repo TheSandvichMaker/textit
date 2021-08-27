@@ -147,7 +147,7 @@ MakeNewProject(String search_start)
         if (buffer->project != project) continue;
 
         total_bytes         += buffer->count;
-        total_lines_of_code += GetLineCount(&buffer->line_index);
+        total_lines_of_code += GetLineCount(buffer);
     }
 
     platform->DebugPrint("Loaded %s worth of text representing %zu lines of code in %fms\n",

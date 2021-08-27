@@ -7,13 +7,18 @@
 #define TEXTIT_EXPORT
 #endif
 
-#define SimpleAssert(x) ((x) ? 1 : (__debugbreak(), 0))
-#define Assert(x) \
+// ugh, whatever
+#include <assert.h>
+
+#define SimpleAssert(x) assert(x) // ((x) ? 1 : (__debugbreak(), 0))
+#define Assert(x) assert(x)
+/*
     ((x) ? 1 \
          : (platform->ReportError(PlatformError_Fatal, \
                                   "Assertion Failed: " #x " at file %s, line %d", __FILE__, __LINE__), 0))
+*/
 
-#ifdef DEBUG_BUILD
+#ifdef TEXTIT_SLOW
 #define AssertSlow(x) Assert(x)
 #else
 #define AssertSlow(x) 

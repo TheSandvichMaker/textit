@@ -5,6 +5,12 @@ CharsLeft(Tokenizer *tok)
     return (int64_t)(tok->end - tok->at);
 }
 
+function int64_t
+AtPos(Tokenizer *tok)
+{
+    return tok->at - tok->start;
+}
+
 function uint8_t
 Peek(Tokenizer *tok, int64_t index = 0)
 {
@@ -169,6 +175,8 @@ ParseStandardToken(Tokenizer *tok, Token *t)
 function bool
 ParseWhitespace(Tokenizer *tok)
 {
+    bool result = false;
+
     // TODO: Handle implicit line endings
     Token *prev_t = tok->prev_token;
 
@@ -196,30 +204,17 @@ ParseWhitespace(Tokenizer *tok)
                 // finish old line data
                 //
 
-                int64_t newline_pos = tok->at - tok->start;
+                tok->newline_pos = AtPos(tok) - 1;
 
                 if ((Peek(tok, -1) == '\r') && (Peek(tok, 0) == '\n'))
                 {
                     Advance(tok);
                 }
 
-                int64_t currently_at = tok->at - tok->start;
-                Range line_range = MakeRange(tok->line_start, currently_at);
-
-                LineData *line_data = InsertLine(tok->line_index, line_range);
-                line_data->newline_pos = newline_pos;
-
-                line_data->token_index = tok->line_start_token_count;
-                line_data->token_count = (int16_t)(tok->tokens->count - line_data->token_index);
-                
                 tok->at_line += 1;
 
-                //
-                // new line data
-                //
-
-                tok->line_start = line_range.end;
-                tok->line_start_token_count = tok->tokens->count;
+                result = true;
+                break;
             }
         }
         else
@@ -228,12 +223,41 @@ ParseWhitespace(Tokenizer *tok)
         }
     }
 
-    bool result = !CharsLeft(tok);
     return result;
 }
 
+function Token *
+PushToken(Tokenizer *tok, Token *t)
+{
+    Buffer *buffer = tok->buffer;
+
+    if (tok->first_token_block == nullptr ||
+        tok->first_token_block->token_count >= ArrayCount(tok->first_token_block->tokens))
+    {
+        TokenBlock *block = AllocateTokenBlock(buffer);
+        block->prev = tok->last_token_block;
+
+        if (tok->first_token_block)
+        {
+            tok->last_token_block = tok->last_token_block->next = block;
+        }
+        else
+        {
+            tok->first_token_block = tok->last_token_block = block;
+        }
+    }
+
+    TokenBlock *block = tok->last_token_block;
+
+    Token *dest = &block->tokens[block->token_count++];
+    CopyStruct(t, dest);
+
+    dest->pos = 0;
+    return dest;
+}
+
 function void
-BeginToken(Tokenizer* tok, Token *t)
+BeginToken(Tokenizer *tok, Token *t)
 {
     ZeroStruct(t);
     if (tok->new_line)
@@ -263,7 +287,7 @@ EndToken(Tokenizer *tok, Token *t)
     {
         case Token_LineComment:
         {
-            tok->in_line_comment = true);
+            tok->in_line_comment = true;
         } break;
 
         case Token_OpenBlockComment:
@@ -296,111 +320,82 @@ EndToken(Tokenizer *tok, Token *t)
         t->flags |= TokenFlag_IsComment;
     }
 
-    tok->prev_token = tok->tokens->Push(*t);
+    tok->prev_token = PushToken(tok, t);
 }
 
 function void
 TokenizeBasic(Tokenizer *tok)
 {
-    while (CharsLeft(tok))
+    Token t;
+    BeginToken(tok, &t);
+    ParseStandardToken(tok, &t);
+    EndToken(tok, &t);
+}
+
+function void
+BeginTokenizeLine(Tokenizer *tok, Buffer *buffer, Range range, LineTokenizeState previous_line_state)
+{
+    ZeroStruct(tok);
+    tok->prev_token = &tok->null_token;
+    tok->buffer     = buffer;
+    tok->language   = buffer->language;
+    tok->start      = buffer->text;
+    tok->end        = buffer->text + range.end;
+    tok->at         = tok->start + range.start;
+    tok->first_token_block = tok->last_token_block = AllocateTokenBlock(buffer);
+    tok->new_line   = true;
+    tok->line_start = AtPos(tok);
+
+    if (previous_line_state & LineTokenizeState_BlockComment)
     {
-        if (!ParseWhitespace(tok))
-        {
-            break;
-        }
-        
-        Token t;
-        BeginToken(tok, &t);
-        ParseStandardToken(tok, &t);
-        EndToken(tok, &t);
+        tok->block_comment_count = 1;
     }
 }
 
 function void
-InitializeTokenizer(Tokenizer *tok, Buffer *buffer, Range range, VirtualArray<Token> *tokens)
+EndTokenizeLine(Tokenizer *tok, LineData *line)
 {
-    ZeroStruct(tok);
-    tok->prev_token = &tok->null_token;
-    tok->tokens     = tokens;
-    tok->line_index = &buffer->line_index;
-    tok->language   = buffer->language;
-    tok->start      = buffer->text + range.start;
-    tok->end        = buffer->text + range.end;
-    tok->at         = tok->start;
-    tok->new_line   = true;
+    line->newline_col          = tok->newline_pos - tok->line_start;
+    line->first_token_block    = tok->first_token_block;
+    line->start_tokenize_state = tok->start_line_state;
+    line->end_tokenize_state   = (tok->block_comment_count > 0 ? LineTokenizeState_BlockComment : 0);
+    line->first_token_block    = tok->first_token_block;
+    line->last_token_block     = tok->last_token_block;
+}
 
-    tok->tokens->Clear();
-    tok->tokens->EnsureSpace(1); // what the fuck
+function int64_t
+TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data)
+{
+    Tokenizer tok_, *tok = &tok_;
+    BeginTokenizeLine(tok, buffer, MakeRange(pos, buffer->count), previous_line_state);
+
+    while (CharsLeft(tok))
+    {
+        if (ParseWhitespace(tok))
+        {
+            break;
+        }
+        tok->language->Tokenize(tok);
+    }
+
+    EndTokenizeLine(tok, line_data);
+
+    return AtPos(tok);
 }
 
 function void
 TokenizeBuffer(Buffer *buffer)
 {
-    PlatformHighResTime start = platform->GetTime();
+    LineData line_data = {};
+    LineData *prev_line_data = &line_data;
 
-    LanguageSpec *lang = buffer->language;
-
-    Tokenizer tok;
-    InitializeTokenizer(&tok, buffer, BufferRange(buffer), &buffer->tokens);
-
-    lang->Tokenize(&tok);
-
-    Assert(tok.at == tok.end);
-
-    int64_t currently_at = tok.at - tok.start;
-    Range line_range = MakeRange(tok.line_start, currently_at);
-
-    LineData *final_line_data = InsertLine(tok.line_index, line_range);
-
-    final_line_data->token_index = tok.line_start_token_count;
-    final_line_data->token_count = (int16_t)(tok.tokens->count - final_line_data->token_index);
-    
-    tok.at_line += 1;
-
-    PlatformHighResTime end = platform->GetTime();
-    double time = platform->SecondsElapsed(start, end);
-
-    platform->DebugPrint("Tokenized in %fms\n", 1000.0*time);
-}
-
-function void
-RetokenizeRange(Buffer *buffer, int64_t pos, int64_t delta)
-{
-    if (delta == 0) return;
-
-    // int64_t first_line = GetLineNumber(buffer, pos);
-    // int64_t last_line  = GetLineNumber(buffer, pos + Abs(delta));
-
-    LanguageSpec *lang = buffer->language;
-
-    uint32_t min_token_index = FindTokenIndexForPos(buffer, pos);
-    uint32_t max_token_index = FindTokenIndexForPos(buffer, pos + Abs(delta));
-
-    if (buffer->tokens[max_token_index].pos < pos + delta)
+    int64_t at = 0;
+    while (at < buffer->count)
     {
-        max_token_index += 1;
+        int64_t line_start = at;
+        at = TokenizeLine(buffer, at, prev_line_data->end_tokenize_state, &line_data);
+
+        LineIndexNode *node = InsertLine(buffer, MakeRange(line_start, at), &line_data);
+        prev_line_data = &node->data;
     }
-
-    int64_t min_pos = Min(pos, buffer->tokens[min_token_index].pos);
-    int64_t max_pos = buffer->tokens[max_token_index].pos;
-
-    VirtualArray<Token> tokens = {};
-    tokens.SetCapacity(4'000'000);
-    defer { tokens.Release(); };
-
-    Tokenizer tok;
-    InitializeTokenizer(&tok, buffer, MakeRange(min_pos, max_pos), &tokens);
-
-    lang->Tokenize(&tok);
-
-    for (size_t i = max_token_index; i < buffer->tokens.count; i += 1)
-    {
-        Token *t = &buffer->tokens[i];
-        t->pos += delta;
-    }
-
-    platform->DebugPrint("Retokenize\n");
-    platform->DebugPrint("\tpos: %lld, delta: %lld\n", pos, delta);
-    platform->DebugPrint("\tedit token index: %u\n", max_token_index);
 }
-

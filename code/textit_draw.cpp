@@ -114,7 +114,12 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     int64_t line = min_line;
 
-    LineIndexIterator line_it = IterateLineIndexFromLine(&buffer->line_index, min_line);
+    LineIndexIterator line_it = IterateLineIndexFromLine(buffer, min_line);
+
+    LineInfo info;
+    GetLineInfo(&line_it, &info);
+
+    TokenIterator token_it = IterateLineTokens(&info);
 
     int64_t pos = line_it.range.start;
     view->visible_range.start = pos;
@@ -159,10 +164,10 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         {
             base_background = line_highlight;
         }
-        PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, top_left.y + row), MakeV2i(bounds.max.x, top_left.y + row + 1)), base_background);
+        PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, top_left.y + row), 
+                                  MakeV2i(bounds.max.x, top_left.y + row + 1)), 
+                 base_background);
         PushLayer(Layer_ViewForeground);
-
-        Token *token = &buffer->tokens[line_it.record->data.token_index];
 
         int64_t col = 0;
         int64_t line_number = line + 1;
@@ -188,38 +193,32 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             // Colorize Tokens
             //
 
-            // TODO: Re-enable once confident things work
 #if 0
+            Token token = token_it.token;
+
             while (token &&
-                   (pos >= (token->pos + token->length)))
+                   (pos >= (token.pos + token.length)))
             {
-                token++;
-                if (token >= token_end)
-                {
-                    token = nullptr;
-                    break;
-                }
+                token = Next(&token_it);
             }
 #else
-            // Getting the token like this is more robust against a busted token array, which is good
-            // for when I'm iterating and want to see what my tokens are like
-            token = &buffer->tokens[FindTokenIndexForPos(buffer, pos)];
+            Token token = GetTokenAt(buffer, pos);
 #endif
 
             if (token)
             {
-                String token_name = MakeString(token->length, &buffer->text[token->pos]);
+                String token_name = MakeString(token.length, &buffer->text[token.pos]);
 
                 StringID foreground_id = "text_foreground"_id;
                 if (core_config->syntax_highlighting)
                 {
-                    foreground_id = GetThemeIDForToken(language, token);
+                    foreground_id = GetThemeIDForToken(language, &token);
                     // FIXME: Decide what to do about highlighting untagged functions
-                    if (token->kind == Token_Function)
+                    if (token.kind == Token_Function)
                     {
                         foreground_id = "text_unknown_function"_id;
                     }
-                    if (HasFlag(token->flags, TokenFlag_IsComment))
+                    if (HasFlag(token.flags, TokenFlag_IsComment))
                     {
                         foreground_id = "text_comment"_id;
                         if (AreEqual(token_name, "NOTE"_str))
@@ -231,20 +230,20 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                             foreground_id = "text_comment_todo"_id;
                         }
                     }
-                    else if (token->kind != Token_String && HasFlag(token->flags, TokenFlag_IsPreprocessor))
+                    else if (token.kind != Token_String && HasFlag(token.flags, TokenFlag_IsPreprocessor))
                     {
                         foreground_id = "text_preprocessor"_id;
                     }
-                    else if (token->kind == Token_Identifier ||
-                             token->kind == Token_Function)
+                    else if (token.kind == Token_Identifier ||
+                             token.kind == Token_Function)
                     {
-                        String string = MakeString(token->length, &buffer->text[token->pos]);
+                        String string = MakeString(token.length, &buffer->text[token.pos]);
                         StringID id = HashStringID(string);
                         TokenKind kind = GetTokenKindFromStringID(language, id);
                         if (kind)
                         {
-                            foreground_id = GetThemeIDForToken(language, token);
-                            token->kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
+                            foreground_id = GetThemeIDForToken(language, &token);
+                            token.kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
                                                 // but maybe it should be moved outside of the actual drawing function
                         }
 
@@ -252,7 +251,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                         ScopedMemory temp;
                         for (Tag *tag = PushTagsWithName(temp, project, token_name); tag; tag = tag->next)
                         {
-                            if (tag->related_token_kind == token->kind)
+                            if (tag->related_token_kind == token.kind)
                             {
                                 foreground_id = GetThemeIDForTag(language, tag);
                                 break;
@@ -261,18 +260,20 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     }
                 }
 
-                if (pos >= token->pos &&
-                    editor->pos_at_mouse >= token->pos &&
-                    editor->pos_at_mouse <  token->pos + token->length)
+#if 0
+                if (pos >= token.pos &&
+                    editor->pos_at_mouse >= token.pos &&
+                    editor->pos_at_mouse <  token.pos + token.length)
                 {
                     editor->token_at_mouse = token;
                     background = text_background_highlighted;
                 }
+#endif
 
                 foreground = GetThemeColor(foreground_id);
                 text_style = GetThemeStyle(foreground_id);
 
-                if (token->flags & TokenFlag_NonParticipating)
+                if (token.flags & TokenFlag_NonParticipating)
                 {
                     foreground.r = foreground.r / 2;
                     foreground.g = foreground.g / 2;
@@ -543,6 +544,19 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
+    int64_t at_line = Clamp(view->scroll_at, 0, GetLineCount(buffer));
+    for (int64_t y = bounds.min.y; y < bounds.max.y; y += 1)
+    {
+        LineInfo info;
+        FindLineInfoByLine(buffer, at_line, &info);
+
+        at_line += 1;
+
+        DrawText(MakeV2i(bounds.max.x - 32, y), 
+                 PushTempStringF("%lld: { %lld, %lld }", info.line, info.range.start, info.range.end),
+                 COLOR_WHITE, COLOR_BLACK);
+    }
+
 #if 0
     DrawText(MakeV2i(bounds.max.x - 32, bounds.min.x),
              PushTempStringF("jump at: %d, jump top: %d", view->jump_at, view->jump_top),
@@ -558,27 +572,4 @@ DrawView(View *view, bool is_active_window)
 #endif
 
     return actual_line_height;
-}
-
-function void
-DrawLineIndex(LineIndex *index)
-{
-    uint32_t queue_at  = 0;
-    uint32_t queue_top = 0;
-    LineIndexNode *queue[128];
-
-    queue[queue_top++ % 128] = index->root;
-
-    for (;;)
-    {
-        LineIndexNode *node = queue[queue_at++ % 128];
-        
-        if (node->kind == LineIndexNode_Internal)
-        {
-            for (int i = 0; i < node->entry_count; i += 1)
-            {
-                queue[queue_top++ % 128] = node->children[i];
-            }
-        }
-    }
 }
