@@ -577,6 +577,21 @@ CalculateEditDistance(String s, String t)
     return GetCell(n, m);
 }
 
+function int
+CountNewlines(String string)
+{
+    int result = 0;
+    for (size_t i = 0; i < string.size; i += 1)
+    {
+        if (string[i] == '\r' || string[i] == '\n')
+        {
+            i += (string[i] + string[i + 1] == '\r' + '\n' ? 1 : 0);
+            result += 1;
+        }
+    }
+    return result;
+}
+
 function size_t
 CountNullTerminatedString(char *string, size_t max = 0)
 {

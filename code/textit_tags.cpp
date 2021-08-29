@@ -72,7 +72,7 @@ FreeAllTags(Buffer *buffer)
     Project *project = buffer->project;
 
     Tags *tags = buffer->tags;
-    while (DllIsntEmpty(&tags->sentinel))
+    while (DllHasNodes(&tags->sentinel))
     {
         Tag *tag = tags->sentinel.next;
 
@@ -92,6 +92,8 @@ PushTagsWithName(Arena *arena, Project *project, String name)
 {
     HashResult hash = HashString(name);
 
+    Arena *temp = platform->GetTempArena();
+
     Tag *result = nullptr;
 
     Tag *tag = project->tag_table[hash.u32[0] % ArrayCount(project->tag_table)];
@@ -100,7 +102,7 @@ PushTagsWithName(Arena *arena, Project *project, String name)
         if (tag->hash == hash)
         {
             Buffer *buffer = GetBuffer(tag->buffer);
-            String tag_name = PushBufferRange(arena, buffer, MakeRangeStartLength(tag->pos, tag->length));
+            String tag_name = PushBufferRange(temp, buffer, MakeRangeStartLength(tag->pos, tag->length));
             if (AreEqual(name, tag_name))
             {
                 Tag *new_result = PushStruct(arena, Tag);

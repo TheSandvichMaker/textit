@@ -1,7 +1,7 @@
 function int64_t
 CharsLeft(Tokenizer *tok)
 {
-    AssertSlow(tok->at < tok->end);
+    AssertSlow(tok->at <= tok->end);
     return (int64_t)(tok->end - tok->at);
 }
 
@@ -352,11 +352,11 @@ BeginTokenizeLine(Tokenizer *tok, Buffer *buffer, Range range, LineTokenizeState
 }
 
 function void
-EndTokenizeLine(Tokenizer *tok, LineData *line)
+EndTokenizeLine(Tokenizer *tok, LineData *line, LineTokenizeState previous_line_state)
 {
     line->newline_col          = tok->newline_pos - tok->line_start;
     line->first_token_block    = tok->first_token_block;
-    line->start_tokenize_state = tok->start_line_state;
+    line->start_tokenize_state = previous_line_state;
     line->end_tokenize_state   = (tok->block_comment_count > 0 ? LineTokenizeState_BlockComment : 0);
     line->first_token_block    = tok->first_token_block;
     line->last_token_block     = tok->last_token_block;
@@ -389,7 +389,7 @@ TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state,
         }
     }
 
-    EndTokenizeLine(tok, line_data);
+    EndTokenizeLine(tok, line_data, previous_line_state);
 
     return AtPos(tok);
 }

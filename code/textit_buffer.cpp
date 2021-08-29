@@ -687,13 +687,15 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 
     int64_t next_retokenize_line = start_info.line;
     int64_t tokenize_pos = start_info.range.start;
-    int64_t      end_pos = range.start + delta;
+    // int64_t      end_pos = range.start + delta;
+
+    int lines_to_retokenize = 1 + CountNewlines(text);
 
     //
     // Tokenize new lines
     //
 
-    while (tokenize_pos <= end_pos)
+    while (lines_to_retokenize > 0)
     {
         int64_t this_line_start = tokenize_pos;
 
@@ -704,6 +706,7 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
         prev_line_data = &node->data;
 
         next_retokenize_line += 1;
+        lines_to_retokenize -= 1;
     }
 
     //
@@ -716,9 +719,19 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     {
         LineData *next_line_data = &it.record->data;
 
+        TokenBlock *old_prev = next_line_data->first_token_block->prev;
+        TokenBlock *old_next = next_line_data->last_token_block->next;
+
+        // next_line_data->first_token_block->prev->next = next_line_data->data.last_token_block->next;
+        // record->next->data.first_token_block->prev = record->data.first_token_block->prev;
+
         FreeTokens(buffer, it.record);
 
         TokenizeLine(buffer, it.range.start, prev_line_data->end_tokenize_state, next_line_data);
+
+        if (old_prev) old_prev->next = next_line_data->first_token_block;
+        if (old_next) old_next->prev = next_line_data->last_token_block;
+
         prev_line_data = next_line_data;
 
         Next(&it);

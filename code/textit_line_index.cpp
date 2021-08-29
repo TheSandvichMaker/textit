@@ -842,8 +842,7 @@ RemoveLinesFromIndex(Buffer *buffer, Range line_range)
 {
     LineIndexIterator it = IterateLineIndexFromLine(buffer, line_range.start);
 
-    int64_t line_count = RangeSize(line_range);
-    if (line_count == 0) line_count = 1;
+    int64_t line_count = RangeSize(line_range) + 1;
 
     for (int64_t i = 0; i < line_count; i += 1)
     {
@@ -1080,20 +1079,18 @@ ValidateLineIndexTreeIntegrity(LineIndexNode *root)
 function bool
 ValidateTokenLocatorIntegrity(Buffer *buffer, TokenLocator locator)
 {
+    if (!locator.block)
+    {
+        return true;
+    }
+
     LineInfo info;
     FindLineInfoByPos(buffer, locator.pos, &info);
     TokenLocator test_locator = LocateTokenAtPos(&info, locator.pos);
     
-    if (!locator.block)
-    {
-        Assert(!test_locator.block);
-    }
-    else
-    {
-        Assert(test_locator.block == locator.block);
-        Assert(test_locator.index == locator.index);
-        Assert(test_locator.pos   == locator.pos);
-    }
+    Assert(test_locator.block == locator.block);
+    Assert(test_locator.index == locator.index);
+    Assert(test_locator.pos   == locator.pos);
 
     return true;
 }

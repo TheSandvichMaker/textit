@@ -81,7 +81,7 @@
 #define DllInsertBack(h, n) ((n)->next = h, (n)->prev = (h)->prev, (n)->next->prev = n, (n)->prev->next = n)
 #define DllRemove(n) ((n)->next->prev = (n)->prev, (n)->prev->next = (n)->next)
 #define DllIsEmpty(s) ((s)->next == (s))
-#define DllIsntEmpty(s) ((s)->next != (s))
+#define DllHasNodes(s) ((s)->next != (s))
 
 #define ForDllUnique(it, sentinel, next, prev) for (auto prev_##it = (sentinel), it = (sentinel)->next; \
                                                     it != (sentinel);                                   \

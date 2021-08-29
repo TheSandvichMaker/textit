@@ -1147,7 +1147,9 @@ AppUpdateAndRender(Platform *platform_)
         }
 
         PushLayer(Layer_ViewForeground);
-        PushRect(MakeRect2iMinMax(0, render_state->viewport.max.y, render_state->viewport.max.x, render_state->viewport.max.y + 1), GetThemeColor("text_background"_id));
+        PushRect(MakeRect2iMinMax(0, render_state->viewport.max.y, 
+                                  render_state->viewport.max.x, render_state->viewport.max.y + 1), 
+                 GetThemeColor("text_background"_id));
     }
 
     if (core_config->debug_show_glyph_cache)
