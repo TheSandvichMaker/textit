@@ -218,6 +218,12 @@ Union(Range a, Range b)
     return result;
 }
 
+function bool
+IsInRange(Range range, int64_t pos)
+{
+    return pos >= range.start && pos < range.end;
+}
+
 // NOTE: These colors are in BGRA byte order
 struct Color
 {

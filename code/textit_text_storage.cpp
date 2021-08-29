@@ -58,8 +58,7 @@ TextStorageReplaceRange(TextStorage *storage, Range range, String text)
     PlatformHighResTime end = platform->GetTime();
     if (total_moved != 0 || text.size != 0)
     {
-        double time_elapsed = platform->SecondsElapsed(start, end);
-        platform->DebugPrint("moved %lld bytes, copied %zu bytes in %fms\n", total_moved, text.size, time_elapsed*1000.0);
+        editor->debug.buffer_edit_timing += platform->SecondsElapsed(start, end);
     }
 
     return edit_end;

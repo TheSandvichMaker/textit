@@ -454,8 +454,6 @@ PushUndoInternal(Buffer *buffer, int64_t pos, String forward, String backward)
     undo->current_ordinal += 1;
     node->ordinal = undo->current_ordinal;
 
-    platform->DebugPrint("Pushing undo node, ordinal: %lld\n", node->ordinal);
-
     node->pos = pos;
     node->forward = forward;
     node->backward = backward;
@@ -722,6 +720,8 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 
         TokenizeLine(buffer, it.range.start, prev_line_data->end_tokenize_state, next_line_data);
         prev_line_data = next_line_data;
+
+        Next(&it);
     }
 
     AssertSlow(ValidateLineIndexFull(buffer));
@@ -734,8 +734,18 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
 function int64_t
 BufferReplaceRange(Buffer *buffer, Range range, String text)
 {
+    if (buffer->flags & Buffer_ReadOnly)
+    {
+        return range.start;
+    }
+
     range = SanitizeRange(range);
     range = ClampRange(range, BufferRange(buffer));
+
+    if (RangeSize(range) == 0 && text.size == 0)
+    {
+        return range.start;
+    }
 
     String backward = {};
     if (RangeSize(range) > 0)
@@ -768,4 +778,23 @@ GetTokenAt(Buffer *buffer, int64_t pos)
 
     TokenLocator locator = LocateTokenAtPos(&info, pos);
     return GetToken(locator);
+}
+
+function Buffer *
+DEBUG_FindWhichBufferThisMemoryBelongsTo(void *memory_init)
+{
+    char *memory = (char *)memory_init;
+
+    Buffer *result = nullptr;
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (memory >= buffer->arena.base && memory < buffer->arena.base + buffer->arena.capacity)
+        {
+            result = buffer;
+            break;
+        }
+    }
+
+    return result;
 }

@@ -1105,6 +1105,7 @@ MOVEMENT_PROC(EncloseParameter)
     
     int64_t pos = cursor->pos;
 
+    TokenLocator alternative_start = {};
     TokenKind end_kind      = 0;
     int64_t   end_pos       = -1;
     int64_t   inner_end_pos = -1;
@@ -1114,10 +1115,23 @@ MOVEMENT_PROC(EncloseParameter)
 
     TokenKind open_token = 0;
 
-    while (IsValid(&it))
+    while (IsValid(&it) || alternative_start)
     {
+        if (!IsValid(&it) && alternative_start)
+        {
+            Clear(&nests);
+            Rewind(&it, alternative_start);
+            alternative_start = {};
+        }
+
         Token t = Next(&it);
         if (!t.kind) break;
+
+        if (!alternative_start &&
+            t.kind == Token_LeftParen)
+        {
+            alternative_start = LocateNext(&it);
+        }
 
         if (IsInNest(&nests, t.kind, Direction_Forward))
         {
@@ -1137,10 +1151,7 @@ MOVEMENT_PROC(EncloseParameter)
             {
                 end_pos = t.pos + t.length;
 
-                // kill me
-                Token next = Next(&it);
-                Prev(&it);
-
+                Token next = PeekNext(&it);
                 if (next)
                 {
                     end_pos = next.pos;
@@ -1176,10 +1187,7 @@ MOVEMENT_PROC(EncloseParameter)
             {
                 int64_t inner_start_pos = t.pos + t.length;
 
-                // kill me
-                Token next = Next(&it);
-                Prev(&it);
-
+                Token next = PeekNext(&it);
                 if (next)
                 {
                     inner_start_pos = next.pos;
@@ -1764,6 +1772,7 @@ COMMAND_PROC(OpenNewLineBelow)
 function void
 OnMouseDown(void)
 {
+#if 0
     View *view = GetActiveView();
     Cursor *cursor = GetCursor(view);
 
@@ -1793,6 +1802,7 @@ OnMouseDown(void)
         cursor->pos = editor->pos_at_mouse;
         cursor->selection = MakeSelection(MakeRange(cursor->pos));
     }
+#endif
 }
 
 function void

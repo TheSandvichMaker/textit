@@ -1089,6 +1089,8 @@ AppUpdateAndRender(Platform *platform_)
         OnMouseHeld();
     }
 
+    int events_handled = 0;
+
     PlatformEvent event;
     for (PlatformEventIterator it = platform->IterateEvents(PlatformEventFilter_ANY);
          platform->NextEvent(&it, &event);
@@ -1100,14 +1102,16 @@ AppUpdateAndRender(Platform *platform_)
             continue;
         }
 
+        events_handled += 1;
+
         if (editor->command_line_count > 0)
         {
             editor->clutch = false;
-            handled_any_events = HandleCommandLineEvent(editor->command_lines[editor->command_line_count - 1], &event);
+            handled_any_events |= HandleCommandLineEvent(editor->command_lines[editor->command_line_count - 1], &event);
         }
         else
         {
-            handled_any_events = HandleViewEvent(editor->active_window->view, &event);
+            handled_any_events |= HandleViewEvent(editor->active_window->view, &event);
             if (editor->command_line_count > 0)
             {
                 // if we began a command line, it needs to be warmed up to not show a frame of lag for the predictions
@@ -1180,6 +1184,23 @@ AppUpdateAndRender(Platform *platform_)
             ParseTags(buffer);
         }
     }
+
+    if (handled_any_events) 
+    {
+#if 0
+        platform->DebugPrint("Line index insert time: %fms, lookup time: %fms, lookup count: %lld, recursions per lookup: %lld\n",
+                             1000.0*editor->debug.line_index_insert_timing,
+                             1000.0*editor->debug.line_index_lookup_timing,
+                             editor->debug.line_index_lookup_count,
+                             editor->debug.line_index_lookup_recursion_count / editor->debug.line_index_lookup_count);
+        platform->DebugPrint("Buffer move time: %fms\n", 1000.0*editor->debug.buffer_edit_timing);
+#endif
+    }
+    editor->debug.line_index_insert_timing = 0.0;
+    editor->debug.line_index_lookup_timing = 0.0;
+    editor->debug.line_index_lookup_count = 0;
+    editor->debug.line_index_lookup_recursion_count = 0;
+    editor->debug.buffer_edit_timing = 0.0;
 
     {
         Buffer *active_buffer = GetActiveBuffer();

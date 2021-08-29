@@ -241,6 +241,13 @@ struct EditorState
         int delay;
         int delay_frame_count;
         int allocated_window_count;
+
+        double line_index_insert_timing;
+        double line_index_lookup_timing;
+        int64_t line_index_lookup_count;
+        int64_t line_index_lookup_recursion_count;
+
+        double buffer_edit_timing;
     } debug;
 };
 static EditorState *editor;

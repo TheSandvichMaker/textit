@@ -193,7 +193,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             // Colorize Tokens
             //
 
-#if 0
+#if 1
             Token token = token_it.token;
 
             while (token &&

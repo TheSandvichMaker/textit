@@ -2,6 +2,7 @@
 #define TEXTIT_LINE_INDEX_HPP
 
 #if TEXTIT_SLOW
+#define VALIDATE_LINE_INDEX 1
 #define VALIDATE_LINE_INDEX_TREE_INTEGRITY_AGGRESSIVELY 1
 #define VALIDATE_LINE_INDEX_EXTRA_SLOW 1
 #endif
@@ -75,6 +76,10 @@ struct LineIndexIterator
 
 struct TokenIterator
 {
+#if TEXTIT_SLOW
+    Buffer        *buffer;
+    int64_t        iteration_index;
+#endif
     TokenBlock    *block;
     int64_t        index;
     Token          token;
@@ -84,5 +89,6 @@ function int64_t GetLineCount(struct Buffer *buffer);
 function bool ValidateLineIndexFull(Buffer *buffer);
 function bool ValidateLineIndexTreeIntegrity(LineIndexNode *root);
 function bool ValidateTokenBlockChain(LineIndexNode *record);
+function bool ValidateTokenLocatorIntegrity(Buffer *buffer, TokenLocator locator);
 
 #endif /* TEXTIT_LINE_INDEX_HPP */

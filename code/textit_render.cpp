@@ -837,11 +837,6 @@ RenderCommandsToBitmap(void)
             } break;
         }
     }
-
-    if (glyph_fills > 0)
-    {
-        platform->DebugPrint("glyph fills: %d\n", glyph_fills);
-    }
 }
 
 static void

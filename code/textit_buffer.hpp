@@ -148,5 +148,6 @@ BufferRange(Buffer *buffer)
 }
 
 function uint8_t ReadBufferByte(Buffer *buffer, int64_t pos);
+function Buffer *DEBUG_FindWhichBufferThisMemoryBelongsTo(void *memory_init);
 
 #endif /* TEXTIT_BUFFER_HPP */

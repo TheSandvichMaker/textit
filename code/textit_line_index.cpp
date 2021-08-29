@@ -45,6 +45,7 @@ struct LineIndexLocator
     LineIndexNode *record;
     int64_t        pos;
     int64_t        line;
+    int64_t        times_recursed;
 };
 
 template <bool by_line>
@@ -53,7 +54,8 @@ LocateLineIndexNode(LineIndexNode    *node,
                     int64_t           target,     
                     LineIndexLocator *locator,   
                     int64_t           offset      = 0, 
-                    int64_t           line_offset = 0)
+                    int64_t           line_offset = 0,
+                    int64_t           times_recursed = 0)
 {
     Assert(node->kind != LineIndexNode_Record);
 
@@ -88,10 +90,11 @@ LocateLineIndexNode(LineIndexNode    *node,
         locator->record = child;
         locator->pos    = offset;
         locator->line   = line_offset;
+        locator->times_recursed = times_recursed;
         return;
     }
 
-    LocateLineIndexNode<by_line>(child, target, locator, offset, line_offset);
+    LocateLineIndexNode<by_line>(child, target, locator, offset, line_offset, times_recursed + 1);
 }
 
 function void
@@ -110,6 +113,8 @@ template <bool by_line>
 function void
 FindLineInfo(Buffer *buffer, int64_t target, LineInfo *out_info)
 {
+    PlatformHighResTime start = platform->GetTime();
+
     LineIndexLocator locator;
     LocateLineIndexNode<by_line>(buffer->line_index_root, target, &locator);
 
@@ -123,6 +128,12 @@ FindLineInfo(Buffer *buffer, int64_t target, LineInfo *out_info)
     out_info->range       = MakeRangeStartLength(locator.pos, node->span);
     out_info->newline_pos = locator.pos + data->newline_col;
     out_info->data        = data;
+
+    PlatformHighResTime end = platform->GetTime();
+    editor->debug.line_index_lookup_timing += platform->SecondsElapsed(start, end);
+
+    editor->debug.line_index_lookup_count += 1;
+    editor->debug.line_index_lookup_recursion_count += locator.times_recursed;
 }
 
 function void
@@ -389,6 +400,8 @@ GetFirstRecord(LineIndexNode *root)
 function LineIndexNode *
 InsertLine(Buffer *buffer, Range range, LineData *data)
 {
+    PlatformHighResTime start = platform->GetTime();
+
     if (!buffer->line_index_root)
     {
         buffer->line_index_root = AllocateLineIndexNode(buffer, LineIndexNode_Leaf);
@@ -416,6 +429,9 @@ InsertLine(Buffer *buffer, Range range, LineData *data)
 
     // NOTE: I am not doing the full validation here because the buffer may be desynced with the line index temporarily
     AssertSlow(ValidateLineIndexTreeIntegrity(buffer->line_index_root));
+
+    PlatformHighResTime end = platform->GetTime();
+    editor->debug.line_index_insert_timing += platform->SecondsElapsed(start, end);
 
     return record;
 }
@@ -556,6 +572,8 @@ LocateTokenAtPos(LineInfo *info, int64_t pos)
 {
     TokenLocator result = {};
 
+    Assert(pos >= info->range.start);
+
     int64_t at_pos = info->range.start;
     for (TokenBlock *block = info->data->first_token_block;
          block;
@@ -589,6 +607,11 @@ IterateTokens(Buffer *buffer, int64_t pos = 0)
     TokenLocator locator = LocateTokenAtPos(&info, pos);
     Rewind(&result, locator);
 
+#if TEXTIT_SLOW
+    result.buffer = buffer;
+    ValidateTokenLocatorIntegrity(buffer, locator);
+#endif
+
     return result;
 }
 
@@ -603,6 +626,11 @@ IterateLineTokens(Buffer *buffer, int64_t line)
     TokenLocator locator = LocateTokenAtPos(&info, info.range.start);
     Rewind(&result, locator);
 
+#if TEXTIT_SLOW
+    result.buffer = buffer;
+    ValidateTokenLocatorIntegrity(buffer, locator);
+#endif
+
     return result;
 }
 
@@ -613,6 +641,11 @@ IterateLineTokens(LineInfo *info)
 
     TokenLocator locator = LocateTokenAtPos(info, info->range.start);
     Rewind(&result, locator);
+
+#if TEXTIT_SLOW
+    result.buffer = DEBUG_FindWhichBufferThisMemoryBelongsTo(info->data);
+    ValidateTokenLocatorIntegrity(result.buffer, locator);
+#endif
 
     return result;
 }
@@ -679,6 +712,16 @@ LocateNext(TokenIterator *it, int offset = 1)
     result.index = index;
     result.pos   = pos;
 
+#if TEXTIT_SLOW
+    // platform->DebugPrint("[token iterator %llx, iteration %lld, next]: pos = %lld\n",
+    //                      PointerToInt(it),
+    //                      it->iteration_index,
+    //                      pos);
+
+    ValidateTokenLocatorIntegrity(it->buffer, result);
+    it->iteration_index += 1;
+#endif
+
     return result;
 }
 
@@ -716,13 +759,11 @@ LocatePrev(TokenIterator *it, int offset = 1)
     {
         Assert(it->block->token_count != TOKEN_BLOCK_FREE_TAG);
 
-        pos -= length;
-
         offset -= 1;
         index  -= 1;
         while (block && index < 0)
         {
-            block = block->next;
+            block = block->prev;
             index = block ? block->token_count - 1 : 0;
         }
 
@@ -730,6 +771,8 @@ LocatePrev(TokenIterator *it, int offset = 1)
         {
             Token *t = &block->tokens[index];
             length = t->length;
+
+            pos -= length;
 
             if (offset <= 0 && t->kind != Token_Whitespace)
             {
@@ -745,6 +788,16 @@ LocatePrev(TokenIterator *it, int offset = 1)
     result.block = block;
     result.index = index;
     result.pos   = pos;
+
+#if TEXTIT_SLOW
+    // platform->DebugPrint("[token iterator %llx, iteration %lld, prev]: pos = %lld\n",
+    //                      PointerToInt(it),
+    //                      it->iteration_index,
+    //                      pos);
+
+    ValidateTokenLocatorIntegrity(it->buffer, result);
+    it->iteration_index += 1;
+#endif
 
     return result;
 }
@@ -886,6 +939,10 @@ ValidateTokenBlockChain(LineIndexNode *record)
 function bool
 ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
 {
+    UNUSED_VARIABLE(root);
+    UNUSED_VARIABLE(buffer);
+
+#if VALIDATE_LINE_INDEX
     //
     // validate all spans sum up correctly
     // and newlines are where we expect: at the ends of lines
@@ -998,6 +1055,7 @@ ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
         LineIndexNode *record = GetFirstRecord(root);
         ValidateTokenBlockChain(record);
     }
+#endif
 
     return true;
 }
@@ -1017,4 +1075,25 @@ ValidateLineIndexTreeIntegrity(LineIndexNode *root)
     (void)root;
     return true;
 #endif
+}
+
+function bool
+ValidateTokenLocatorIntegrity(Buffer *buffer, TokenLocator locator)
+{
+    LineInfo info;
+    FindLineInfoByPos(buffer, locator.pos, &info);
+    TokenLocator test_locator = LocateTokenAtPos(&info, locator.pos);
+    
+    if (!locator.block)
+    {
+        Assert(!test_locator.block);
+    }
+    else
+    {
+        Assert(test_locator.block == locator.block);
+        Assert(test_locator.index == locator.index);
+        Assert(test_locator.pos   == locator.pos);
+    }
+
+    return true;
 }

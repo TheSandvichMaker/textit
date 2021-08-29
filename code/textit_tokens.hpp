@@ -100,7 +100,7 @@ struct TokenBlock
     TokenBlock *next;
     TokenBlock *prev;
     int64_t token_count;
-    Token tokens[32];
+    Token tokens[16];
 };
 
 struct TokenLocator
