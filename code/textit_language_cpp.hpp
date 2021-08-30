@@ -8,6 +8,7 @@ enum TokenizeState_C
 
 enum TokenKind_C : TokenSubKind
 {
+    Token_C_None,
     Token_C_Arrow,
 
     Token_Cpp_Namespace,

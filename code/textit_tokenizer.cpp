@@ -241,6 +241,7 @@ PushToken(Tokenizer *tok, Token *t)
 
         if (tok->first_token_block)
         {
+            block->prev = tok->last_token_block;
             tok->last_token_block = tok->last_token_block->next = block;
         }
         else
@@ -262,11 +263,12 @@ function void
 BeginToken(Tokenizer *tok, Token *t)
 {
     ZeroStruct(t);
+
     if (tok->new_line)
     {
-        tok->new_line = false;
         t->flags |= TokenFlag_FirstInLine;
     }
+
     t->pos = tok->at - tok->start;
 }
 
@@ -322,7 +324,12 @@ EndToken(Tokenizer *tok, Token *t)
         t->flags |= TokenFlag_IsComment;
     }
 
-    tok->prev_token = PushToken(tok, t);
+    Token *pushed = PushToken(tok, t);
+    if (pushed->kind != Token_Whitespace)
+    {
+        tok->prev_token = pushed;
+        tok->new_line   = false;
+    }
 }
 
 function void

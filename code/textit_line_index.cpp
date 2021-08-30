@@ -303,8 +303,8 @@ InsertEntry(Buffer         *buffer,
         if (record->next) record->next->prev = record;
         if (record->prev) record->prev->next = record;
 
-        if (record->next) record->next->data.first_token_block->prev = record->data.last_token_block;
-        if (record->prev) record->prev->data.last_token_block->next = record->data.first_token_block;
+        if (record->data.last_token_block->next)  record->data.last_token_block->next->prev  = record->data.last_token_block;
+        if (record->data.first_token_block->prev) record->data.first_token_block->prev->next = record->data.first_token_block;
 
 #if VALIDATE_LINE_INDEX_EXTRA_SLOW
         ValidateTokenBlockChain(record);
@@ -454,6 +454,49 @@ ClearLineIndex(Buffer *buffer)
     ClearLineIndex(buffer, buffer->line_index_root);
     buffer->line_index_root = nullptr;
 }
+
+struct LineIndexCountResult
+{
+    size_t nodes;
+    size_t nodes_size;
+    size_t token_blocks;
+    size_t token_blocks_size;
+    size_t token_blocks_capacity;
+    size_t token_blocks_occupancy;
+};
+
+function void
+CountLineIndex(LineIndexNode *node, LineIndexCountResult *result)
+{
+    if (!node) return;
+
+    result->nodes      += 1;
+    result->nodes_size += sizeof(*node);
+
+    if (node->kind == LineIndexNode_Record)
+    {
+        for (TokenBlock *block = node->data.first_token_block;
+             block;
+             block = block->next)
+        {
+            result->token_blocks           += 1;
+            result->token_blocks_size      += sizeof(*block);
+            result->token_blocks_capacity  += ArrayCount(block->tokens);
+            result->token_blocks_occupancy += block->token_count;
+
+            if (block == node->data.last_token_block)
+            {
+                break;
+            }
+        }
+    }
+
+    for (int i = 0; i < node->entry_count; i += 1)
+    {
+        CountLineIndex(node->children[i], result);
+    }
+}
+
 
 //
 // Line Index Iterator
@@ -908,20 +951,11 @@ ValidateTokenBlockChain(LineIndexNode *record)
     ScopedMemory temp;
     TokenBlock **big_horrid_stack = PushArrayNoClear(temp, 10'000, TokenBlock *);
 
+    bool is_first_node = !record->prev;
+    bool is_last_node  = !record->next;
+
     TokenBlock *first = record->data.first_token_block;
     TokenBlock *block = first;
-    for (; block; block = block->prev)
-    {
-        Assert(block->token_count != TOKEN_BLOCK_FREE_TAG);
-        for (int i = 0; i < visited_block_count; i += 1)
-        {
-            Assert(big_horrid_stack[i] != block);
-        }
-        big_horrid_stack[visited_block_count++] = block;
-    }
-
-    visited_block_count = 0;
-
     for (; block; block = block->next)
     {
         Assert(block->token_count != TOKEN_BLOCK_FREE_TAG);
@@ -930,6 +964,50 @@ ValidateTokenBlockChain(LineIndexNode *record)
             Assert(big_horrid_stack[i] != block);
         }
         big_horrid_stack[visited_block_count++] = block;
+
+        if (!is_first_node || block != record->data.first_token_block)
+        {
+            Assert(block->prev);
+        }
+
+        if (!is_last_node || block != record->data.last_token_block)
+        {
+            Assert(block->next);
+        }
+
+        if (block == record->data.last_token_block)
+        {
+            break;
+        }
+    }
+
+    Assert(block == record->data.last_token_block);
+
+    visited_block_count = 0;
+
+    for (; block; block = block->prev)
+    {
+        Assert(block->token_count != TOKEN_BLOCK_FREE_TAG);
+        for (int i = 0; i < visited_block_count; i += 1)
+        {
+            Assert(big_horrid_stack[i] != block);
+        }
+        big_horrid_stack[visited_block_count++] = block;
+
+        if (!is_first_node || block != record->data.first_token_block)
+        {
+            Assert(block->prev);
+        }
+
+        if (!is_last_node || block != record->data.last_token_block)
+        {
+            Assert(block->next);
+        }
+
+        if (block == record->data.first_token_block)
+        {
+            break;
+        }
     }
 
     return true;
@@ -987,16 +1065,29 @@ ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
                     {
                         INVALID_CODE_PATH;
                     }
-                }
 
-                for (TokenBlock *block = data->first_token_block;
-                     block;
-                     block = block->next)
-                {
-                    Assert(block->token_count != TOKEN_BLOCK_FREE_TAG);
-                    if (block == data->last_token_block)
+                    bool is_first_node = !node->prev;
+                    bool is_last_node  = !node->next;
+
+                    for (TokenBlock *block = data->first_token_block;
+                         block;
+                         block = block->next)
                     {
-                        break;
+                        if (!is_first_node || block != data->first_token_block)
+                        {
+                            Assert(block->prev);
+                        }
+
+                        if (!is_last_node || block != data->last_token_block)
+                        {
+                            Assert(block->next);
+                        }
+
+                        Assert(block->token_count != TOKEN_BLOCK_FREE_TAG);
+                        if (block == data->last_token_block)
+                        {
+                            break;
+                        }
                     }
                 }
 
@@ -1036,12 +1127,35 @@ ValidateLineIndexInternal(LineIndexNode *root, Buffer *buffer)
         {
             int64_t sum      = 0;
             int64_t line_sum = 0;
+
+            // forward
             LineIndexNode *first = level->children[0];
+            LineIndexNode *last  = nullptr;
             for (LineIndexNode *node = first;
                  node;
                  node = node->next)
             {
                 Assert(node->kind == first->kind);
+                if (node->prev) Assert(node->prev->next == node);
+                if (node->next) Assert(node->next->prev == node);
+                sum      += node->span;
+                line_sum += node->line_span;
+                if (!node->next)
+                {
+                    last = node;
+                }
+            }
+            Assert(sum      == root->span);
+            Assert(line_sum == root->line_span);
+
+            // and back
+            sum      = 0;
+            line_sum = 0;
+            for (LineIndexNode *node = last;
+                 node;
+                 node = node->prev)
+            {
+                Assert(node->kind == last->kind);
                 if (node->prev) Assert(node->prev->next == node);
                 if (node->next) Assert(node->next->prev == node);
                 sum      += node->span;

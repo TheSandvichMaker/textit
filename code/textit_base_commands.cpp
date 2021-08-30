@@ -1,3 +1,28 @@
+COMMAND_PROC(ReportMetrics,
+             "Report some metrics relevant to development"_str)
+{
+    Buffer *buffer = GetActiveBuffer();
+    size_t buffer_bytes     = buffer->count;
+
+    LineIndexCountResult index_stats = {};
+    CountLineIndex(buffer->line_index_root, &index_stats);
+
+    platform->DebugPrint("Memory usage\n"
+                         "\tBuffer Text:\t\t%s/%s\n"
+                         "\tBuffer Arena:\t\t%s/%s\n"
+                         "\tLine Index:\t\t%s\n"
+                         "\tToken Blocks:\t\t%s (occupied: %zu/%zu (%.02f%%%%))\n",
+                         FormatHumanReadableBytes(buffer_bytes).data,
+                         FormatHumanReadableBytes(TEXTIT_BUFFER_SIZE).data,
+                         FormatHumanReadableBytes(buffer->arena.used).data,
+                         FormatHumanReadableBytes(buffer->arena.capacity).data,
+                         FormatHumanReadableBytes(index_stats.nodes_size).data,
+                         FormatHumanReadableBytes(index_stats.token_blocks_size).data,
+                         index_stats.token_blocks_occupancy,
+                         index_stats.token_blocks_capacity,
+                         100.0*((double)index_stats.token_blocks_occupancy / (double)index_stats.token_blocks_capacity));
+}
+
 COMMAND_PROC(ResetGlyphCache,
              "Reset the glyph cache"_str)
 {
@@ -1026,6 +1051,7 @@ SelectSurroundingNest(View *view,
         }
     }
 
+    depth = 0;
     if (start_pos >= 0)
     {
         while (IsValid(&it))

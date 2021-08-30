@@ -145,7 +145,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         Color base_background = text_background;
 
-        PushLayer(Layer_ViewBackground);
         bool contains_cursor = false;
         if (draw_cursor)
         {
@@ -164,10 +163,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         {
             base_background = line_highlight;
         }
-        PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, top_left.y + row), 
-                                  MakeV2i(bounds.max.x, top_left.y + row + 1)), 
-                 base_background);
-        PushLayer(Layer_ViewForeground);
+
+        int64_t start_row = row;
 
         int64_t col = 0;
         int64_t line_number = line + 1;
@@ -454,6 +451,14 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 break;
             }
         }
+
+        PushLayer(Layer_ViewBackground);
+
+        PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x, top_left.y + start_row), 
+                                  MakeV2i(bounds.max.x, top_left.y + row + 1)), 
+                 base_background);
+
+        PushLayer(Layer_ViewForeground);
 
         row += 1;
     }

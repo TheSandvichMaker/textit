@@ -153,7 +153,8 @@ struct CommandList
     uint32_t command_count;
     Command commands[MAX_COMMAND_COUNT];
 };
-GLOBAL_STATE(CommandList, command_list);
+// Not using the global state macro because we want this to be reloaded if the DLL reloads
+static CommandList command_list_, *command_list = &command_list_;
 
 function Command *FindCommand(String name, StringMatchFlags flags = 0);
 

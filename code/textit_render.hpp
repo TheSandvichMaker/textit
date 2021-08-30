@@ -122,8 +122,10 @@ enum WallSegment
 enum RenderLayer
 {
     Layer_ViewBackground,
+    Layer_ViewTextBackground,
     Layer_ViewForeground,
     Layer_OverlayBackground,
+    Layer_OverlayTextBackground,
     Layer_OverlayForeground,
     Layer_COUNT,
 };
@@ -141,8 +143,8 @@ union RenderSortKey
 {
     struct
     {
-        uint32_t offset : 30;
-        uint32_t layer  : 2;
+        uint32_t offset : 29;
+        uint32_t layer  : 3;
     };
     uint32_t u32;
 };

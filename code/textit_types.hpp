@@ -108,20 +108,6 @@ struct StringList
     size_t node_count = 0;
 };
 
-struct DynamicString
-{
-    union
-    {
-        struct
-        {
-            size_t size;
-            uint8_t *data;
-        };
-        String string;
-    };
-    size_t capacity;
-};
-
 struct Range
 {
     // convention is [start .. end)
