@@ -56,13 +56,14 @@ COMMAND_PROC(EnterCommandLineMode)
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String command_string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
         for (size_t i = 0; i < command_list->command_count; i += 1)
         {
             Command *command = &command_list->commands[i];
             if ((command->kind == Command_Basic) &&
                 (command->flags & Command_Visible) &&
-                (FindSubstring(command->name, command_string, StringMatch_CaseInsensitive) != command->name.size))
+                (FindSubstring(command->name, string, StringMatch_CaseInsensitive) != command->name.size))
             {
                 if (!AddPrediction(cl, MakePrediction(command->name)))
                 {
@@ -74,8 +75,9 @@ COMMAND_PROC(EnterCommandLineMode)
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String command_string = TrimSpaces(MakeString(cl->count, cl->text));
-        Command *command = FindCommand(command_string, StringMatch_CaseInsensitive);
+        String string = GetCommandString(cl);
+
+        Command *command = FindCommand(string, StringMatch_CaseInsensitive);
         if (command &&
             (command->kind == Command_Basic) &&
             (command->flags & Command_Visible))
@@ -97,7 +99,7 @@ COMMAND_PROC(OpenBuffer,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         String leaf;
         String path = SplitPath(string, &leaf);
@@ -136,7 +138,8 @@ COMMAND_PROC(OpenBuffer,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
         for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
         {
             Buffer *buffer = it.buffer;
@@ -161,7 +164,7 @@ COMMAND_PROC(OpenFile,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         String leaf;
         String path = SplitPath(string, &leaf);
@@ -216,7 +219,7 @@ COMMAND_PROC(OpenFile,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         View *view = GetActiveView();
         for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
@@ -244,8 +247,9 @@ COMMAND_PROC(ChangeWorkingDirectory,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
-        String path   = SplitPath(string);
+        String string = GetCommandString(cl);
+
+        String path = SplitPath(string);
 
         char *separator = "/";
         if (PeekEnd(path) == '\\') separator = "\\";
@@ -276,7 +280,8 @@ COMMAND_PROC(ChangeWorkingDirectory,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
         platform->SetWorkingDirectory(string);
         return true;
     };
@@ -290,7 +295,7 @@ COMMAND_PROC(Set,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         for (size_t i = 0; i < Introspection<CoreConfig>::member_count; i += 1)
         {
@@ -314,13 +319,13 @@ COMMAND_PROC(Set,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         cl = BeginCommandLine();
         cl->name = string;
         cl->AcceptEntry = [](CommandLine *cl)
         {
-            String string = TrimSpaces(MakeString(cl->count, cl->text));
+            String string = GetCommandString(cl);
 
             for (size_t i = 0; i < Introspection<CoreConfig>::member_count; i += 1)
             {
@@ -348,7 +353,7 @@ COMMAND_PROC(SetLanguage,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         for (LanguageSpec *language = language_registry->first_language;
              language;
@@ -368,7 +373,7 @@ COMMAND_PROC(SetLanguage,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         for (LanguageSpec *language = language_registry->first_language;
              language;
@@ -396,10 +401,13 @@ COMMAND_PROC(SetFont,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
+        ScopedMemory temp;
 
         uint32_t font_count;
-        String *filtered_fonts = platform->EnumerateFonts(platform->GetTempArena(), ArrayCount(cl->predictions) + 1, string, &font_count);
+        String *filtered_fonts = platform->EnumerateFonts(temp, ArrayCount(cl->predictions) + 1, string, &font_count);
+
         for (size_t i = 0; i < font_count; i += 1)
         {
             Prediction prediction = {};
@@ -413,7 +421,8 @@ COMMAND_PROC(SetFont,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
         SetEditorFont(string, editor->font_size, editor->font_quality);
         return true;
     };
@@ -427,7 +436,8 @@ COMMAND_PROC(SetFontQuality,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
         String options[] =
         {
             "Subpixel"_str,
@@ -445,7 +455,8 @@ COMMAND_PROC(SetFontQuality,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
         PlatformFontQuality quality = PlatformFontQuality_SubpixelAA;
         if      (AreEqual(string, "Subpixel"_str))  quality = PlatformFontQuality_SubpixelAA;
         else if (AreEqual(string, "Greyscale"_str)) quality = PlatformFontQuality_GreyscaleAA;
@@ -468,7 +479,8 @@ COMMAND_PROC(SetFontSize,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
         int64_t size;
         if (ParseInt(string, nullptr, &size))
         {
@@ -511,12 +523,13 @@ COMMAND_PROC(Tags,
              "Browse tags for all buffers"_str)
 {
     CommandLine *cl = BeginCommandLine();
-    cl->name = "Tags"_str;
+    cl->name                  = "Tags"_str;
     cl->sort_by_edit_distance = true;
+    cl->no_quickselect        = true;
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         for (BufferIterator it = IterateBuffers();
              IsValid(&it);
@@ -552,7 +565,8 @@ COMMAND_PROC(Tags,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
+
         View *view = GetActiveView();
         Buffer *buffer = GetBuffer(view);
 
@@ -577,7 +591,7 @@ COMMAND_PROC(SetTheme,
 
     cl->GatherPredictions = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
 
         for (Theme *theme = editor->first_theme; theme; theme = theme->next)
         {
@@ -595,7 +609,7 @@ COMMAND_PROC(SetTheme,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = TrimSpaces(MakeString(cl->count, cl->text));
+        String string = GetCommandString(cl);
         SetEditorTheme(string);
         return true;
     };
@@ -790,7 +804,7 @@ COMMAND_PROC(AppendAtEnd)
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
-    cursor->pos = FindLineEnd(buffer, cursor->pos).inner + 1;
+    cursor->pos = FindLineEnd(buffer, cursor->pos).inner;
     CMD_EnterTextMode();
 }
 
@@ -1141,9 +1155,9 @@ MOVEMENT_PROC(EncloseParameter)
 
     TokenKind open_token = 0;
 
-    while (IsValid(&it) || alternative_start)
+    while (IsValid(&it) || IsValid(alternative_start))
     {
-        if (!IsValid(&it) && alternative_start)
+        if (!IsValid(&it) && IsValid(alternative_start))
         {
             Clear(&nests);
             Rewind(&it, alternative_start);
@@ -1153,7 +1167,7 @@ MOVEMENT_PROC(EncloseParameter)
         Token t = Next(&it);
         if (!t.kind) break;
 
-        if (!alternative_start &&
+        if (!IsValid(alternative_start) &&
             t.kind == Token_LeftParen)
         {
             alternative_start = LocateNext(&it);
@@ -1753,7 +1767,7 @@ TEXT_COMMAND_PROC(WriteText)
             TokenIterator it = IterateLineTokens(&info);
             Token t = it.token;
 
-            if (t.kind == Token_LineComment)
+            if (IsInRange(info.range, t.pos) && t.kind == Token_LineComment)
             {
                 String line_comment_string = GetOperatorAsString(buffer->language, Token_LineComment);
                 Append(&buf, line_comment_string);

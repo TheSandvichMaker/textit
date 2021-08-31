@@ -215,24 +215,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     {
                         foreground_id = "text_unknown_function"_id;
                     }
-                    if (HasFlag(token.flags, TokenFlag_IsComment))
-                    {
-                        foreground_id = "text_comment"_id;
-                        if (AreEqual(token_name, "NOTE"_str))
-                        {
-                            foreground_id = "text_comment_note"_id;
-                        }
-                        else if (AreEqual(token_name, "TODO"_str))
-                        {
-                            foreground_id = "text_comment_todo"_id;
-                        }
-                    }
-                    else if (token.kind != Token_String && HasFlag(token.flags, TokenFlag_IsPreprocessor))
-                    {
-                        foreground_id = "text_preprocessor"_id;
-                    }
-                    else if (token.kind == Token_Identifier ||
-                             token.kind == Token_Function)
+
+                    if (token.kind == Token_Identifier ||
+                        token.kind == Token_Function)
                     {
                         String string = MakeString(token.length, &buffer->text[token.pos]);
                         StringID id = HashStringID(string);
@@ -243,17 +228,46 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                             token.kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
                                                 // but maybe it should be moved outside of the actual drawing function
                         }
-
                         // TODO: Bit excessive
                         ScopedMemory temp;
                         for (Tag *tag = PushTagsWithName(temp, project, token_name); tag; tag = tag->next)
                         {
                             if (tag->related_token_kind == token.kind)
                             {
-                                foreground_id = GetThemeIDForTag(language, tag);
+                                if (HasFlag(token.flags, TokenFlag_IsComment))
+                                {
+                                    if (tag->kind == Tag_CommentAnnotation)
+                                    {
+                                        foreground_id = GetThemeIDForTag(language, tag);
+                                    }
+                                }
+                                else
+                                {
+                                    foreground_id = GetThemeIDForTag(language, tag);
+                                }
                                 break;
                             }
                         }
+                    }
+
+                    if (HasFlag(token.flags, TokenFlag_IsComment))
+                    {
+                        if (foreground_id != "text_comment_annotation"_id)
+                        {
+                            foreground_id = "text_comment"_id;
+                            if (AreEqual(token_name, "NOTE"_str))
+                            {
+                                foreground_id = "text_comment_note"_id;
+                            }
+                            else if (AreEqual(token_name, "TODO"_str))
+                            {
+                                foreground_id = "text_comment_todo"_id;
+                            }
+                        }
+                    }
+                    else if (token.kind != Token_String && HasFlag(token.flags, TokenFlag_IsPreprocessor))
+                    {
+                        foreground_id = "text_preprocessor"_id;
                     }
                 }
 

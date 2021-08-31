@@ -86,7 +86,15 @@ AddTagSubKind(LanguageSpec *spec, TagSubKind kind, String name, StringID theme_i
 function StringID
 GetThemeIDForTag(LanguageSpec *spec, Tag *tag)
 {
-    StringID result = spec->sub_tag_kind_to_theme_id[tag->sub_kind];
+    StringID result = "text_foreground"_id;
+    if (tag->kind == Tag_CommentAnnotation)
+    {
+        result = "text_comment_annotation"_id;
+    }
+    if (tag->sub_kind)
+    {
+        result = spec->sub_tag_kind_to_theme_id[tag->sub_kind];
+    }
     return result;
 }
 
@@ -96,8 +104,9 @@ GetTagBaseKindName(Tag *tag)
     String result = "??"_str;
     switch (tag->kind)
     {
-        case Tag_Declaration: result = "decl"_str; break;
-        case Tag_Definition:  result = "defn"_str; break;
+        case Tag_Declaration:       result = "decl"_str;  break;
+        case Tag_Definition:        result = "defn"_str;  break;
+        case Tag_CommentAnnotation: result = "annot"_str; break;
     }
     return result;
 }

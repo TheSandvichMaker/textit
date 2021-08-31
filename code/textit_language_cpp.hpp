@@ -17,6 +17,7 @@ enum TokenKind_C : TokenSubKind
 enum TagKind_C : TagSubKind
 {
     Tag_C_None,
+
     Tag_C_Struct,
     Tag_C_Union,
     Tag_C_Enum,

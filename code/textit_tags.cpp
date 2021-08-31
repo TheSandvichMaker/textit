@@ -286,3 +286,22 @@ ParseTags(Buffer *buffer)
         lang->ParseTags(buffer);
     }
 }
+
+function void
+ParseBuiltinTag(TagParser *parser)
+{
+    Buffer *buffer = parser->buffer;
+
+    SetFlags(parser, TokenFlag_IsComment, 0);
+    if (ConsumeToken(parser, '@'))
+    {
+        if (Token t = ConsumeToken(parser, Token_Identifier))
+        {
+            Tag *tag = AddTag(buffer, &t);
+            tag->kind = Tag_CommentAnnotation;
+            return;
+        }
+    }
+
+    Advance(parser);
+}

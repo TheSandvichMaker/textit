@@ -8,6 +8,7 @@
 #include "textit_glyph_cache.cpp"
 #include "textit_render.cpp"
 #include "textit_text_storage.cpp"
+#include "textit_tokens.cpp"
 #include "textit_language.cpp"
 #include "textit_line_index.cpp"
 #include "textit_buffer.cpp"

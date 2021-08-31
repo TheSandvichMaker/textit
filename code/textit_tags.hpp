@@ -6,6 +6,7 @@ enum TagKind : uint8_t
     Tag_None,
     Tag_Declaration,
     Tag_Definition,
+    Tag_CommentAnnotation,
     Tag_COUNT,
 };
 

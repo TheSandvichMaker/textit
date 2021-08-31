@@ -1,3 +1,9 @@
+function String 
+GetCommandString(CommandLine *cl)
+{
+    return TrimSpaces(MakeString(cl->count, cl->text));
+}
+
 function void
 EndCommandLine()
 {

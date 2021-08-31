@@ -47,6 +47,7 @@ struct CommandLine
     bool (*AcceptEntry)(CommandLine *cl);
 };
 
+function String GetCommandString(CommandLine *cl);
 function CommandLine *BeginCommandLine();
 function void EndCommandLine();
 function bool AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key = 0);

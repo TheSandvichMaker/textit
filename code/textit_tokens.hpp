@@ -1,6 +1,8 @@
 #ifndef TEXTIT_TOKENS_HPP
 #define TEXTIT_TOKENS_HPP
 
+struct Buffer;
+
 typedef uint8_t TokenKind;
 enum TokenKind_ENUM : TokenKind
 {
@@ -108,9 +110,13 @@ struct TokenLocator
     TokenBlock *block;
     int64_t     index;
     int64_t     pos;
-
-    operator bool() { return block; }
 };
+
+function bool
+IsValid(TokenLocator locator)
+{
+    return locator.block && locator.index >= 0 && locator.index < locator.block->token_count;
+}
 
 function Token
 GetToken(TokenLocator locator)
@@ -120,13 +126,35 @@ GetToken(TokenLocator locator)
     int64_t     pos   = locator.pos;
 
     Token result = {};
-    if (block && index < block->token_count)
+    if (block && index >= 0 && index < block->token_count)
     {
         result = block->tokens[index];
         result.pos = pos;
     }
     return result;
 }
+
+function bool ValidateTokenLocatorIntegrity(Buffer *buffer, TokenLocator locator);
+
+struct TokenIterator
+{
+#if TEXTIT_SLOW
+    Buffer        *buffer;
+    int64_t        iteration_index;
+#endif
+    TokenBlock    *block;
+    int64_t        index;
+    Token          token;
+};
+
+struct NestHelper
+{
+    int depth;
+    TokenKind opener;
+    TokenKind closer;
+    TokenKind last_seen_opener;
+    TokenKind last_seen_closer;
+};
 
 function bool
 IsNestOpener(TokenKind t)
@@ -160,75 +188,6 @@ GetOtherNestTokenKind(TokenKind kind)
         INCOMPLETE_SWITCH;
     }
     return Token_None;
-}
-
-struct NestHelper
-{
-    int depth;
-    TokenKind opener;
-    TokenKind closer;
-    TokenKind last_seen_opener;
-    TokenKind last_seen_closer;
-};
-
-function void
-Clear(NestHelper *nests)
-{
-    ZeroStruct(nests);
-}
-
-function bool
-IsInNest(NestHelper *nests, TokenKind t, Direction dir)
-{
-    if (nests->depth < 0) return false;
-    bool result = nests->depth > 0;
-
-    if (nests->opener)
-    {
-        if (dir == Direction_Forward && IsNestOpener(t))
-        {
-            nests->last_seen_opener = t;
-        }
-        else if (dir == Direction_Backward && IsNestCloser(t))
-        {
-            if (t != GetOtherNestTokenKind(nests->last_seen_opener))
-            {
-                // something smells fishy, time to give up
-                Clear(nests);
-                return false;
-            }
-        }
-
-        if (t == nests->opener)
-        {
-            nests->depth += 1;
-        }
-        else if (t == nests->closer)
-        {
-            nests->depth -= 1;
-            if (nests->depth == 0)
-            {
-                Clear(nests);
-                nests->depth = -1;
-            }
-        }
-    }
-    else
-    {
-        bool starts_nest = false;
-        if (dir == Direction_Forward)  starts_nest = IsNestOpener(t);
-        if (dir == Direction_Backward) starts_nest = IsNestCloser(t);
-        if (starts_nest)
-        {
-            nests->opener = t;
-            nests->closer = GetOtherNestTokenKind(t);
-            nests->depth += 1;
-
-            result = true;
-        }
-    }
-
-    return result;
 }
 
 #endif /* TEXTIT_TOKENS_HPP */

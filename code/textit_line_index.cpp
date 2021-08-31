@@ -281,6 +281,7 @@ InsertEntry(Buffer         *buffer,
             offset += test_span;
         }
 
+        // TODO: This looks a bit silly doesn't it
         if (insert_index < node->entry_count)
         {
             LineIndexNode *next_child = node->children[insert_index];
@@ -288,7 +289,7 @@ InsertEntry(Buffer         *buffer,
             record->next = next_child;
 
             record->data.first_token_block->prev = next_child->data.first_token_block->prev;
-            record->data.last_token_block->next = next_child->data.first_token_block;
+            record->data.last_token_block->next  = next_child->data.first_token_block;
         }
         else if (node->entry_count > 0)
         {
@@ -297,7 +298,7 @@ InsertEntry(Buffer         *buffer,
             record->next = prev_child->next;
 
             record->data.first_token_block->prev = prev_child->data.last_token_block;
-            record->data.last_token_block->next = prev_child->data.last_token_block->next;
+            record->data.last_token_block->next  = prev_child->data.last_token_block->next;
         }
 
         if (record->next) record->next->prev = record;
@@ -596,271 +597,6 @@ GetLineInfo(LineIndexIterator *it, LineInfo *out_info)
     out_info->newline_pos = it->record->data.newline_col - it->range.start;
     out_info->flags       = it->record->data.flags;
     out_info->data        = &it->record->data;
-}
-
-//
-// Token Iterator
-//
-
-function void
-Rewind(TokenIterator *it, TokenLocator locator)
-{
-    it->block = locator.block;
-    it->index = locator.index;
-    it->token = GetToken(locator);
-}
-
-function TokenLocator
-LocateTokenAtPos(LineInfo *info, int64_t pos)
-{
-    TokenLocator result = {};
-
-    Assert(pos >= info->range.start);
-
-    int64_t at_pos = info->range.start;
-    for (TokenBlock *block = info->data->first_token_block;
-         block;
-         block = block->next)
-    {
-        for (int64_t index = 0; index < block->token_count; index += 1)
-        {
-            Token *token = &block->tokens[index];
-            if (token->kind != Token_Whitespace && (at_pos + token->length > pos))
-            {
-                result.block = block;
-                result.index = index;
-                result.pos   = at_pos;
-                return result;
-            }
-            at_pos += token->length;
-        }
-    }
-
-    return result;
-}
-
-function TokenIterator
-IterateTokens(Buffer *buffer, int64_t pos = 0)
-{
-    TokenIterator result = {};
-
-    LineInfo info;
-    FindLineInfoByPos(buffer, pos, &info);
-
-    TokenLocator locator = LocateTokenAtPos(&info, pos);
-    Rewind(&result, locator);
-
-#if TEXTIT_SLOW
-    result.buffer = buffer;
-    ValidateTokenLocatorIntegrity(buffer, locator);
-#endif
-
-    return result;
-}
-
-function TokenIterator
-IterateLineTokens(Buffer *buffer, int64_t line)
-{
-    TokenIterator result = {};
-
-    LineInfo info;
-    FindLineInfoByLine(buffer, line, &info);
-
-    TokenLocator locator = LocateTokenAtPos(&info, info.range.start);
-    Rewind(&result, locator);
-
-#if TEXTIT_SLOW
-    result.buffer = buffer;
-    ValidateTokenLocatorIntegrity(buffer, locator);
-#endif
-
-    return result;
-}
-
-function TokenIterator
-IterateLineTokens(LineInfo *info)
-{
-    TokenIterator result = {};
-
-    TokenLocator locator = LocateTokenAtPos(info, info->range.start);
-    Rewind(&result, locator);
-
-#if TEXTIT_SLOW
-    result.buffer = DEBUG_FindWhichBufferThisMemoryBelongsTo(info->data);
-    ValidateTokenLocatorIntegrity(result.buffer, locator);
-#endif
-
-    return result;
-}
-
-function bool
-IsValid(TokenIterator *it)
-{
-    return it->block;
-}
-
-function TokenLocator
-GetLocator(TokenIterator *it)
-{
-    TokenLocator locator = {};
-    locator.block = it->block;
-    locator.index = it->index;
-    locator.pos   = it->token.pos;
-    return locator;
-}
-
-function TokenLocator
-LocateNext(TokenIterator *it, int offset = 1)
-{
-    if (!IsValid(it)) return {};
-
-    TokenLocator result = {};
-
-    TokenBlock *block  = it->block;
-    int64_t     index  = it->index;
-    int64_t     pos    = it->token.pos;
-    int64_t     length = it->token.length;
-
-    while (it->block)
-    {
-        Assert(it->block->token_count != TOKEN_BLOCK_FREE_TAG);
-
-        pos += length;
-
-        offset -= 1;
-        index  += 1;
-        while (block && index >= block->token_count)
-        {
-            block = block->next;
-            index = 0;
-        }
-
-        if (block)
-        {
-            Token *t = &block->tokens[index];
-            length = t->length;
-
-            if (offset <= 0 && t->kind != Token_Whitespace)
-            {
-                break;
-            }
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    result.block = block;
-    result.index = index;
-    result.pos   = pos;
-
-#if TEXTIT_SLOW
-    // platform->DebugPrint("[token iterator %llx, iteration %lld, next]: pos = %lld\n",
-    //                      PointerToInt(it),
-    //                      it->iteration_index,
-    //                      pos);
-
-    ValidateTokenLocatorIntegrity(it->buffer, result);
-    it->iteration_index += 1;
-#endif
-
-    return result;
-}
-
-function Token
-PeekNext(TokenIterator *it, int offset = 1)
-{
-    TokenLocator locator = LocateNext(it, offset);
-    Token token = GetToken(locator);
-    return token;
-}
-
-function Token
-Next(TokenIterator *it, int offset = 1)
-{
-    TokenLocator locator = LocateNext(it, offset);
-    it->block = locator.block;
-    it->index = locator.index;
-    it->token = GetToken(locator);
-    return it->token;
-}
-
-function TokenLocator
-LocatePrev(TokenIterator *it, int offset = 1)
-{
-    if (!IsValid(it)) return {};
-
-    TokenLocator result = {};
-
-    TokenBlock *block  = it->block;
-    int64_t     index  = it->index;
-    int64_t     pos    = it->token.pos;
-    int64_t     length = it->token.length;
-
-    while (it->block)
-    {
-        Assert(it->block->token_count != TOKEN_BLOCK_FREE_TAG);
-
-        offset -= 1;
-        index  -= 1;
-        while (block && index < 0)
-        {
-            block = block->prev;
-            index = block ? block->token_count - 1 : 0;
-        }
-
-        if (block)
-        {
-            Token *t = &block->tokens[index];
-            length = t->length;
-
-            pos -= length;
-
-            if (offset <= 0 && t->kind != Token_Whitespace)
-            {
-                break;
-            }
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    result.block = block;
-    result.index = index;
-    result.pos   = pos;
-
-#if TEXTIT_SLOW
-    // platform->DebugPrint("[token iterator %llx, iteration %lld, prev]: pos = %lld\n",
-    //                      PointerToInt(it),
-    //                      it->iteration_index,
-    //                      pos);
-
-    ValidateTokenLocatorIntegrity(it->buffer, result);
-    it->iteration_index += 1;
-#endif
-
-    return result;
-}
-
-function Token
-PeekPrev(TokenIterator *it, int offset = 1)
-{
-    TokenLocator locator = LocatePrev(it, offset);
-    Token token = GetToken(locator);
-    return token;
-}
-
-function Token
-Prev(TokenIterator *it, int offset = 1)
-{
-    TokenLocator locator = LocatePrev(it, offset);
-    it->block = locator.block;
-    it->index = locator.index;
-    it->token = GetToken(locator);
-    return it->token;
 }
 
 function void
@@ -1188,23 +924,4 @@ ValidateLineIndexTreeIntegrity(LineIndexNode *root)
     (void)root;
     return true;
 #endif
-}
-
-function bool
-ValidateTokenLocatorIntegrity(Buffer *buffer, TokenLocator locator)
-{
-    if (!locator.block)
-    {
-        return true;
-    }
-
-    LineInfo info;
-    FindLineInfoByPos(buffer, locator.pos, &info);
-    TokenLocator test_locator = LocateTokenAtPos(&info, locator.pos);
-    
-    Assert(test_locator.block == locator.block);
-    Assert(test_locator.index == locator.index);
-    Assert(test_locator.pos   == locator.pos);
-
-    return true;
 }

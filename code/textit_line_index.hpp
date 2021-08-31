@@ -7,6 +7,8 @@
 #define VALIDATE_LINE_INDEX_EXTRA_SLOW 1
 #endif
 
+struct Buffer;
+
 enum_flags(uint8_t, LineFlags)
 {
     Line_Empty = 0x1,
@@ -74,21 +76,13 @@ struct LineIndexIterator
     int64_t        line; 
 };
 
-struct TokenIterator
-{
-#if TEXTIT_SLOW
-    Buffer        *buffer;
-    int64_t        iteration_index;
-#endif
-    TokenBlock    *block;
-    int64_t        index;
-    Token          token;
-};
+function void FindLineInfoByPos(Buffer *buffer, int64_t pos, LineInfo *out_info);
+function void FindLineInfoByLine(Buffer *buffer, int64_t line, LineInfo *out_info);
 
-function int64_t GetLineCount(struct Buffer *buffer);
+function int64_t GetLineCount(Buffer *buffer);
+
 function bool ValidateLineIndexFull(Buffer *buffer);
 function bool ValidateLineIndexTreeIntegrity(LineIndexNode *root);
 function bool ValidateTokenBlockChain(LineIndexNode *record);
-function bool ValidateTokenLocatorIntegrity(Buffer *buffer, TokenLocator locator);
 
 #endif /* TEXTIT_LINE_INDEX_HPP */
