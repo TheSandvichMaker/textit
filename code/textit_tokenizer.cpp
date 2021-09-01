@@ -102,6 +102,8 @@ MatchOperator(Tokenizer *tok, Token *t, uint8_t a)
 function void
 ParseString(Tokenizer *tok, Token *t, uint8_t end_char)
 {
+    INVALID_CODE_PATH; // No longer how we do things! Replace it!
+
     // TODO: Make strings not even be tokens, just a flag?
     t->kind = Token_String;
     while (CharsLeft(tok))
@@ -120,7 +122,7 @@ ParseString(Tokenizer *tok, Token *t, uint8_t end_char)
                 Advance(tok);
             }
         }
-        else if (Match(tok, end_char))
+        else if (Peek(tok, -1) != '\\' && Match(tok, end_char))
         {
             break;
         }

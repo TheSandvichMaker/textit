@@ -21,7 +21,7 @@ static WINDOWPLACEMENT g_window_position = { sizeof(g_window_position) };
 static Win32State win32_state;
 static Platform platform_;
 
-static bool g_use_d3d = true;
+static bool g_use_d3d = false;
 
 static PlatformHighResTime
 Win32_GetTime(void)
@@ -1406,7 +1406,7 @@ Win32_GetLastWriteTime(wchar_t *path)
 }
 
 static int dll_generation;
-static bool
+function bool
 Win32_LoadAppCode(Win32AppCode *old_code)
 {
     bool result = false;
@@ -2079,12 +2079,14 @@ Win32_AppThread(LPVOID userdata)
     win32_state.exe_folder = FindExeFolderLikeAMonkeyInAMonkeySuit();
     win32_state.dll_path   = FormatWString(&win32_state.arena, L"\\\\?\\%s\\textit.dll", win32_state.exe_folder);
 
+#if TEXTIT_BUILD_DLL
     Win32AppCode *app_code = &win32_state.app_code;
     if (!Win32_LoadAppCode(app_code))
     {
         platform->ReportError(PlatformError_Fatal, "Could not load app code");
     }
-     platform->exe_reloaded = true;
+#endif
+     platform->exe_reloaded = true; // if we aren't building a dll I'll make this true once anyway to signify the initial startup
 
      Win32_LoadDefaultFonts();
 
@@ -2157,13 +2159,19 @@ Win32_AppThread(LPVOID userdata)
         }
 
         bool updated = false;
+#if TEXTIT_BUILD_DLL
         if (app_code->valid)
+#endif
         {
             updated = true;
 
             PlatformHighResTime start = platform->GetTime();
 
+#if TEXTIT_BUILD_DLL
             app_code->UpdateAndRender(platform);
+#else
+            AppUpdateAndRender(platform);
+#endif
             platform->exe_reloaded = false;
 
             PlatformHighResTime end = platform->GetTime();
@@ -2272,6 +2280,7 @@ Win32_AppThread(LPVOID userdata)
 
         win32_state.event_read_index = win32_state.working_write_index;
 
+#if TEXTIT_BUILD_DLL
         uint64_t last_write_time = Win32_GetLastWriteTime(win32_state.dll_path);
         if (app_code->last_write_time != last_write_time)
         {
@@ -2286,6 +2295,7 @@ Win32_AppThread(LPVOID userdata)
                 Sleep(100);
             }
         }
+#endif
 
         if (platform->exit_requested)
         {

@@ -302,6 +302,69 @@ Prev(TokenIterator *it, int offset = 1)
     return it->token;
 }
 
+function Token
+EncloseString(TokenLocator locator)
+{
+    TokenIterator it = {};
+    Rewind(&it, locator):
+
+    Token result = {};
+
+    if (it.token & TokenFlag_PartOfString)
+    {
+        TokenFlags flags = it.token.flags; // TODO: I am assuming the flags stay constant for the string.
+                                           // This is a false assumption, and I should instead collect flags
+                                           // from all the tokens that make up this string.
+
+        while (IsValid(&it) && it.token.kind != Token_StringStart)
+        {
+            Prev(&it);
+        }
+        if (it.token.kind == Token_StringStart)
+        {
+            int64_t start = it.token.pos + it.token.length; // getting the inner range, just the contents of the string
+            int8_t  inner_start_offset = it.token.inner_start_offset;
+            while (IsValid(&it) && it.token.kind != Token_StringEnd)
+            {
+                Next(&it);
+            }
+            if (it.token.kind == Token_StringEnd)
+            {
+                int64_t end              = it.token.pos; // getting the inner range, just the contents of the string
+                int8_t  inner_end_offset = it.token.inner_end_offset;
+
+                result.kind               = Token_String;
+                result.flags              = flags;
+                result.length             = SafeTruncateI64ToI16(end - start);
+                result.inner_start_offset = inner_start_offset;
+                result.inner_end_offset   = inner_end_offset;
+                result.pos                = start;
+            }
+        }
+    }
+
+    return result;
+}
+
+function Token
+GetTokenAt(Buffer *buffer, int64_t pos, GetTokenFlags flags = 0)
+{
+    Token result = {};
+    TokenIterator it = IterateTokens(buffer, pos);
+
+    if (HasFlag(it.token.flags, TokenFlag_PartOfString) &&
+        HasFlag(flags, GetToken_CaptureStrings))
+    {
+        result = EncloseString(GetLocator(&it));
+    }
+    else
+    {
+        result = it.token;
+    }
+
+    return result;
+}
+
 //
 // Nest Helper
 //

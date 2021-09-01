@@ -783,16 +783,6 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
     return result;
 }
 
-function Token
-GetTokenAt(Buffer *buffer, int64_t pos)
-{
-    LineInfo info;
-    FindLineInfoByPos(buffer, pos, &info);
-
-    TokenLocator locator = LocateTokenAtPos(&info, pos);
-    return GetToken(locator);
-}
-
 function Buffer *
 DEBUG_FindWhichBufferThisMemoryBelongsTo(void *memory_init)
 {

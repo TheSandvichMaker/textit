@@ -255,17 +255,25 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                         if (foreground_id != "text_comment_annotation"_id)
                         {
                             foreground_id = "text_comment"_id;
-                            if (AreEqual(token_name, "NOTE"_str))
+                            if (AreEqual(token_name, "NOTE"_str, StringMatch_CaseInsensitive))
                             {
                                 foreground_id = "text_comment_note"_id;
                             }
-                            else if (AreEqual(token_name, "TODO"_str))
+                            else if (AreEqual(token_name, "TODO"_str, StringMatch_CaseInsensitive))
                             {
                                 foreground_id = "text_comment_todo"_id;
                             }
+                            else if (AreEqual(token_name, "FIXME"_str, StringMatch_CaseInsensitive))
+                            {
+                                foreground_id = "text_comment_fixme"_id;
+                            }
                         }
                     }
-                    else if (token.kind != Token_String && HasFlag(token.flags, TokenFlag_IsPreprocessor))
+                    else if (HasFlags(token.flags, Token_PartOfString))
+                    {
+                        foreground_id = "text_string"_id;
+                    }
+                    else if (HasFlag(token.flags, TokenFlag_IsPreprocessor))
                     {
                         foreground_id = "text_preprocessor"_id;
                     }

@@ -500,11 +500,11 @@ COMMAND_PROC(GoToFileUnderCursor,
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    Token token = GetTokenAt(buffer, cursor->pos);
+    Token token = GetTokenAt(buffer, cursor->pos, GetToken_EncloseStrings);
     if (token.kind == Token_String)
     {
         ScopedMemory temp;
-        String string = PushBufferRange(temp, buffer, MakeRangeStartLength(token.pos + 1, token.length - 2));
+        String string = PushBufferRange(temp, buffer, GetInnerRange(token));
 
         for (PlatformFileIterator *it = platform->FindFiles(temp, string);
              platform->FileIteratorIsValid(it);
@@ -623,7 +623,7 @@ COMMAND_PROC(GoToDefinitionUnderCursor,
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
 
-    Token token = GetTokenAt(buffer, cursor->pos);
+    Token token = GetTokenAt(buffer, cursor->pos, GetToken_EncloseStrings);
     if (token.kind == Token_Identifier ||
         token.kind == Token_Function)
     {

@@ -337,6 +337,14 @@ SafeTruncateI64(int64_t value)
     return (int32_t)value;
 }
 
+function int32_t
+SafeTruncateI64ToI16(int64_t value)
+{
+    Assert((value >= INT16_MIN) &&
+           (value <= INT16_MAX));
+    return (int16_t)value;
+}
+
 function uint32_t
 Permute(uint32_t index, uint32_t len, uint32_t seed)
 {

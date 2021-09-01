@@ -41,7 +41,7 @@ parse_default:
 
         case '_':
         {
-            if (prev_t->kind == Token_String)
+            if (prev_t->kind == Token_StringEnd)
             {
                 t->kind = Token_Operator;
                 while (IsValidIdentifierAscii(Peek(tok))) Advance(tok);

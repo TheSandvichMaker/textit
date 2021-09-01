@@ -104,6 +104,7 @@ LoadDefaultDarkTheme()
     SetThemeColor(theme, "text_comment"_id,      MakeColor(0, 164, 0), TextStyle_Italic);
     SetThemeColor(theme, "text_comment_note"_id, MakeColor(192, 255, 0), TextStyle_Italic|TextStyle_Bold|TextStyle_Underline);
     SetThemeColor(theme, "text_comment_todo"_id, MakeColor(192, 64,  0), TextStyle_Italic|TextStyle_Bold|TextStyle_Underline);
+    SetThemeColor(theme, "text_comment_fixme"_id, MakeColor(192, 192,  0), TextStyle_Italic|TextStyle_Bold|TextStyle_Underline);
     SetThemeColor(theme, "text_comment_annotation"_id, MakeColor(192, 255, 0), TextStyle_Italic|TextStyle_Bold|TextStyle_Underline);
     SetThemeColor(theme, "text_type"_id, MakeColor(128, 255, 200));
     SetThemeColor(theme, "text_foreground"_id, MakeColor(235, 235, 225));

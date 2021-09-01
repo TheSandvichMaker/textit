@@ -112,6 +112,8 @@ struct Range
 {
     // convention is [start .. end)
     int64_t start, end;
+    
+    operator bool() { return start != end; } // questionable decision, I use ranges with the same start and end from time to time
 };
 
 function Range

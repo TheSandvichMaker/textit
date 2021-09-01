@@ -10,23 +10,23 @@ set LINKER_FLAGS=/opt:ref /incremental:no
 set LINKER_LIBRARIES=user32.lib gdi32.lib dwmapi.lib d3d11.lib d3dcompiler.lib
 
 set FLAGS=%SHARED_FLAGS%
-echo]
-if "%1" equ "release" (
-    echo ------------------------------------------
-    echo *** BUILDING RELEASE BUILD FROM SOURCE ***
-    echo ------------------------------------------
-    set FLAGS=%FLAGS% %RELEASE_FLAGS%
-) else if "%1" equ "sanitize" (
-    echo --------------------------------------------
-    echo *** BUILDING SANITIZED BUILD FROM SOURCE ***
-    echo --------------------------------------------
-    set FLAGS=%FLAGS% %SANITIZE_FLAGS%
-) else (
-    echo ----------------------------------------
-    echo *** BUILDING DEBUG BUILD FROM SOURCE ***
-    echo ----------------------------------------
-    set FLAGS=%FLAGS% %DEBUG_FLAGS%
-)
+rem echo]
+rem if "%1" equ "release" (
+rem     echo ------------------------------------------
+rem     echo *** BUILDING RELEASE BUILD FROM SOURCE ***
+rem     echo ------------------------------------------
+rem     set FLAGS=%FLAGS% %RELEASE_FLAGS%
+rem ) else if "%1" equ "sanitize" (
+rem     echo --------------------------------------------
+rem     echo *** BUILDING SANITIZED BUILD FROM SOURCE ***
+rem     echo --------------------------------------------
+rem     set FLAGS=%FLAGS% %SANITIZE_FLAGS%
+rem ) else (
+rem     echo ----------------------------------------
+rem     echo *** BUILDING DEBUG BUILD FROM SOURCE ***
+rem     echo ----------------------------------------
+rem     set FLAGS=%FLAGS% %DEBUG_FLAGS%
+rem )
 
 if not exist ctm mkdir ctm
 misc\ctime.exe -begin ctm\textit.ctm
@@ -39,8 +39,12 @@ if "%TEXTIT_USE_LLVM%" equ "1" goto build_llvm
 
 :build_msvc
 echo COMPILER: CL
-cl code\textit.cpp -DTEXTIT_BUILD_DLL=1 %FLAGS% %MSVC_FLAGS% /Fe"textit.dll" /LD /link %LINKER_FLAGS%
-cl code\win32_textit.cpp %FLAGS% %MSVC_FLAGS% /Fe"win32_textit.exe" %LINKER_LIBRARIES% 
+cl code\textit.cpp       -DTEXTIT_BUILD_DLL=1 %FLAGS% %SANTIZE_FLAGS% %MSVC_FLAGS% /Fe"textit.dll" /LD /link %LINKER_FLAGS%
+cl code\win32_textit.cpp -DTEXTIT_BUILD_DLL=1 %FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_debug.exe" %LINKER_LIBRARIES% 
+echo built win32_textit_msvc_debug.exe
+del textit_lock.temp
+cl code\win32_textit.cpp code\textit.cpp %FLAGS% %RELEASE_FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_release.exe" /link %LINKER_FLAGS% %LINKER_LIBRARIES%
+echo built win32_textit_msvc_release.exe
 goto build_finished
 
 :build_llvm
@@ -52,7 +56,6 @@ goto build_finished
 :build_finished
 
 set LAST_ERROR=%ERRORLEVEL%
-del textit_lock.temp
 del *.lib
 del *.obj
 del *.ilk
