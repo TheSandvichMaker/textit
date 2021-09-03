@@ -95,6 +95,7 @@ LoadDefaultDarkTheme()
     SetThemeColor(theme, "text_label"_id, MakeColor(255, 128, 0), TextStyle_Underline|TextStyle_Italic);
     SetThemeColor(theme, "text_preprocessor"_id, MakeColor(255, 192, 255));
     SetThemeColor(theme, "text_string"_id, MakeColor(255, 192, 64));
+    SetThemeColor(theme, "text_string_formatting"_id, MakeColor(255, 128, 64));
     SetThemeColor(theme, "text_number"_id, MakeColor(64, 192, 255));
     SetThemeColor(theme, "text_literal"_id, MakeColor(192, 212, 255));
     SetThemeColor(theme, "text_function"_id, MakeColor(128, 196, 255));

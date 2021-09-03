@@ -1,6 +1,7 @@
 #ifndef TEXTIT_MEMORY_HPP
 #define TEXTIT_MEMORY_HPP
 
+#define DEFAULT_ARENA_ALIGN    16
 #define DEFAULT_ARENA_CAPACITY Gigabytes(8)
 
 function size_t
@@ -101,9 +102,9 @@ CheckArena(Arena *arena)
     (Type *)PushSize_(arena, sizeof(Type)*(Count), Align, false, LOCATION_STRING(#arena))
 
 #define PushSize(arena, size) \
-    PushSize_(arena, size, 1, true, LOCATION_STRING(#arena))
+    PushSize_(arena, size, DEFAULT_ARENA_ALIGN, true, LOCATION_STRING(#arena))
 #define PushSizeNoClear(arena, size) \
-    PushSize_(arena, size, 1, false, LOCATION_STRING(#arena))
+    PushSize_(arena, size, DEFAULT_ARENA_ALIGN, false, LOCATION_STRING(#arena))
 #define PushAlignedSize(arena, size, align) \
     PushSize_(arena, size, align, true, LOCATION_STRING(#arena))
 #define PushAlignedSizeNoClear(arena, size, align) \

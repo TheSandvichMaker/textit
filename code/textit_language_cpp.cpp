@@ -1,104 +1,220 @@
+function bool
+ParsePrintfFormatter(Tokenizer *tok, Token *t)
+{
+    bool result = false;
+
+    // flags
+    Match(tok, '-');
+    Match(tok, '+');
+    Match(tok, ' ');
+    Match(tok, '#');
+    Match(tok, '0');
+
+    // width
+    if (!Match(tok, '*'))
+    {
+        while (CharsLeft(tok) && 
+               Peek(tok) >= '0' && Peek(tok) <= '9')
+        {
+            Advance(tok);
+        }
+    }
+
+    // precision
+    if (Match(tok, '.'))
+    {
+        if (!Match(tok, '*'))
+        {
+            while (CharsLeft(tok) && 
+                   Peek(tok) >= '0' && Peek(tok) <= '9')
+            {
+                Advance(tok);
+            }
+        }
+    }
+
+    // length
+    switch (Peek(tok))
+    {
+        case 'h':
+        case 'l':
+        case 'j':
+        case 'z':
+        case 't':
+        case 'L':
+        {
+            Advance(tok);
+            switch (Peek(tok))
+            {
+                case 'h':
+                case 'l':
+                {
+                    Advance(tok);
+                } break;
+            }
+        } break;
+    }
+
+    // specifier
+    switch (Peek(tok))
+    {
+        case 'd':
+        case 'i':
+        case 'o':
+        case 'x':
+        case 'X':
+        case 'f':
+        case 'F':
+        case 'e':
+        case 'E':
+        case 'g':
+        case 'G':
+        case 'a':
+        case 'A':
+        case 'c':
+        case 's':
+        case 'p':
+        case 'n':
+        case '%':
+        {
+            Advance(tok);
+
+            result = true;
+            t->kind     = Token_Custom;
+            t->sub_kind = Token_C_PrintfFormatter;
+        } break;
+    }
+
+    return result;
+}
+
 function void
 TokenizeCpp(Tokenizer *tok, Token *t)
 {
+    TokenizerCpp *tok_cpp = (TokenizerCpp *)tok->userdata;
+
     Token *prev_t = tok->prev_token;
 
     if ((t->flags & TokenFlag_FirstInLine) &&
-        (tok->user_state & TokenizeState_C_InPreprocessor) &&
         (prev_t->kind != Token_LineContinue))
     {
         tok->user_state &= ~TokenizeState_C_InPreprocessor;
         tok->state      &= ~TokenizeState_ImplicitStatementEndings;
+        if (!tok->in_multiline_string)
+        {
+            tok->in_string = false;
+        }
     }
 
     uint8_t c = Advance(tok);
-    switch (c)
+    if (tok->in_string && c == tok_cpp->string_end_char)
     {
-        default:
+        t->kind = Token_EndString;
+    }
+    else
+    {
+        switch (c)
         {
+            default:
+            {
 parse_default:
-            bool parse_string = false;
-            char string_end_char = '"';
-            if (c == 'L' && Match(tok, '"'))       { parse_string = true; } 
-            if (c == 'u' && Match(tok, '"'))       { parse_string = true; }
-            if (c == 'U' && Match(tok, '"'))       { parse_string = true; }
-            if (c == 'u' && Match(tok, "8\""_str)) { parse_string = true; }
-            if (tok->user_state & TokenizeState_C_InPreprocessor && Match(tok, '<'))
-            {
-                parse_string = true;
-                string_end_char = '>';
-            }
-
-            if (parse_string)
-            {
-                ParseString(tok, t, string_end_char);
-                break;
-            }
-
-            Revert(tok, t);
-            ParseStandardToken(tok, t);
-        } break;
-
-        case '_':
-        {
-            if (prev_t->kind == Token_StringEnd)
-            {
-                t->kind = Token_Operator;
-                while (IsValidIdentifierAscii(Peek(tok))) Advance(tok);
-            }
-            else
-            {
-                goto parse_default;
-            }
-        } break;
-
-        case '#':
-        {
-            if (t->flags & TokenFlag_FirstInLine)
-            {
-                t->kind = Token_Preprocessor;
-                tok->user_state |= TokenizeState_C_InPreprocessor;
-                tok->state      |= TokenizeState_ImplicitStatementEndings;
-            }
-        } break;
-
-        case ':':
-        {
-            if ((prev_t->kind == Token_Identifier) &&
-                (prev_t->flags & TokenFlag_FirstInLine))
-            {
-                prev_t->kind = Token_Label;
-            }
-            goto parse_default;
-        } break;
-
-        case '\'':
-        {
-            if (Peek(tok) != '\'')
-            {
-                if (Match(tok, '\\') ||
-                    Peek(tok) != '\'')
+                bool parse_string = false;
+                if (c == 'L' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; } 
+                if (c == 'u' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
+                if (c == 'U' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
+                if (c == 'u' && Match(tok, "8\""_str)) { tok_cpp->string_end_char = '"'; parse_string = true; }
+                if (tok->user_state & TokenizeState_C_InPreprocessor && Match(tok, '<'))
                 {
-                    tok->at++;
-                    if (Match(tok, '\''))
+                    parse_string = true;
+                    tok_cpp->string_end_char = '>';
+                }
+
+                if (parse_string)
+                {
+                    t->kind = Token_StartString;
+                    break;
+                }
+
+                Revert(tok, t);
+                ParseStandardToken(tok, t);
+            } break;
+
+            case '%':
+            {
+                if (!tok->in_string) goto parse_default;
+                if (!ParsePrintfFormatter(tok, t)) goto parse_default;
+            } break;
+
+            case '"':
+            {
+                if (Peek(tok, -1) != '\\')
+                {
+                    t->kind = Token_StartString;
+                    tok_cpp->string_end_char = '"';
+                }
+            } break;
+
+            case '_':
+            {
+                if (prev_t->kind == Token_EndString)
+                {
+                    t->kind = Token_Operator;
+                    while (IsValidIdentifierAscii(Peek(tok))) Advance(tok);
+                }
+                else
+                {
+                    goto parse_default;
+                }
+            } break;
+
+            case '#':
+            {
+                if (t->flags & TokenFlag_FirstInLine)
+                {
+                    t->kind = Token_Preprocessor;
+                    tok->user_state |= TokenizeState_C_InPreprocessor;
+                    tok->state      |= TokenizeState_ImplicitStatementEndings;
+                }
+            } break;
+
+            case ':':
+            {
+                if ((prev_t->kind == Token_Identifier) &&
+                    (prev_t->flags & TokenFlag_FirstInLine))
+                {
+                    prev_t->kind = Token_Label;
+                }
+                goto parse_default;
+            } break;
+
+            case '\'':
+            {
+                if (Peek(tok) != '\'')
+                {
+                    if (Match(tok, '\\') ||
+                        Peek(tok) != '\'')
                     {
-                        t->kind = Token_CharacterLiteral;
-                        break;
+                        tok->at++;
+                        if (Match(tok, '\''))
+                        {
+                            t->kind = Token_CharacterLiteral;
+                            break;
+                        }
                     }
                 }
-            }
 
-            goto parse_default;
-        } break;
+                goto parse_default;
+            } break;
 
-        case '(':
-        {
-            if (prev_t->kind == Token_Identifier && !(prev_t->flags & TokenFlag_IsPreprocessor))
+            case '(':
             {
-                prev_t->kind = Token_Function;
-            }
-            goto parse_default;
-        } break;
+                if (prev_t->kind == Token_Identifier && !(prev_t->flags & TokenFlag_IsPreprocessor))
+                {
+                    prev_t->kind = Token_Function;
+                }
+                goto parse_default;
+            } break;
+        }
     }
 
     if (tok->user_state & TokenizeState_C_InPreprocessor)
@@ -301,8 +417,11 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AssociateExtension(lang, "cc"_str);
     AssociateExtension(lang, "h"_str);
 
+    lang->tokenize_userdata_size = sizeof(TokenizerCpp);
     lang->Tokenize  = TokenizeCpp;
     lang->ParseTags = ParseTagsCpp;
+
+    AddTokenSubKind(lang, Token_C_PrintfFormatter, "text_string_formatting"_id);
 
     AddTagSubKind(lang, Tag_C_Struct,        "struct"_str,         "text_type"_id);
     AddTagSubKind(lang, Tag_C_Union,         "union"_str,          "text_type"_id);
@@ -323,6 +442,8 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AddOperator(lang, "/*"_str, Token_OpenBlockComment);
     AddOperator(lang, "*/"_str, Token_CloseBlockComment);
     AddOperator(lang, "//"_str, Token_LineComment);
+
+    AddOperator(lang, "\""_str, Token_String);
 
     AddOperator(lang, "::"_str, Token_Operator, Token_Cpp_Namespace);
     AddOperator(lang, "->"_str, Token_Operator, Token_C_Arrow);
@@ -365,6 +486,174 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AddKeyword(lang, "false"_id, Token_Literal);
     AddKeyword(lang, "nullptr"_id, Token_Literal);
     AddKeyword(lang, "NULL"_id, Token_Literal);
+
+    AddKeyword(lang, "CHAR_BIT"_id, Token_Literal); 
+    AddKeyword(lang, "MB_LEN_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "MB_CUR_MAX"_id, Token_Literal);
+    
+    AddKeyword(lang, "UCHAR_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "ULONG_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "USHRT_MAX"_id, Token_Literal);
+    
+    AddKeyword(lang, "CHAR_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "LONG_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "SHRT_MIN"_id, Token_Literal);
+    
+    AddKeyword(lang, "CHAR_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "LONG_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "SHRT_MAX"_id, Token_Literal);
+    
+    AddKeyword(lang, "SCHAR_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "SINT_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "SLONG_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "SSHRT_MIN"_id, Token_Literal);
+    
+    AddKeyword(lang, "SCHAR_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "SINT_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "SLONG_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "SSHRT_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "__func__"_id, Token_Literal); 
+    AddKeyword(lang, "__VA_ARGS__"_id, Token_Literal);
+      
+    AddKeyword(lang, "LLONG_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "LLONG_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "ULLONG_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "INT8_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT16_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT32_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT64_MIN"_id, Token_Literal);
+      
+    AddKeyword(lang, "INT8_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT16_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT32_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT64_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "UINT8_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT16_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT32_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT64_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "INT_LEAST8_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT_LEAST16_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT_LEAST32_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT_LEAST64_MIN"_id, Token_Literal);
+      
+    AddKeyword(lang, "INT_LEAST8_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT_LEAST16_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT_LEAST32_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT_LEAST64_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "UINT_LEAST8_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT_LEAST16_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT_LEAST32_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT_LEAST64_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "INT_FAST8_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT_FAST16_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT_FAST32_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INT_FAST64_MIN"_id, Token_Literal);
+      
+    AddKeyword(lang, "INT_FAST8_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT_FAST16_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT_FAST32_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "INT_FAST64_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "UINT_FAST8_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT_FAST16_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT_FAST32_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINT_FAST64_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "INTPTR_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INTPTR_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINTPTR_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "INTMAX_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "INTMAX_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "UINTMAX_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "PTRDIFF_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "PTRDIFF_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "SIG_ATOMIC_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "SIG_ATOMIC_MAX"_id, Token_Literal);
+      
+    AddKeyword(lang, "SIZE_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "WCHAR_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "WCHAR_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "WINT_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "WINT_MAX"_id, Token_Literal);
+    
+    AddKeyword(lang, "FLT_RADIX"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_ROUNDS"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_DIG"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_MANT_DIG"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_EPSILON"_id, Token_Literal); 
+    AddKeyword(lang, "DBL_DIG"_id, Token_Literal); 
+    AddKeyword(lang, "DBL_MANT_DIG"_id, Token_Literal); 
+    AddKeyword(lang, "DBL_EPSILON"_id, Token_Literal);
+    
+    AddKeyword(lang, "LDBL_DIG"_id, Token_Literal); 
+    AddKeyword(lang, "LDBL_MANT_DIG"_id, Token_Literal); 
+    AddKeyword(lang, "LDBL_EPSILON"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_MIN_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_MAX_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_MIN_10_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "FLT_MAX_10_EXP"_id, Token_Literal);
+    
+    AddKeyword(lang, "DBL_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "DBL_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "DBL_MIN_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "DBL_MAX_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "DBL_MIN_10_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "DBL_MAX_10_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "LDBL_MIN"_id, Token_Literal); 
+    AddKeyword(lang, "LDBL_MAX"_id, Token_Literal); 
+    AddKeyword(lang, "LDBL_MIN_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "LDBL_MAX_EXP"_id, Token_Literal);
+    
+    AddKeyword(lang, "LDBL_MIN_10_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "LDBL_MAX_10_EXP"_id, Token_Literal); 
+    AddKeyword(lang, "HUGE_VAL"_id, Token_Literal); 
+    AddKeyword(lang, "CLOCKS_PER_SEC"_id, Token_Literal); 
+    AddKeyword(lang, "NULL"_id, Token_Literal); 
+    AddKeyword(lang, "LC_ALL"_id, Token_Literal); 
+    AddKeyword(lang, "LC_COLLATE"_id, Token_Literal); 
+    AddKeyword(lang, "LC_CTYPE"_id, Token_Literal); 
+    AddKeyword(lang, "LC_MONETARY"_id, Token_Literal);
+    
+    AddKeyword(lang, "LC_NUMERIC"_id, Token_Literal); 
+    AddKeyword(lang, "LC_TIME"_id, Token_Literal); 
+    AddKeyword(lang, "SIG_DFL"_id, Token_Literal); 
+    AddKeyword(lang, "SIG_ERR"_id, Token_Literal); 
+    AddKeyword(lang, "SIG_IGN"_id, Token_Literal); 
+    AddKeyword(lang, "SIGABRT"_id, Token_Literal); 
+    AddKeyword(lang, "SIGFPE"_id, Token_Literal); 
+    AddKeyword(lang, "SIGILL"_id, Token_Literal); 
+    AddKeyword(lang, "SIGHUP"_id, Token_Literal); 
+    AddKeyword(lang, "SIGINT"_id, Token_Literal); 
+    AddKeyword(lang, "SIGSEGV"_id, Token_Literal); 
+    AddKeyword(lang, "SIGTERM"_id, Token_Literal);
+
+    AddKeyword(lang, "M_E"_id, Token_Literal);
+    AddKeyword(lang, "M_LOG2E"_id, Token_Literal);
+    AddKeyword(lang, "M_LOG10E"_id, Token_Literal);
+    AddKeyword(lang, "M_LN2"_id, Token_Literal);
+    AddKeyword(lang, "M_LN10"_id, Token_Literal);
+    AddKeyword(lang, "M_PI"_id, Token_Literal);
+    AddKeyword(lang, "M_PI_2"_id, Token_Literal);
+    AddKeyword(lang, "M_PI_4"_id, Token_Literal);
+
+    AddKeyword(lang, "M_1_PI"_id, Token_Literal);
+    AddKeyword(lang, "M_2_PI"_id, Token_Literal);
+    AddKeyword(lang, "M_2_SQRTPI"_id, Token_Literal);
+    AddKeyword(lang, "M_SQRT2"_id, Token_Literal);
+    AddKeyword(lang, "M_SQRT1_2"_id, Token_Literal);
 
     AddKeyword(lang, "unsigned"_id, Token_Type);
     AddKeyword(lang, "signed"_id, Token_Type);

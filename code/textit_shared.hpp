@@ -337,7 +337,7 @@ SafeTruncateI64(int64_t value)
     return (int32_t)value;
 }
 
-function int32_t
+function int16_t
 SafeTruncateI64ToI16(int64_t value)
 {
     Assert((value >= INT16_MIN) &&

@@ -6,9 +6,10 @@ typedef uint32_t TokenizeState;
 enum TokenizeState_ENUM : TokenizeState
 {
     TokenizeState_ImplicitStatementEndings = 0x1,
+    // TODO: TokenizeState_InPreprocessor           = 0x2,
+    // TODO: TokenizeState_InLineComment            = 0x4,
+    // TODO: TokenizeState_InString                 = 0x8,
 };
-
-struct StringMap;
 
 enum ParseWhitespaceResult
 {
@@ -19,6 +20,8 @@ enum ParseWhitespaceResult
 
 struct Tokenizer
 {
+    void *userdata;
+
     Token null_token;
     Token *prev_token;
     TokenBlock *first_token_block;
@@ -33,6 +36,8 @@ struct Tokenizer
     bool continue_next_line;
     bool in_line_comment;
     bool in_preprocessor;
+    bool in_string;
+    bool in_multiline_string;
     bool allow_nested_block_comments;
     int  block_comment_count;
 

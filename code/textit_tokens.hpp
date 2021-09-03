@@ -17,8 +17,8 @@ enum TokenKind_ENUM : TokenKind
     Token_Label,
     Token_Preprocessor,
     Token_String, // not produced by tokenizer, but can be generated with helper functions
-    Token_StringStart,
-    Token_StringEnd,
+    Token_StartString,
+    Token_EndString,
     Token_Number,
     Token_Literal,
     Token_CharacterLiteral,
@@ -37,6 +37,8 @@ enum TokenKind_ENUM : TokenKind
     Token_RightScope,
     Token_LastOperator = Token_RightScope,
 
+    Token_Custom, // check sub kind
+
     Token_COUNT,
 };
 
@@ -53,8 +55,8 @@ GetBaseTokenThemeID(TokenKind kind)
         case Token_Label:             return "text_label"_id;
         case Token_Preprocessor:      return "text_preprocessor"_id;
         case Token_String:            return "text_string"_id;
-        case Token_StringStart:       return "text_string"_id;
-        case Token_StringEnd:         return "text_string"_id;
+        case Token_StartString:       return "text_string"_id;
+        case Token_EndString:         return "text_string"_id;
         case Token_Number:            return "text_number"_id;
         case Token_Literal:           return "text_literal"_id;
         case Token_CharacterLiteral:  return "text_literal"_id;
@@ -94,14 +96,21 @@ struct Token
     TokenFlags   flags;              // 3
     uint8_t      pad0;               // 4
     int16_t      length;             // 6 (it's completely realistic to limit the length of tokens to something lower like 16 bits, but I should make sure I handle degenerate cases)
-    // TODO: IMPLEMENT >> 
     int8_t       inner_start_offset; // 7 (e.g. for strings, the offset from the start of the token to the start of the contents of the string)
     int8_t       inner_end_offset;   // 8 (e.g. for strings, the offset from the end of the token to the end of the contents of the string)
-    // <<
     int64_t      pos;                // 16
 
     operator bool() { return !!kind; }
 };
+
+function Range
+GetInnerRange(Token token)
+{
+    Range result;
+    result.start = token.pos + token.inner_start_offset;
+    result.end   = token.pos + token.length - token.inner_end_offset;
+    return result;
+}
 
 #define TOKEN_BLOCK_FREE_TAG -1
 
@@ -147,7 +156,6 @@ function bool ValidateTokenLocatorIntegrity(Buffer *buffer, TokenLocator locator
 struct TokenIterator
 {
 #if TEXTIT_SLOW
-    Buffer        *buffer;
     int64_t        iteration_index;
 #endif
     TokenBlock    *block;

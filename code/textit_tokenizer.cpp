@@ -143,11 +143,7 @@ ParseStandardToken(Tokenizer *tok, Token *t)
         return;
     }
 
-    if (c == '"')
-    {
-        ParseString(tok, t, '"');
-    }
-    else if (IsHeadUtf8Byte(c) || IsAlphabeticAscii(c) || c == '_')
+    if (IsHeadUtf8Byte(c) || IsAlphabeticAscii(c) || c == '_')
     {
         t->kind = Token_Identifier;
         while (CharsLeft(tok) &&
@@ -312,8 +308,38 @@ EndToken(Tokenizer *tok, Token *t)
                 tok->block_comment_count = 0;
             }
         } break;
+
+        case Token_String:
+        case Token_StartString:
+        case Token_EndString:
+        {
+            t->flags |= TokenFlag_PartOfString;
+            if (t->kind == Token_StartString)
+            {
+                Assert(!tok->in_string);
+                tok->in_string = true;
+            }
+            else if (t->kind == Token_EndString)
+            {
+                Assert(tok->in_string);
+                tok->in_string = false;
+            }
+            else if (t->kind == Token_String)
+            {
+                tok->in_string = !tok->in_string;
+            }
+        }
     }
 
+    if (tok->in_string)
+    {
+        t->flags |= TokenFlag_PartOfString;
+    }
+    else
+    {
+        tok->in_multiline_string = false;
+    }
+    
     if (tok->in_preprocessor)
     {
         t->flags |= TokenFlag_IsPreprocessor;
@@ -341,7 +367,7 @@ TokenizeBasic(Tokenizer *tok, Token *t)
 }
 
 function void
-BeginTokenizeLine(Tokenizer *tok, Buffer *buffer, Range range, LineTokenizeState previous_line_state)
+BeginTokenizeLine(Arena *arena, Tokenizer *tok, Buffer *buffer, Range range, LineTokenizeState previous_line_state)
 {
     ZeroStruct(tok);
     tok->prev_token = &tok->null_token;
@@ -353,6 +379,7 @@ BeginTokenizeLine(Tokenizer *tok, Buffer *buffer, Range range, LineTokenizeState
     tok->first_token_block = tok->last_token_block = AllocateTokenBlock(buffer);
     tok->new_line   = true;
     tok->line_start = AtPos(tok);
+    tok->userdata   = PushSize(arena, tok->language->tokenize_userdata_size);
 
     if (previous_line_state & LineTokenizeState_BlockComment)
     {
@@ -375,7 +402,7 @@ function int64_t
 TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data)
 {
     Tokenizer tok_, *tok = &tok_;
-    BeginTokenizeLine(tok, buffer, MakeRange(pos, buffer->count), previous_line_state);
+    BeginTokenizeLine(platform->GetTempArena(), tok, buffer, MakeRange(pos, buffer->count), previous_line_state);
 
     while (CharsLeft(tok))
     {

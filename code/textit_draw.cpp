@@ -140,7 +140,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         actual_line_height += 1;
 
-        bool empty_line = (ReadBufferByte(buffer, line_it.range.start) == '\n');
+        bool empty_line = (ReadBufferByte(buffer, line_it.range.start) == '\r' ||
+                           ReadBufferByte(buffer, line_it.range.start) == '\n');
         int64_t indentation_end = FindFirstNonHorzWhitespace(buffer, line_it.range.start);
 
         Color base_background = text_background;
@@ -269,9 +270,12 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                             }
                         }
                     }
-                    else if (HasFlags(token.flags, Token_PartOfString))
+                    else if (HasFlag(token.flags, TokenFlag_PartOfString))
                     {
-                        foreground_id = "text_string"_id;
+                        if (foreground_id != "text_string_formatting"_id)
+                        {
+                            foreground_id = "text_string"_id;
+                        }
                     }
                     else if (HasFlag(token.flags, TokenFlag_IsPreprocessor))
                     {
@@ -301,10 +305,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             }
 
             String string = {};
-            if (empty_line)
-            {
-                string = " "_str;
-            }
 
             int64_t advance             = 1;
             bool    right_align         = false;
@@ -351,6 +351,10 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     foreground = text_foreground_dimmest;
                     right_align = right_align_visualized_newlines;
                     text_style = 0;
+                }
+                else if (empty_line)
+                {
+                    string = " "_str;
                 }
             }
             else if (b == ' ' && visualize_whitespace)

@@ -535,7 +535,7 @@ CalculateEditDistance(String s, String t)
     int m = (int)t.size;
     int stride = n + 1;
 
-    ScopedMemory temp(platform->GetTempArena());
+    ScopedMemory temp;
     int *matrix = PushArray(temp, (n + 1)*(m + 1), int);
 
     auto SetCell = [matrix, stride](int x, int y, int value)

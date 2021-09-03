@@ -32,12 +32,14 @@ LocateTokenAtPos(LineInfo *info, int64_t pos)
 }
 
 function bool
-ValidateTokenLocatorIntegrity(Buffer *buffer, TokenLocator locator)
+ValidateTokenLocatorIntegrity(TokenLocator locator)
 {
     if (!IsValid(locator))
     {
         return true;
     }
+
+    Buffer *buffer = DEBUG_FindWhichBufferThisMemoryBelongsTo(locator.block);
 
     LineInfo info;
     FindLineInfoByPos(buffer, locator.pos, &info);
@@ -63,20 +65,26 @@ Rewind(TokenIterator *it, TokenLocator locator)
 }
 
 function TokenIterator
+IterateTokens(TokenLocator locator)
+{
+    TokenIterator it = {};
+    Rewind(&it, locator);
+
+#if TEXTIT_SLOW
+    ValidateTokenLocatorIntegrity(locator);
+#endif
+
+    return it;
+}
+
+function TokenIterator
 IterateTokens(Buffer *buffer, int64_t pos = 0)
 {
-    TokenIterator result = {};
-
     LineInfo info;
     FindLineInfoByPos(buffer, pos, &info);
 
     TokenLocator locator = LocateTokenAtPos(&info, pos);
-    Rewind(&result, locator);
-
-#if TEXTIT_SLOW
-    result.buffer = buffer;
-    ValidateTokenLocatorIntegrity(buffer, locator);
-#endif
+    TokenIterator result = IterateTokens(locator);
 
     return result;
 }
@@ -84,18 +92,11 @@ IterateTokens(Buffer *buffer, int64_t pos = 0)
 function TokenIterator
 IterateLineTokens(Buffer *buffer, int64_t line)
 {
-    TokenIterator result = {};
-
     LineInfo info;
     FindLineInfoByLine(buffer, line, &info);
 
     TokenLocator locator = LocateTokenAtPos(&info, info.range.start);
-    Rewind(&result, locator);
-
-#if TEXTIT_SLOW
-    result.buffer = buffer;
-    ValidateTokenLocatorIntegrity(buffer, locator);
-#endif
+    TokenIterator result = IterateTokens(locator);
 
     return result;
 }
@@ -103,15 +104,8 @@ IterateLineTokens(Buffer *buffer, int64_t line)
 function TokenIterator
 IterateLineTokens(LineInfo *info)
 {
-    TokenIterator result = {};
-
     TokenLocator locator = LocateTokenAtPos(info, info->range.start);
-    Rewind(&result, locator);
-
-#if TEXTIT_SLOW
-    result.buffer = DEBUG_FindWhichBufferThisMemoryBelongsTo(info->data);
-    ValidateTokenLocatorIntegrity(result.buffer, locator);
-#endif
+    TokenIterator result = IterateTokens(locator);
 
     return result;
 }
@@ -306,32 +300,32 @@ function Token
 EncloseString(TokenLocator locator)
 {
     TokenIterator it = {};
-    Rewind(&it, locator):
+    Rewind(&it, locator);
 
     Token result = {};
 
-    if (it.token & TokenFlag_PartOfString)
+    if (HasFlag(it.token.flags, TokenFlag_PartOfString))
     {
         TokenFlags flags = it.token.flags; // TODO: I am assuming the flags stay constant for the string.
                                            // This is a false assumption, and I should instead collect flags
                                            // from all the tokens that make up this string.
 
-        while (IsValid(&it) && it.token.kind != Token_StringStart)
+        while (IsValid(&it) && it.token.kind != Token_StartString)
         {
             Prev(&it);
         }
-        if (it.token.kind == Token_StringStart)
+        if (it.token.kind == Token_StartString)
         {
-            int64_t start = it.token.pos + it.token.length; // getting the inner range, just the contents of the string
-            int8_t  inner_start_offset = it.token.inner_start_offset;
-            while (IsValid(&it) && it.token.kind != Token_StringEnd)
+            int64_t start              = it.token.pos;
+            int8_t  inner_start_offset = (int8_t)it.token.length;
+            while (IsValid(&it) && it.token.kind != Token_EndString)
             {
                 Next(&it);
             }
-            if (it.token.kind == Token_StringEnd)
+            if (it.token.kind == Token_EndString)
             {
-                int64_t end              = it.token.pos; // getting the inner range, just the contents of the string
-                int8_t  inner_end_offset = it.token.inner_end_offset;
+                int64_t end              = it.token.pos + it.token.length;
+                int8_t  inner_end_offset = -(int8_t)it.token.length;
 
                 result.kind               = Token_String;
                 result.flags              = flags;
@@ -353,7 +347,7 @@ GetTokenAt(Buffer *buffer, int64_t pos, GetTokenFlags flags = 0)
     TokenIterator it = IterateTokens(buffer, pos);
 
     if (HasFlag(it.token.flags, TokenFlag_PartOfString) &&
-        HasFlag(flags, GetToken_CaptureStrings))
+        HasFlag(flags, GetToken_EncloseStrings))
     {
         result = EncloseString(GetLocator(&it));
     }
@@ -363,6 +357,22 @@ GetTokenAt(Buffer *buffer, int64_t pos, GetTokenFlags flags = 0)
     }
 
     return result;
+}
+
+function bool
+ValidateTokenIteration(Buffer *buffer)
+{
+    TokenIterator it = IterateTokens(buffer);
+    while (IsValidForward(&it))
+    {
+        Next(&it);
+    }
+    Assert(it.token.pos + it.token.length == buffer->count);
+    while (IsValidBackward(&it))
+    {
+        Prev(&it);
+    }
+    Assert(it.token.pos == 0);
 }
 
 //
@@ -379,6 +389,7 @@ function bool
 IsInNest(NestHelper *nests, TokenKind t, Direction dir)
 {
     if (nests->depth < 0) return false;
+
     bool result = nests->depth > 0;
 
     if (nests->opener)

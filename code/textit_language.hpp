@@ -16,10 +16,10 @@ union KeywordSlot
 
 struct OperatorSlot
 {
-    uint32_t     pattern;
-    uint8_t      pattern_length;
-    TokenKind    kind;
-    TokenSubKind sub_kind;
+    uint32_t      pattern;
+    uint8_t       pattern_length;
+    TokenKind     kind;
+    TokenSubKind  sub_kind;
 };
 
 struct LanguageSpec
@@ -31,6 +31,7 @@ struct LanguageSpec
     int associated_extension_count;
     String associated_extensions[16];
 
+    size_t tokenize_userdata_size;
     void (*Tokenize)(Tokenizer *tok, Token *t); // tokenizes one token
     void (*ParseTags)(Buffer *buffer);
 
