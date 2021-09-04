@@ -275,6 +275,13 @@ OpenBufferFromFile(String filename, BufferFlags flags)
     return result;
 }
 
+function
+PLATFORM_JOB(OpenBufferFromFileJob)
+{
+    OpenBufferFromFileJobArgs *args = (OpenBufferFromFileJobArgs *)userdata;
+    OpenBufferFromFile(args->name, args->flags);
+}
+
 function Buffer *
 GetBuffer(BufferID id)
 {

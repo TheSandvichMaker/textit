@@ -11,10 +11,14 @@ struct Project
 {
     Project *next;
 
+    bool opening;
+
     int associated_buffer_count;
     ProjectFlags flags;
 
     String root;
+
+    TicketMutex tag_table_mutex;
     Tag *tag_table[4096];
 };
 

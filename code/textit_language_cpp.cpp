@@ -356,6 +356,8 @@ ConsumeCppType(TagParser *parser)
 
     TokenLocator rewind_point = GetLocator(parser);
 
+    ConsumeToken(parser, Token_Keyword, "struct"_str); // account for forward declarations
+
     while (ConsumeToken(parser, Token_Keyword, "const"_str) ||
            ConsumeToken(parser, Token_Keyword, "volatile"_str));
 

@@ -194,7 +194,6 @@ struct EditorState
     IndentRules default_indent_rules;
 
     Project *first_project;
-    Tag *first_free_tag;
 
     uint32_t buffer_count;
     Buffer *buffers[MAX_BUFFER_COUNT];
@@ -264,6 +263,13 @@ function Cursor *IterateCursors(ViewID view, BufferID buffer);
 function Cursor *IterateCursors(View *view);
 
 function void SetEditorFont(String name, int size, PlatformFontQuality quality);
+
+struct OpenBufferFromFileJobArgs
+{
+    String name;
+    BufferFlags flags;
+};
+function PLATFORM_JOB(OpenBufferFromFileJob);
 
 struct BufferIterator
 {

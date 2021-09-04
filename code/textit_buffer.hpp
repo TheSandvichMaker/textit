@@ -3,6 +3,12 @@
 
 #define MAX_BUFFER_COUNT 1024
 
+struct Project;
+struct LanguageSpec;
+struct IndentRules;
+struct Tags;
+struct Tag;
+
 enum LineEndKind
 {
     LineEnd_LF,
@@ -88,12 +94,13 @@ struct Buffer : TextStorage
         int64_t insert_pos;
     } undo;
 
-    struct Project      *project;
-    struct LanguageSpec *language;
-    struct IndentRules  *indent_rules;
-    struct Tags         *tags;
+    Project      *project;
+    LanguageSpec *language;
+    IndentRules  *indent_rules;
+    Tags         *tags;
 
     TokenBlock *first_free_token_block;
+    Tag *first_free_tag;
 
     LineIndexNode *line_index_root;
     LineIndexNode *first_free_line_index_node;

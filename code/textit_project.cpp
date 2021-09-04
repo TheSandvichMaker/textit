@@ -40,7 +40,7 @@ FindProjectRoot(Arena *arena, String search_start)
 function void
 OpenCodeFilesRecursively(String search_start, BufferFlags buffer_flags = 0)
 {
-    ScopedMemory temp;
+    Arena *temp = platform->GetTempArena();
 
     String search_path = SplitPath(search_start);
     for (PlatformFileIterator *it = platform->FindFiles(temp, search_path);
@@ -62,7 +62,14 @@ OpenCodeFilesRecursively(String search_start, BufferFlags buffer_flags = 0)
 
             if (GetLanguageFromExtension(ext))
             {
-                OpenBufferFromFile(PushTempStringF("%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name)), buffer_flags);
+#if 1
+                OpenBufferFromFileJobArgs *args = PushStruct(temp, OpenBufferFromFileJobArgs);
+                args->name  = PushStringF(temp, "%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name));
+                args->flags = buffer_flags;
+                platform->AddJob(platform->high_priority_queue, args, OpenBufferFromFileJob);
+#else
+                OpenBufferFromFile(PushStringF(temp, "%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name)), buffer_flags);
+#endif
             }
         }
     }
@@ -140,7 +147,28 @@ MakeNewProject(String search_start)
     editor->first_project = project;
 
     PlatformHighResTime start = platform->GetTime();
+
+    project->opening = true;
+
     OpenCodeFilesRecursively(project->root);
+    platform->WaitForJobs(platform->high_priority_queue);
+
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (buffer->project != project) continue;
+
+        Tags *tags = buffer->tags;
+        for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
+        {
+            Tag **slot = &project->tag_table[tag->hash.u32[0] % ArrayCount(project->tag_table)];
+            tag->next_in_hash = *slot;
+            *slot = tag;
+        }
+    }
+
+    project->opening = false;
+
     PlatformHighResTime end = platform->GetTime();
 
     double total_time = platform->SecondsElapsed(start, end);

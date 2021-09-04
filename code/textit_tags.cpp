@@ -1,13 +1,13 @@
 function Tag *
-AllocateTag()
+AllocateTag(Buffer *buffer)
 {
-    if (!editor->first_free_tag)
+    if (!buffer->first_free_tag)
     {
-        editor->first_free_tag = PushStructNoClear(&editor->transient_arena, Tag);
-        editor->first_free_tag->next = nullptr;
+        buffer->first_free_tag = PushStructNoClear(&buffer->arena, Tag);
+        buffer->first_free_tag->next = nullptr;
     }
-    Tag *result = editor->first_free_tag;
-    editor->first_free_tag = result->next;
+    Tag *result = buffer->first_free_tag;
+    buffer->first_free_tag = result->next;
 
     ZeroStruct(result);
 
@@ -15,10 +15,10 @@ AllocateTag()
 }
 
 function void
-FreeTag(Tag *tag)
+FreeTag(Buffer *buffer, Tag *tag)
 {
-    tag->next = editor->first_free_tag;
-    editor->first_free_tag = tag;
+    tag->next = buffer->first_free_tag;
+    buffer->first_free_tag = tag;
 }
 
 function Tag **
@@ -38,14 +38,17 @@ AddTagInternal(Buffer *buffer, String name)
     Tags *tags = buffer->tags;
     Project *project = buffer->project;
 
-    Tag *result = AllocateTag();
+    Tag *result = AllocateTag(buffer);
 
     HashResult hash = HashString(name);
     result->hash = hash;
 
-    Tag **slot = &project->tag_table[hash.u32[0] % ArrayCount(project->tag_table)];
-    result->next_in_hash = *slot;
-    *slot = result;
+    if (!project->opening)
+    {
+        Tag **slot = &project->tag_table[hash.u32[0] % ArrayCount(project->tag_table)];
+        result->next_in_hash = *slot;
+        *slot = result;
+    }
 
     DllInsertBack(&tags->sentinel, result);
 
@@ -83,7 +86,7 @@ FreeAllTags(Buffer *buffer)
         DllRemove(tag);
         tag->next = tag->prev = nullptr;
 
-        FreeTag(tag);
+        FreeTag(buffer, tag);
     }
 }
 
