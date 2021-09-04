@@ -722,13 +722,11 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
         TokenBlock *old_prev = next_line_data->first_token_block->prev;
         TokenBlock *old_next = next_line_data->last_token_block->next;
 
-        // next_line_data->first_token_block->prev->next = next_line_data->data.last_token_block->next;
-        // record->next->data.first_token_block->prev = record->data.first_token_block->prev;
-
         FreeTokens(buffer, it.record);
-
         TokenizeLine(buffer, it.range.start, prev_line_data->end_tokenize_state, next_line_data);
 
+        next_line_data->first_token_block->prev = old_prev;
+        next_line_data->last_token_block->next  = old_next;
         if (old_prev) old_prev->next = next_line_data->first_token_block;
         if (old_next) old_next->prev = next_line_data->last_token_block;
 
@@ -738,6 +736,7 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
     }
 
     AssertSlow(ValidateLineIndexFull(buffer));
+    AssertSlow(ValidateTokenIteration(buffer));
 
     OnBufferChanged(buffer, range.start, delta);
 

@@ -340,6 +340,7 @@ EndToken(Tokenizer *tok, Token *t)
         tok->in_multiline_string = false;
     }
     
+    // FuckedLineStateStuff
     if (tok->in_preprocessor)
     {
         t->flags |= TokenFlag_IsPreprocessor;
@@ -380,6 +381,8 @@ BeginTokenizeLine(Arena *arena, Tokenizer *tok, Buffer *buffer, Range range, Lin
     tok->new_line   = true;
     tok->line_start = AtPos(tok);
     tok->userdata   = PushSize(arena, tok->language->tokenize_userdata_size);
+    tok->in_preprocessor = HasFlag(previous_line_state, LineTokenizeState_Preprocessor);
+    tok->in_string       = HasFlag(previous_line_state, LineTokenizeState_String);
 
     if (previous_line_state & LineTokenizeState_BlockComment)
     {
@@ -394,6 +397,11 @@ EndTokenizeLine(Tokenizer *tok, LineData *line, LineTokenizeState previous_line_
     line->first_token_block    = tok->first_token_block;
     line->start_tokenize_state = previous_line_state;
     line->end_tokenize_state   = (tok->block_comment_count > 0 ? LineTokenizeState_BlockComment : 0);
+    if (tok->prev_token->kind == Token_LineContinue)
+    {
+        line->end_tokenize_state  |= (tok->in_preprocessor ? LineTokenizeState_Preprocessor : 0);
+        line->end_tokenize_state  |= (tok->in_string ? LineTokenizeState_String : 0);
+    }
     line->first_token_block    = tok->first_token_block;
     line->last_token_block     = tok->last_token_block;
 }
@@ -447,4 +455,8 @@ TokenizeBuffer(Buffer *buffer)
         LineIndexNode *node = InsertLine(buffer, MakeRange(line_start, at), &line_data);
         prev_line_data = &node->data;
     }
+
+#if TEXTIT_SLOW
+    ValidateTokenIteration(buffer);
+#endif
 }

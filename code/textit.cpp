@@ -26,11 +26,11 @@
 #include "textit_language_cpp.cpp"
 
 // things missing:
+// saving lmao << do this asap
+// local search (and replace) << do this next? questions about threading input thing
 // autocomplete of any kind
-// multiple cursors
-// local search (and replace)
+// multiple cursors -- needs to be thought about implementation robustness
 // project wide search (and replace)
-// saving lmao
 // not making undo history take up one billion megabytes, have a way to flush it to disk
 // undo tree visualization / ux (I mean that was supposed to be a thing)
 // yank behaviour (yank inner vs outer / yank on delete / etc)
@@ -38,9 +38,7 @@
 // sensible scrolling in rendering
 // hardware accelerated rendering
 // rendering api that isn't dumb as bananacakes
-// incremental tokenization
 // incremental parsing for code index
-// incremental updating of line cache
 // piece table text storage?
 // editing big files without keeping them entirely in memory??
 // language support for multiple languages to test and refine things
@@ -214,7 +212,7 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
 }
 
 function Buffer *
-OpenBufferFromFile(String filename)
+OpenBufferFromFile(String filename, BufferFlags flags)
 {
     ScopedMemory temp;
     String full_path = platform->PushFullPath(temp, filename);
@@ -224,6 +222,7 @@ OpenBufferFromFile(String filename)
         Buffer *buffer = it.buffer;
         if (AreEqual(buffer->full_path, full_path))
         {
+            buffer->flags = flags;
             return buffer;
         }
     }
@@ -235,6 +234,7 @@ OpenBufferFromFile(String filename)
 
     Buffer *result = OpenNewBuffer(leaf);
     result->full_path = PushString(&result->arena, full_path);
+    result->flags |= flags;
 
     size_t file_size = platform->GetFileSize(filename);
     EnsureSpace(result, file_size);
@@ -1122,15 +1122,32 @@ AppUpdateAndRender(Platform *platform_)
         }
     }
 
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
     {
-        View   *view   = GetActiveView();
-        Buffer *buffer = GetBuffer(view);
+        Buffer *buffer = it.buffer;
+        if (buffer->dirty)
+        {
+            buffer->dirty = false;
+            ParseTags(buffer);
+        }
+    }
 
+    for (ViewIterator it = IterateViews(); IsValid(&it); Next(&it))
+    {
+        View *view = it.view;
         if (view->next_buffer)
         {
             view->buffer = view->next_buffer;
             view->next_buffer = {};
+
+            Buffer *buffer = GetBuffer(view);
+            buffer->flags &= ~Buffer_Hidden;
         }
+    }
+
+    {
+        View   *view   = GetActiveView();
+        Buffer *buffer = GetBuffer(view);
 
         if ((editor->next_edit_mode == EditMode_Text) &&
             (buffer->flags & Buffer_ReadOnly))
@@ -1146,11 +1163,6 @@ AppUpdateAndRender(Platform *platform_)
         {
             DrawCommandLines();
         }
-
-        PushLayer(Layer_ViewForeground);
-        PushRect(MakeRect2iMinMax(0, render_state->viewport.max.y, 
-                                  render_state->viewport.max.x, render_state->viewport.max.y + 1), 
-                 GetThemeColor("text_background"_id));
     }
 
     if (core_config->debug_show_glyph_cache)
@@ -1177,16 +1189,6 @@ AppUpdateAndRender(Platform *platform_)
         }
     }
 #endif
-
-    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
-    {
-        Buffer *buffer = it.buffer;
-        if (buffer->dirty)
-        {
-            buffer->dirty = false;
-            ParseTags(buffer);
-        }
-    }
 
     if (handled_any_events) 
     {

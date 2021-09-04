@@ -11,7 +11,7 @@ enum TokenKind_C : TokenSubKind
     Token_C_None,
 
     Token_C_Arrow,
-    Token_C_PrintfFormatter,
+    Token_C_StringSpecial,
 
     Token_Cpp_Namespace,
 };

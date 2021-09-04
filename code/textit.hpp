@@ -253,7 +253,7 @@ struct EditorState
 static EditorState *editor;
 
 function void ExecuteCommand(View *view, Command *command);
-function Buffer *OpenBufferFromFile(String filename);
+function Buffer *OpenBufferFromFile(String filename, BufferFlags flags = 0);
 
 function Cursor *CreateCursor(View *view);
 function void FreeCursor(Cursor *cursor);

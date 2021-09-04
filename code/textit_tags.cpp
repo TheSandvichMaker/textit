@@ -124,14 +124,6 @@ PushTagsWithName(Arena *arena, Project *project, String name)
 // Tag Parser
 //
 
-function void
-Advance(TagParser *parser)
-{
-    parser->parse_index += 1;
-    parser->pushed_text = false;
-    Next(&parser->it);
-}
-
 function TokenLocator
 GetLocator(TagParser *parser)
 {
@@ -148,6 +140,26 @@ function bool
 TokensLeft(TagParser *parser)
 {
     return IsValid(&parser->it);
+}
+
+function bool
+AcceptToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, Token *t)
+{
+    bool result = t->kind == kind && (!sub_kind || t->sub_kind == sub_kind);
+    if (((t->flags & parser->require_flags) != parser->require_flags ||
+         (t->flags & parser->reject_flags)))
+    {
+        result = false;
+    }
+    return result;
+}
+
+function void
+Advance(TagParser *parser)
+{
+    parser->parse_index += 1;
+    parser->pushed_text = false;
+    Next(&parser->it);
 }
 
 function void
@@ -183,18 +195,6 @@ function Token
 PeekToken(TagParser *parser)
 {
     return parser->it.token;
-}
-
-function bool
-AcceptToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, Token *t)
-{
-    bool result = t->kind == kind && (!sub_kind || t->sub_kind == sub_kind);
-    if (((t->flags & parser->require_flags) != parser->require_flags ||
-         (t->flags & parser->reject_flags)))
-    {
-        result = false;
-    }
-    return result;
 }
 
 function Token

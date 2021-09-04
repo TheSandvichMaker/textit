@@ -16,8 +16,11 @@ enum_flags(uint8_t, LineFlags)
 
 enum_flags(uint8_t, LineTokenizeState)
 {
+    // TODO: Use these states in the tokenizer to stop things from being extremely horrid
     LineTokenizeState_None         = 0x0,
     LineTokenizeState_BlockComment = 0x1,
+    LineTokenizeState_Preprocessor = 0x2,
+    LineTokenizeState_String       = 0x4,
 };
 
 struct LineData

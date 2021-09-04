@@ -101,6 +101,15 @@ COMMAND_PROC(OpenBuffer,
     {
         String string = GetCommandString(cl);
 
+        Project *active_project = GetActiveBuffer()->project;
+
+        bool show_hidden = false;
+        if (string[0] == '!')
+        {
+            show_hidden = true;
+            string = Advance(string);
+        }
+
         String leaf;
         String path = SplitPath(string, &leaf);
 
@@ -116,6 +125,7 @@ COMMAND_PROC(OpenBuffer,
         for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
         {
             Buffer *buffer = it.buffer;
+            if (!show_hidden && buffer->project != active_project) continue;
 
             String test_ext = {};
             String test_name = buffer->name;
@@ -128,7 +138,15 @@ COMMAND_PROC(OpenBuffer,
                 (FindSubstring(test_name, name, StringMatch_CaseInsensitive) != test_name.size &&
                  (!ext.size || FindSubstring(test_ext, ext, StringMatch_CaseInsensitive) != test_ext.size)))
             {
-                if (!AddPrediction(cl, MakePrediction(buffer->name)))
+                Prediction prediction = {};
+                prediction.text = buffer->name;
+                if (buffer->project != active_project)
+                {
+                    prediction.preview_text = PushTempStringF("%-32.*s - (%.*s)", StringExpand(buffer->name), StringExpand(buffer->project->root));
+                    prediction.color        = "command_line_option_directory"_id;
+                }
+
+                if (!AddPrediction(cl, prediction))
                 {
                     break;
                 }
@@ -233,6 +251,67 @@ COMMAND_PROC(OpenFile,
         }
 
         view->next_buffer = OpenBufferFromFile(string)->id;
+        return true;
+    };
+}
+
+COMMAND_PROC(ToggleProjectVisibility,
+             "Toggle the visibility of projects"_str,
+             Command_Jump)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Toggle Project Visibility"_str;
+    cl->no_quickselect = true;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+
+        for (Project *project = editor->first_project; project; project = project->next)
+        {
+            if (string.size == 0 ||
+                (FindSubstring(project->root, string, StringMatch_CaseInsensitive) != project->root.size))
+            {
+                Prediction prediction = {};
+                prediction.text = project->root;
+                if (HasFlag(project->flags, Project_Hidden))
+                {
+                    prediction.preview_text = PushTempStringF("(hidden)  %.*s", StringExpand(project->root));
+                    prediction.color        = "command_line_option_inactive"_id;
+                }
+                else
+                {
+                    prediction.preview_text = PushTempStringF("(visible) %.*s", StringExpand(project->root));
+                    prediction.color        = "command_line_option_active"_id;
+                }
+
+                if (!AddPrediction(cl, prediction))
+                {
+                    break;
+                }
+            }
+        }
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+
+        for (Project *project = editor->first_project; project; project = project->next)
+        {
+            if (AreEqual(project->root, string))
+            {
+                if (HasFlag(project->flags, Project_Hidden))
+                {
+                    project->flags &= ~Project_Hidden;
+                }
+                else
+                {
+                    project->flags |= Project_Hidden;
+                }
+                return true;
+            }
+        }
         return true;
     };
 }
@@ -531,11 +610,16 @@ COMMAND_PROC(Tags,
     {
         String string = GetCommandString(cl);
 
+        // Project *active_project = GetActiveBuffer()->project;
+
         for (BufferIterator it = IterateBuffers();
              IsValid(&it);
              Next(&it))
         {
             Buffer *buffer = it.buffer;
+            // TODO: What should da policy be for showing tags from other projects?
+            // if (buffer->project != active_project) continue;
+
             Tags *tags = buffer->tags;
             for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
             {

@@ -51,10 +51,12 @@ struct BufferLocation
     Range line_range;
 };
 
-enum_flags(int, BufferFlags)
+typedef int BufferFlags;
+enum BufferFlags_ENUM : BufferFlags
 {
     Buffer_Indestructible = 0x1,
     Buffer_ReadOnly       = 0x2,
+    Buffer_Hidden         = 0x4,
 };
 
 #define TEXTIT_BUFFER_SIZE Gigabytes(8)

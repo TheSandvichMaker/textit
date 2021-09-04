@@ -95,7 +95,7 @@ LoadDefaultDarkTheme()
     SetThemeColor(theme, "text_label"_id, MakeColor(255, 128, 0), TextStyle_Underline|TextStyle_Italic);
     SetThemeColor(theme, "text_preprocessor"_id, MakeColor(255, 192, 255));
     SetThemeColor(theme, "text_string"_id, MakeColor(255, 192, 64));
-    SetThemeColor(theme, "text_string_formatting"_id, MakeColor(255, 128, 64));
+    SetThemeColor(theme, "text_string_special"_id, MakeColor(255, 128, 64));
     SetThemeColor(theme, "text_number"_id, MakeColor(64, 192, 255));
     SetThemeColor(theme, "text_literal"_id, MakeColor(192, 212, 255));
     SetThemeColor(theme, "text_function"_id, MakeColor(128, 196, 255));
@@ -137,6 +137,8 @@ LoadDefaultDarkTheme()
     SetThemeColor(theme, "command_line_option_numbers"_id, MakeColor(128, 192, 128));
     SetThemeColor(theme, "command_line_option_numbers_highlighted"_id, MakeColor(128, 255, 128));
     SetThemeColor(theme, "command_line_option_directory"_id, MakeColor(192, 192, 128));
+    SetThemeColor(theme, "command_line_option_active"_id, MakeColor(235, 255, 128));
+    SetThemeColor(theme, "command_line_option_inactive"_id, MakeColor(192, 192, 192));
 }
 
 function void

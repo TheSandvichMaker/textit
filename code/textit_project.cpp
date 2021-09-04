@@ -38,7 +38,7 @@ FindProjectRoot(Arena *arena, String search_start)
 }
 
 function void
-OpenCodeFilesRecursively(String search_start)
+OpenCodeFilesRecursively(String search_start, BufferFlags buffer_flags = 0)
 {
     ScopedMemory temp;
 
@@ -53,7 +53,7 @@ OpenCodeFilesRecursively(String search_start)
 
         if (it->info.directory)
         {
-            OpenCodeFilesRecursively(PushTempStringF("%.*s%.*s\\", StringExpand(search_path), StringExpand(it->info.name)));
+            OpenCodeFilesRecursively(PushTempStringF("%.*s%.*s\\", StringExpand(search_path), StringExpand(it->info.name)), buffer_flags);
         }
         else
         {
@@ -62,7 +62,7 @@ OpenCodeFilesRecursively(String search_start)
 
             if (GetLanguageFromExtension(ext))
             {
-                OpenBufferFromFile(PushTempStringF("%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name)));
+                OpenBufferFromFile(PushTempStringF("%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name)), buffer_flags);
             }
         }
     }
@@ -129,6 +129,12 @@ MakeNewProject(String search_start)
 {
     Project *project = PushStruct(&editor->transient_arena, Project);
     project->root = FindProjectRoot(&editor->transient_arena, search_start);
+
+    bool is_first_project = !editor->first_project;
+    if (!is_first_project)
+    {
+        project->flags |= Project_Hidden;
+    }
 
     project->next = editor->first_project;
     editor->first_project = project;

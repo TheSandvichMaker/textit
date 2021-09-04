@@ -1,3 +1,113 @@
+// @FuckedLineStateStuff: between in_preprocessor, TokenizeState_C_InPreprocessor and LineTokenizeState_Preprocessor I think we have
+// enough ways of specifying this shit. Same for in_string etc. And TokenizeState is junk. LineTokenizeState is relevant.
+
+function int
+DecodeDigit(uint8_t c, int base = 10)
+{
+    int result = -1;
+
+    c = ToLowerAscii(c);
+
+    if (c >= '0' && c <= '9')
+    {
+        int value = c - '0';
+        if (value >= 0 && value < base)
+        {
+            result = value;
+        }
+    }
+    else if (c >= 'a' && c <= 'f')
+    {
+        int value = 10 + c - 'a';
+        if (value >= 10 && value < base)
+        {
+            result = value;
+        }
+    }
+
+    return result;
+}
+
+function bool
+ParseNumber(Tokenizer *tok, int base = 10, int max = INT_MAX)
+{
+    bool result = false;
+
+    if (DecodeDigit(Peek(tok), base) > 0)
+    {
+        result = true;
+
+        Advance(tok);
+        max -= 1;
+        while (max > 0 && CharsLeft(tok) && DecodeDigit(Peek(tok), base) != -1)
+        {
+            Advance(tok);
+            max -= 1;
+        }
+    }
+
+    return true;
+}
+
+function bool
+ParseEscapeSequence(Tokenizer *tok, Token *t)
+{
+    bool result = false;
+
+    switch (Peek(tok))
+    {
+        case 'a':
+        case 'b':
+        case 'e':
+        case 'f':
+        case 'n':
+        case 'r':
+        case 't':
+        case 'v':
+        case '\\':
+        case '\'':
+        case '"':
+        case '\?':
+        {
+            Advance(tok);
+            result = true;
+        } break;
+
+        case 'x':
+        {
+            Advance(tok);
+            result = ParseNumber(tok, 16, 2);
+        } break;
+
+        case 'u':
+        {
+            Advance(tok);
+            result = ParseNumber(tok, 16, 4);
+        } break;
+
+        case 'U':
+        {
+            Advance(tok);
+            result = ParseNumber(tok, 16, 8);
+        } break;
+
+        case '0': case '1': case '2': case '3':
+        case '4': case '5': case '6': case '7':
+        case '8':
+        {
+            result = ParseNumber(tok, 8, 3);
+        } break;
+    }
+
+    if (result)
+    {
+        t->kind     = Token_Custom;
+        t->sub_kind = Token_C_StringSpecial;
+    }
+
+    return result;
+}
+
 function bool
 ParsePrintfFormatter(Tokenizer *tok, Token *t)
 {
@@ -13,11 +123,7 @@ ParsePrintfFormatter(Tokenizer *tok, Token *t)
     // width
     if (!Match(tok, '*'))
     {
-        while (CharsLeft(tok) && 
-               Peek(tok) >= '0' && Peek(tok) <= '9')
-        {
-            Advance(tok);
-        }
+        ParseNumber(tok);
     }
 
     // precision
@@ -25,11 +131,7 @@ ParsePrintfFormatter(Tokenizer *tok, Token *t)
     {
         if (!Match(tok, '*'))
         {
-            while (CharsLeft(tok) && 
-                   Peek(tok) >= '0' && Peek(tok) <= '9')
-            {
-                Advance(tok);
-            }
+            ParseNumber(tok);
         }
     }
 
@@ -60,6 +162,7 @@ ParsePrintfFormatter(Tokenizer *tok, Token *t)
     {
         case 'd':
         case 'i':
+        case 'u':
         case 'o':
         case 'x':
         case 'X':
@@ -81,7 +184,7 @@ ParsePrintfFormatter(Tokenizer *tok, Token *t)
 
             result = true;
             t->kind     = Token_Custom;
-            t->sub_kind = Token_C_PrintfFormatter;
+            t->sub_kind = Token_C_StringSpecial;
         } break;
     }
 
@@ -95,128 +198,151 @@ TokenizeCpp(Tokenizer *tok, Token *t)
 
     Token *prev_t = tok->prev_token;
 
-    if ((t->flags & TokenFlag_FirstInLine) &&
-        (prev_t->kind != Token_LineContinue))
-    {
-        tok->user_state &= ~TokenizeState_C_InPreprocessor;
-        tok->state      &= ~TokenizeState_ImplicitStatementEndings;
-        if (!tok->in_multiline_string)
-        {
-            tok->in_string = false;
-        }
-    }
-
     uint8_t c = Advance(tok);
-    if (tok->in_string && c == tok_cpp->string_end_char)
+    switch (c)
     {
-        t->kind = Token_EndString;
-    }
-    else
-    {
-        switch (c)
+        default:
         {
-            default:
-            {
 parse_default:
-                bool parse_string = false;
-                if (c == 'L' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; } 
-                if (c == 'u' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
-                if (c == 'U' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
-                if (c == 'u' && Match(tok, "8\""_str)) { tok_cpp->string_end_char = '"'; parse_string = true; }
-                if (tok->user_state & TokenizeState_C_InPreprocessor && Match(tok, '<'))
+            bool parse_string = false;
+            if (c == 'L' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; } 
+            if (c == 'u' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
+            if (c == 'U' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
+            if (c == 'u' && Match(tok, "8\""_str)) { tok_cpp->string_end_char = '"'; parse_string = true; }
+            if (HasFlag(tok->user_state, TokenizeState_C_InPreprocessor) && Peek(tok) == '<')
+            {
+                ScopedMemory temp;
+                String prev_token_string = PushTokenString(temp, tok->buffer, prev_t);
+                if (AreEqual(prev_token_string, "include"_str))
                 {
                     parse_string = true;
                     tok_cpp->string_end_char = '>';
                 }
+            }
 
-                if (parse_string)
+            if (parse_string)
+            {
+                t->kind = Token_StartString;
+                break;
+            }
+
+            Revert(tok, t);
+            ParseStandardToken(tok, t);
+        } break;
+
+        case '%':
+        {
+            if (!tok->in_string) goto parse_default;
+            if (!ParsePrintfFormatter(tok, t)) goto parse_default;
+        } break;
+
+        case '\\':
+        {
+            if (!tok->in_string) goto parse_default;
+            if (!ParseEscapeSequence(tok, t)) goto parse_default;
+        } break;
+
+        case '>':
+        {
+            if (tok->in_string && tok_cpp->string_end_char == '>')
+            {
+                t->kind = Token_EndString;
+            }
+            else
+            {
+                goto parse_default;
+            }
+        } break;
+
+        case '"':
+        {
+            if (Peek(tok, -1) != '\\')
+            {
+                if (tok->in_string && tok_cpp->string_end_char == '"')
                 {
-                    t->kind = Token_StartString;
-                    break;
+                    t->kind = Token_EndString;
                 }
-
-                Revert(tok, t);
-                ParseStandardToken(tok, t);
-            } break;
-
-            case '%':
-            {
-                if (!tok->in_string) goto parse_default;
-                if (!ParsePrintfFormatter(tok, t)) goto parse_default;
-            } break;
-
-            case '"':
-            {
-                if (Peek(tok, -1) != '\\')
+                else if (!tok->in_string)
                 {
                     t->kind = Token_StartString;
                     tok_cpp->string_end_char = '"';
-                }
-            } break;
-
-            case '_':
-            {
-                if (prev_t->kind == Token_EndString)
-                {
-                    t->kind = Token_Operator;
-                    while (IsValidIdentifierAscii(Peek(tok))) Advance(tok);
                 }
                 else
                 {
                     goto parse_default;
                 }
-            } break;
+            }
+        } break;
 
-            case '#':
+        case '_':
+        {
+            if (prev_t->kind == Token_EndString)
             {
-                if (t->flags & TokenFlag_FirstInLine)
-                {
-                    t->kind = Token_Preprocessor;
-                    tok->user_state |= TokenizeState_C_InPreprocessor;
-                    tok->state      |= TokenizeState_ImplicitStatementEndings;
-                }
-            } break;
-
-            case ':':
+                t->kind = Token_Operator;
+                while (IsValidIdentifierAscii(Peek(tok))) Advance(tok);
+            }
+            else
             {
-                if ((prev_t->kind == Token_Identifier) &&
-                    (prev_t->flags & TokenFlag_FirstInLine))
-                {
-                    prev_t->kind = Token_Label;
-                }
                 goto parse_default;
-            } break;
+            }
+        } break;
 
-            case '\'':
+        case '#':
+        {
+            if (t->flags & TokenFlag_FirstInLine)
             {
-                if (Peek(tok) != '\'')
+                t->kind = Token_Preprocessor;
+                // FuckedLineStateStuff
+                tok->in_preprocessor = true;
+                tok->user_state |= TokenizeState_C_InPreprocessor;
+                tok->state      |= TokenizeState_ImplicitStatementEndings;
+            }
+            else
+            {
+                goto parse_default;
+            }
+        } break;
+
+        case ':':
+        {
+            if ((prev_t->kind == Token_Identifier) &&
+                (prev_t->flags & TokenFlag_FirstInLine))
+            {
+                prev_t->kind = Token_Label;
+            }
+            goto parse_default;
+        } break;
+
+        case '\'':
+        {
+            if (Peek(tok) != '\'')
+            {
+                if (Match(tok, '\\') ||
+                    Peek(tok) != '\'')
                 {
-                    if (Match(tok, '\\') ||
-                        Peek(tok) != '\'')
+                    tok->at++;
+                    if (Match(tok, '\''))
                     {
-                        tok->at++;
-                        if (Match(tok, '\''))
-                        {
-                            t->kind = Token_CharacterLiteral;
-                            break;
-                        }
+                        t->kind = Token_CharacterLiteral;
+                        break;
                     }
                 }
+            }
 
-                goto parse_default;
-            } break;
+            goto parse_default;
+        } break;
 
-            case '(':
+        case '(':
+        {
+            if (prev_t->kind == Token_Identifier && !(prev_t->flags & TokenFlag_IsPreprocessor))
             {
-                if (prev_t->kind == Token_Identifier && !(prev_t->flags & TokenFlag_IsPreprocessor))
-                {
-                    prev_t->kind = Token_Function;
-                }
-                goto parse_default;
-            } break;
-        }
+                prev_t->kind = Token_Function;
+            }
+            goto parse_default;
+        } break;
     }
 
+    // FuckedLineStateStuff
     if (tok->user_state & TokenizeState_C_InPreprocessor)
     {
         t->flags |= TokenFlag_IsPreprocessor;
@@ -304,6 +430,15 @@ ConsumeCppIf0(TagParser *parser)
 }
 
 function void
+SkipComments(TagParser *parser)
+{
+    while (parser->it.token.flags & TokenFlag_IsComment)
+    {
+        Advance(parser);
+    }
+}
+
+function void
 ParseTagsCpp(Buffer *buffer)
 {
     PlatformHighResTime start = platform->GetTime();
@@ -342,6 +477,8 @@ ParseTagsCpp(Buffer *buffer)
                     {
                         while (TokensLeft(parser) && !ConsumeToken(parser, Token_RightScope))
                         {
+                            SkipComments(parser); // jank alert: you'd expect comments to be automatically skipped when matching here, really
+                                                  // but that's not how I architected the parser
                             if (Token enum_value = ConsumeToken(parser, Token_Identifier))
                             {
                                 Tag *child_tag = AddTag(buffer, &enum_value);
@@ -391,10 +528,14 @@ ParseTagsCpp(Buffer *buffer)
                     Tag *tag = AddTag(buffer, &t);
                     tag->kind     = Tag_Definition;
                     tag->sub_kind = Tag_C_Macro;
-                    if (ConsumeToken(parser, Token_LeftParen))
+                    if (Token left_paren = ConsumeToken(parser, Token_LeftParen))
                     {
-                        tag->related_token_kind = Token_Function;
-                        tag->sub_kind           = Tag_C_FunctionMacro;
+                        // make sure there's no whitespace inbetween (TODO: I could look for a whitespace token if I provided that functionality)
+                        if (left_paren.pos == t.pos + t.length)
+                        {
+                            tag->related_token_kind = Token_Function;
+                            tag->sub_kind           = Tag_C_FunctionMacro;
+                        }
                     }
                 }
             }
@@ -421,7 +562,7 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     lang->Tokenize  = TokenizeCpp;
     lang->ParseTags = ParseTagsCpp;
 
-    AddTokenSubKind(lang, Token_C_PrintfFormatter, "text_string_formatting"_id);
+    AddTokenSubKind(lang, Token_C_StringSpecial, "text_string_special"_id);
 
     AddTagSubKind(lang, Tag_C_Struct,        "struct"_str,         "text_type"_id);
     AddTagSubKind(lang, Tag_C_Union,         "union"_str,          "text_type"_id);
@@ -445,6 +586,9 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
 
     AddOperator(lang, "\""_str, Token_String);
 
+    // I don't remember why I added these initially, but post-hoc I have justified it as
+    // being for avoiding the first : in :: being used for labels, and the > in -> for
+    // matching template nonsense
     AddOperator(lang, "::"_str, Token_Operator, Token_Cpp_Namespace);
     AddOperator(lang, "->"_str, Token_Operator, Token_C_Arrow);
 
@@ -482,8 +626,54 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AddKeyword(lang, "goto"_id, Token_FlowControl);
     AddKeyword(lang, "return"_id, Token_FlowControl);
 
+    AddKeyword(lang, "unsigned"_id, Token_Type);
+    AddKeyword(lang, "signed"_id, Token_Type);
+    AddKeyword(lang, "register"_id, Token_Type);
+    AddKeyword(lang, "bool"_id, Token_Type); 
+    AddKeyword(lang, "void"_id, Token_Type); 
+    AddKeyword(lang, "char"_id, Token_Type); 
+    AddKeyword(lang, "char_t"_id, Token_Type); 
+    AddKeyword(lang, "char16_t"_id, Token_Type); 
+    AddKeyword(lang, "char32_t"_id, Token_Type); 
+    AddKeyword(lang, "wchar_t"_id, Token_Type); 
+    AddKeyword(lang, "short"_id, Token_Type); 
+    AddKeyword(lang, "int"_id, Token_Type); 
+    AddKeyword(lang, "long"_id, Token_Type); 
+    AddKeyword(lang, "float"_id, Token_Type); 
+    AddKeyword(lang, "double"_id, Token_Type);
+    AddKeyword(lang, "int8_t"_id, Token_Type); 
+    AddKeyword(lang, "int16_t"_id, Token_Type); 
+    AddKeyword(lang, "int32_t"_id, Token_Type); 
+    AddKeyword(lang, "int64_t"_id, Token_Type);
+    AddKeyword(lang, "uint8_t"_id, Token_Type); 
+    AddKeyword(lang, "uint16_t"_id, Token_Type); 
+    AddKeyword(lang, "uint32_t"_id, Token_Type); 
+    AddKeyword(lang, "uint64_t"_id, Token_Type);
+    AddKeyword(lang, "intptr_t"_id, Token_Type);
+    AddKeyword(lang, "uintptr_t"_id, Token_Type);
+    AddKeyword(lang, "size_t"_id, Token_Type);
+    AddKeyword(lang, "ssize_t"_id, Token_Type);
+    AddKeyword(lang, "ptrdiff_t"_id, Token_Type);
+    AddKeyword(lang, "__int64"_id, Token_Type);
+    AddKeyword(lang, "__m128"_id, Token_Type);
+    AddKeyword(lang, "__m128i"_id, Token_Type);
+    AddKeyword(lang, "__m128d"_id, Token_Type);
+    AddKeyword(lang, "__m128h"_id, Token_Type);
+    AddKeyword(lang, "__m256"_id, Token_Type);
+    AddKeyword(lang, "__m256i"_id, Token_Type);
+    AddKeyword(lang, "__m256d"_id, Token_Type);
+    AddKeyword(lang, "__m256h"_id, Token_Type);
+    AddKeyword(lang, "__m512"_id, Token_Type);
+    AddKeyword(lang, "__m512i"_id, Token_Type);
+    AddKeyword(lang, "__m512d"_id, Token_Type);
+    AddKeyword(lang, "__m512h"_id, Token_Type);
+    AddKeyword(lang, "__mmask8"_id, Token_Type);
+    AddKeyword(lang, "__mmask16"_id, Token_Type);
+    AddKeyword(lang, "__mmask32"_id, Token_Type);
+
     AddKeyword(lang, "true"_id, Token_Literal);
     AddKeyword(lang, "false"_id, Token_Literal);
+
     AddKeyword(lang, "nullptr"_id, Token_Literal);
     AddKeyword(lang, "NULL"_id, Token_Literal);
 
@@ -654,50 +844,5 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AddKeyword(lang, "M_2_SQRTPI"_id, Token_Literal);
     AddKeyword(lang, "M_SQRT2"_id, Token_Literal);
     AddKeyword(lang, "M_SQRT1_2"_id, Token_Literal);
-
-    AddKeyword(lang, "unsigned"_id, Token_Type);
-    AddKeyword(lang, "signed"_id, Token_Type);
-    AddKeyword(lang, "register"_id, Token_Type);
-    AddKeyword(lang, "bool"_id, Token_Type); 
-    AddKeyword(lang, "void"_id, Token_Type); 
-    AddKeyword(lang, "char"_id, Token_Type); 
-    AddKeyword(lang, "char_t"_id, Token_Type); 
-    AddKeyword(lang, "char16_t"_id, Token_Type); 
-    AddKeyword(lang, "char32_t"_id, Token_Type); 
-    AddKeyword(lang, "wchar_t"_id, Token_Type); 
-    AddKeyword(lang, "short"_id, Token_Type); 
-    AddKeyword(lang, "int"_id, Token_Type); 
-    AddKeyword(lang, "long"_id, Token_Type); 
-    AddKeyword(lang, "float"_id, Token_Type); 
-    AddKeyword(lang, "double"_id, Token_Type);
-    AddKeyword(lang, "int8_t"_id, Token_Type); 
-    AddKeyword(lang, "int16_t"_id, Token_Type); 
-    AddKeyword(lang, "int32_t"_id, Token_Type); 
-    AddKeyword(lang, "int64_t"_id, Token_Type);
-    AddKeyword(lang, "uint8_t"_id, Token_Type); 
-    AddKeyword(lang, "uint16_t"_id, Token_Type); 
-    AddKeyword(lang, "uint32_t"_id, Token_Type); 
-    AddKeyword(lang, "uint64_t"_id, Token_Type);
-    AddKeyword(lang, "intptr_t"_id, Token_Type);
-    AddKeyword(lang, "uintptr_t"_id, Token_Type);
-    AddKeyword(lang, "size_t"_id, Token_Type);
-    AddKeyword(lang, "ssize_t"_id, Token_Type);
-    AddKeyword(lang, "ptrdiff_t"_id, Token_Type);
-    AddKeyword(lang, "__int64"_id, Token_Type);
-    AddKeyword(lang, "__m128"_id, Token_Type);
-    AddKeyword(lang, "__m128i"_id, Token_Type);
-    AddKeyword(lang, "__m128d"_id, Token_Type);
-    AddKeyword(lang, "__m128h"_id, Token_Type);
-    AddKeyword(lang, "__m256"_id, Token_Type);
-    AddKeyword(lang, "__m256i"_id, Token_Type);
-    AddKeyword(lang, "__m256d"_id, Token_Type);
-    AddKeyword(lang, "__m256h"_id, Token_Type);
-    AddKeyword(lang, "__m512"_id, Token_Type);
-    AddKeyword(lang, "__m512i"_id, Token_Type);
-    AddKeyword(lang, "__m512d"_id, Token_Type);
-    AddKeyword(lang, "__m512h"_id, Token_Type);
-    AddKeyword(lang, "__mmask8"_id, Token_Type);
-    AddKeyword(lang, "__mmask16"_id, Token_Type);
-    AddKeyword(lang, "__mmask32"_id, Token_Type);
 }
 END_REGISTER_LANGUAGE

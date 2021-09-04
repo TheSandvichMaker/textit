@@ -343,6 +343,22 @@ PeekEnd(String string)
 }
 
 function String
+Advance(String string, size_t by = 1)
+{
+    if (by <= string.size)
+    {
+        string.size -= by;
+        string.data += by;
+    }
+    else
+    {
+        string.data += string.size;
+        string.size = 0;
+    }
+    return string;
+}
+
+function String
 TrimSpaces(String string)
 {
     String result = string;

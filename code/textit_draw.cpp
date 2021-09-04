@@ -272,7 +272,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                     }
                     else if (HasFlag(token.flags, TokenFlag_PartOfString))
                     {
-                        if (foreground_id != "text_string_formatting"_id)
+                        if (foreground_id != "text_string_special"_id)
                         {
                             foreground_id = "text_string"_id;
                         }
