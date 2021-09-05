@@ -124,9 +124,10 @@ next:
     Token override_anchor = {};
     IndentRule override_rule = 0;
 
-    // now we have the anchor to start with, do a forward pass for refinement,
-    // I am too stupid to do this logic in the reverse pass (or it's actually
-    // just not practical)
+    IndentRule anchor_rule = rules->table[anchor.kind];
+
+    // now we have the anchor to start with, do a forward pass for finding unfinished statements,
+    // I am too stupid to do this logic in the reverse pass (or it's actually just not practical)
     for (;;)
     {
         t = Next(&it);
@@ -135,14 +136,16 @@ next:
         if (t.pos >= line_start) break;
 
         IndentRule rule = rules->table[t.kind];
-        if (!override_anchor.kind &&
+        // Super whacky unfinished statement detection
+        if (!(anchor_rule & IndentRule_Hanging) &&
+            !override_anchor.kind &&
             (t.flags & TokenFlag_LastInLine) &&
             !(t.flags & TokenFlag_IsComment) &&
             !(rule & IndentRule_StatementEnd) &&
             !(rule & IndentRule_AffectsIndent))
         {
             override_anchor = t;
-            override_rule   = IndentRule_PushIndent;
+            override_rule   = rules->unfinished_statement;
         }
 
         if (rule & IndentRule_StatementEnd)
@@ -196,7 +199,7 @@ next:
 
         indent = indent_depth;
 
-        IndentRule anchor_rule = rules->table[anchor.kind];
+        anchor_rule = rules->table[anchor.kind];
         if (override_anchor.kind)
         {
             anchor_rule = override_rule;

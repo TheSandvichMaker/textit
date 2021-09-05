@@ -94,7 +94,10 @@ struct Buffer : TextStorage
         int64_t insert_pos;
     } undo;
 
+    int64_t last_save_undo_ordinal;
+
     Project      *project;
+    LanguageSpec *inferred_language;
     LanguageSpec *language;
     IndentRules  *indent_rules;
     Tags         *tags;

@@ -296,13 +296,19 @@ ParseBuiltinTag(TagParser *parser)
     Buffer *buffer = parser->buffer;
 
     SetFlags(parser, TokenFlag_IsComment, 0);
-    if (ConsumeToken(parser, '@'))
+    if (Token tag_string = ConsumeToken(parser, Token_Identifier, "tag"_str))
     {
-        if (Token t = ConsumeToken(parser, Token_Identifier))
+        if (Token colon = ConsumeToken(parser, ':'))
         {
-            Tag *tag = AddTag(buffer, &t);
-            tag->kind = Tag_CommentAnnotation;
-            return;
+            if (colon.pos == tag_string.pos + tag_string.length)
+            {
+                if (Token t = ConsumeToken(parser, Token_Identifier))
+                {
+                    Tag *tag = AddTag(buffer, &t);
+                    tag->kind = Tag_CommentAnnotation;
+                    return;
+                }
+            }
         }
     }
 

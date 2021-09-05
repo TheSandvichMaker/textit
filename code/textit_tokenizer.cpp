@@ -412,6 +412,11 @@ TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state,
     Tokenizer tok_, *tok = &tok_;
     BeginTokenizeLine(platform->GetTempArena(), tok, buffer, MakeRange(pos, buffer->count), previous_line_state);
 
+    if (pos == 667177)
+    {
+        int y = 0; (void)y;
+    }
+
     while (CharsLeft(tok))
     {
         Token t;

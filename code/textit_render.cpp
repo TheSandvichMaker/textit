@@ -575,6 +575,7 @@ BeginRender(void)
     PushClipRect(Scale(clip_rect, editor->font_metrics));
 }
 
+#if 0
 function void
 MergeSortInternal(uint32_t count, uint32_t *a, uint32_t *b)
 {
@@ -618,6 +619,7 @@ MergeSort(uint32_t count, uint32_t *a, uint32_t *b)
     CopyArray(count, a, b);
     MergeSortInternal(count, a, b);
 }
+#endif
 
 function void
 RasterizeText(PlatformOffscreenBuffer *buffer, Rect2i rect, PlatformFontHandle font, String text, Color foreground, Color background)

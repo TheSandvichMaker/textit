@@ -102,10 +102,10 @@ struct StringNode
 
 struct StringList
 {
-    StringNode *first = nullptr;
-    StringNode *last = nullptr;
-    size_t total_size = 0;
-    size_t node_count = 0;
+    StringNode *first;
+    StringNode *last;
+    size_t total_size;
+    size_t node_count;
 };
 
 struct Range
@@ -114,6 +114,12 @@ struct Range
     int64_t start, end;
     
     operator bool() { return start != end; } // questionable decision, I use ranges with the same start and end from time to time
+};
+
+struct RangeNode
+{
+    RangeNode *next;
+    Range range;
 };
 
 function Range

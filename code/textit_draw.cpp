@@ -55,6 +55,8 @@ DrawText(V2i p, String line, Color foreground, Color background, size_t max = 0)
 function int64_t
 DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 {
+    ScopedMemory temp;
+
     Buffer *buffer = GetBuffer(view);
     Project *project = buffer->project;
     LanguageSpec *language = buffer->language;
@@ -68,20 +70,23 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     bool show_line_numbers               = core_config->show_line_numbers;
     int  indent_width                    = core_config->indent_width;
 
-    Color text_comment                 = GetThemeColor("text_comment"_id);
-    Color text_preprocessor            = GetThemeColor("text_preprocessor"_id);
-    Color text_foreground              = GetThemeColor("text_foreground"_id);
-    Color text_foreground_dim          = GetThemeColor("text_foreground_dim"_id);
-    Color text_foreground_dimmer       = GetThemeColor("text_foreground_dimmer"_id);
-    Color text_foreground_dimmest      = GetThemeColor("text_foreground_dimmest"_id);
-    Color text_background              = GetThemeColor(is_active_window ? "text_background"_id : "text_background_inactive"_id);
-    Color text_background_unreachable  = GetThemeColor("text_background_unreachable"_id);
-    Color text_background_highlighted  = GetThemeColor("text_background_highlighted"_id);
-    Color unrenderable_text_foreground = GetThemeColor("unrenderable_text_foreground"_id);
-    Color unrenderable_text_background = GetThemeColor("unrenderable_text_background"_id);
-    Color inner_selection_background   = GetThemeColor("inner_selection_background"_id);
-    Color outer_selection_background   = GetThemeColor("outer_selection_background"_id);
-    Color line_highlight               = GetThemeColor("line_highlight"_id);
+    Color text_comment                   = GetThemeColor("text_comment"_id);
+    Color text_preprocessor              = GetThemeColor("text_preprocessor"_id);
+    Color text_foreground                = GetThemeColor("text_foreground"_id);
+    Color text_foreground_dim            = GetThemeColor("text_foreground_dim"_id);
+    Color text_foreground_dimmer         = GetThemeColor("text_foreground_dimmer"_id);
+    Color text_foreground_dimmest        = GetThemeColor("text_foreground_dimmest"_id);
+    Color text_background                = GetThemeColor(is_active_window ? "text_background"_id : "text_background_inactive"_id);
+    Color text_background_unreachable    = GetThemeColor("text_background_unreachable"_id);
+    Color text_background_highlighted    = GetThemeColor("text_background_highlighted"_id);
+    Color text_search_highlight          = GetThemeColor("text_search_highlight"_id);
+    Color text_nest_highlight_foreground = GetThemeColor("text_nest_highlight_foreground"_id);
+    Color text_nest_highlight_background = GetThemeColor("text_nest_highlight_background"_id);
+    Color unrenderable_text_foreground   = GetThemeColor("unrenderable_text_foreground"_id);
+    Color unrenderable_text_background   = GetThemeColor("unrenderable_text_background"_id);
+    Color inner_selection_background     = GetThemeColor("inner_selection_background"_id);
+    Color outer_selection_background     = GetThemeColor("outer_selection_background"_id);
+    Color line_highlight                 = GetThemeColor("line_highlight"_id);
 
     V2i top_left = bounds.min;
 
@@ -121,10 +126,45 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     TokenIterator token_it = IterateLineTokens(&info);
 
+    int nest_highlight_count = 0;
+    Range *nest_highlights = PushArrayNoClear(temp, 64, Range);
+
+    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    {
+        TokenIterator nest_it = IterateTokens(buffer, cursor->pos);
+
+        if (GetOtherNestTokenKind(nest_it.token.kind) && IsInTokenRange(nest_it.token, cursor->pos))
+        {
+            Direction direction = (IsNestOpener(nest_it.token.kind) ? Direction_Forward : Direction_Backward);
+
+            NestHelper nests = {};
+            if (IsInNest(&nests, nest_it.token.kind, direction) == NestResult_EnteringNest)
+            {
+                Token start_token = nest_it.token;
+                Advance(&nest_it, direction);
+
+                for (; IsValid(&nest_it); Advance(&nest_it, direction))
+                {
+                    if (IsInNest(&nests, nest_it.token.kind, direction) == NestResult_ExitingNest)
+                    {
+                        Token end_token = nest_it.token;
+                        if (nest_highlight_count < 64) nest_highlights[nest_highlight_count++] = GetTokenRange(start_token);
+                        if (nest_highlight_count < 64) nest_highlights[nest_highlight_count++] = GetTokenRange(end_token);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    MergeSort(nest_highlight_count, nest_highlights, +[](Range *a, Range *b) { return a->start >= b->start; });
+
     int64_t pos = line_it.range.start;
     view->visible_range.start = pos;
 
     V2i metrics = editor->font_metrics;
+
+    Range search_highlight = FindNextOccurrence(buffer, pos, editor->search.as_string, editor->search_flags);
 
     while (IsInBufferRange(buffer, pos))
     {
@@ -181,6 +221,11 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
         while (IsInBufferRange(buffer, pos))
         {
+            if (pos >= search_highlight.end)
+            {
+                search_highlight = FindNextOccurrence(buffer, search_highlight.start + 1, editor->search.as_string, editor->search_flags);
+            }
+
             uint8_t b = ReadBufferByte(buffer, pos);
 
             Color foreground = text_foreground;
@@ -230,14 +275,13 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                                                 // but maybe it should be moved outside of the actual drawing function
                         }
                         // TODO: Bit excessive
-                        ScopedMemory temp;
                         for (Tag *tag = PushTagsWithName(temp, project, token_name); tag; tag = tag->next)
                         {
                             if (tag->related_token_kind == token.kind)
                             {
-                                if (HasFlag(token.flags, TokenFlag_IsComment))
+                                if (tag->kind == Tag_CommentAnnotation)
                                 {
-                                    if (tag->kind == Tag_CommentAnnotation)
+                                    if (HasFlag(token.flags, TokenFlag_IsComment))
                                     {
                                         foreground_id = GetThemeIDForTag(language, tag);
                                     }
@@ -282,16 +326,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                         foreground_id = "text_preprocessor"_id;
                     }
                 }
-
-#if 0
-                if (pos >= token.pos &&
-                    editor->pos_at_mouse >= token.pos &&
-                    editor->pos_at_mouse <  token.pos + token.length)
-                {
-                    editor->token_at_mouse = token;
-                    background = text_background_highlighted;
-                }
-#endif
 
                 foreground = GetThemeColor(foreground_id);
                 text_style = GetThemeStyle(foreground_id);
@@ -383,6 +417,21 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 string = MakeString(advance, &buffer->text[pos]);
             }
 
+            if (editor->show_search_highlight && IsInRange(search_highlight, pos))
+            {
+                background = text_search_highlight;
+            }
+
+            bool nest_highlight = false;
+            if (nest_highlight_count > 0 &&
+                IsInRange(nest_highlights[nest_highlight_count - 1], pos))
+            {
+                nest_highlight = true;
+                foreground = text_nest_highlight_foreground;
+                background = text_nest_highlight_background;
+                nest_highlight_count -= 1;
+            }
+
             if (draw_cursor)
             {
                 for (Cursor *cursor = IterateCursors(view->id, buffer->id);
@@ -411,17 +460,23 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                             pos <  inner.end)
                         {
                             background = inner_selection_background;
-                            foreground.r = 255 - inner_selection_background.r;
-                            foreground.g = 255 - inner_selection_background.g;
-                            foreground.b = 255 - inner_selection_background.b;
+                            if (!nest_highlight)
+                            {
+                                foreground.r = 255 - inner_selection_background.r;
+                                foreground.g = 255 - inner_selection_background.g;
+                                foreground.b = 255 - inner_selection_background.b;
+                            }
                         }
                         else if (pos >= outer.start &&
                                  pos <  outer.end)
                         {
                             background = outer_selection_background;
-                            foreground.r = 255 - outer_selection_background.r;
-                            foreground.g = 255 - outer_selection_background.g;
-                            foreground.b = 255 - outer_selection_background.b;
+                            if (!nest_highlight)
+                            {
+                                foreground.r = 255 - outer_selection_background.r;
+                                foreground.g = 255 - outer_selection_background.g;
+                                foreground.b = 255 - outer_selection_background.b;
+                            }
                         }
                     }
                 }
@@ -512,9 +567,10 @@ DrawView(View *view, bool is_active_window)
 
     PushLayer(Layer_ViewForeground);
 
-    Color text_foreground         = GetThemeColor("text_foreground"_id);
-    Color text_background         = GetThemeColor(is_active_window ? "text_background"_id : "text_background_inactive"_id);
-    Color filebar_text_foreground = GetThemeColor("filebar_text_foreground"_id);
+    Color text_foreground          = GetThemeColor("text_foreground"_id);
+    Color text_background          = GetThemeColor(is_active_window ? "text_background"_id : "text_background_inactive"_id);
+    Color filebar_text_foreground  = GetThemeColor("filebar_text_foreground"_id);
+    Color filebar_text_highlighted = GetThemeColor("filebar_text_highlighted"_id);
 
     uint64_t filebar_text_background_id = "filebar_text_inactive"_id;
     if (is_active_window)
@@ -555,11 +611,28 @@ DrawView(View *view, bool is_active_window)
     PushRect(MakeRect2iMinMax(MakeV2i(bounds.min.x + 0, filebar_y), MakeV2i(bounds.max.x - 0, filebar_y + 1)), filebar_text_background);
 
     PushLayer(Layer_ViewForeground);
-    DrawText(MakeV2i(bounds.min.x, filebar_y),
-             PushTempStringF("%hd:%.*s", buffer->id.index, StringExpand(leaf)),
-             filebar_text_foreground, filebar_text_background);
+    V2i left_at = DrawText(MakeV2i(bounds.min.x, filebar_y),
+                           PushTempStringF("%hd:%.*s", buffer->id.index, StringExpand(leaf)),
+                           filebar_text_foreground, filebar_text_background);
+
+    if (buffer->last_save_undo_ordinal != buffer->undo.current_ordinal)
+    {
+        DrawText(left_at, "[+]"_str, filebar_text_foreground, filebar_text_background);
+    }
 
     String right_string = PushTempStringF("[%.*s] %lld%% %lld:%lld ", StringExpand(buffer->language->name), line_percentage, loc.line + 1, loc.col);
+
+    int cursor_count = 0;
+    for (Cursor *it_cursor = IterateCursors(view); it_cursor; it_cursor = it_cursor->next)
+    {
+        cursor_count += 1;
+    }
+    
+    if (cursor_count > 1)
+    {
+        right_string = PushTempStringF("multi-cursor: #%d %.*s", cursor_count, StringExpand(right_string));
+    }
+
     DrawText(MakeV2i(bounds.max.x - right_string.size, filebar_y), right_string, filebar_text_foreground, filebar_text_background);
 
     if (core_config->show_scrollbar)

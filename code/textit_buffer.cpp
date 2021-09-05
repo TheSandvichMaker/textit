@@ -124,15 +124,22 @@ function Selection
 ScanWordForward2(Buffer *buffer, int64_t pos)
 {
     Selection result = {};
+    result.inner = MakeRange(pos);
+    result.outer = MakeRange(pos);
 
+    bool skipped_whitespace = false;
     while (IsInBufferRange(buffer, pos) &&
            IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
+        skipped_whitespace = true;
         pos += 1;
     }
 
-    result.inner = MakeRange(pos);
-    result.outer = MakeRange(pos);
+    if (skipped_whitespace) 
+    {
+        result.inner.end = result.outer.end = pos;
+        return result;
+    }
 
     CharacterClassFlags match_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
     while (IsInBufferRange(buffer, pos) &&
@@ -163,12 +170,21 @@ ScanWordBackward2(Buffer *buffer, int64_t pos)
         pos -= 1;
     }
 
+    bool skipped_whitespace = false;
     while (IsInBufferRange(buffer, pos) &&
            IsWhitespaceAscii(ReadBufferByte(buffer, pos)))
     {
+        skipped_whitespace = true;
         pos -= 1;
     }
+
     result.inner.start = pos + 1;
+
+    if (skipped_whitespace)
+    {
+        result.inner.end = result.outer.end = pos;
+        return result;
+    }
 
     CharacterClassFlags match_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
     while (IsInBufferRange(buffer, pos - 1) &&
@@ -410,7 +426,7 @@ CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col)
     FindLineInfoByLine(buffer, line, &info);
 
     result.line       = info.line;
-    result.col        = Clamp(col, 0, info.newline_pos - info.range.start);
+    result.col        = ClampToRange(col, MakeRange(0, info.newline_pos - info.range.start));
     result.pos        = info.range.start + result.col;
     result.line_range = info.range;
 
@@ -519,7 +535,7 @@ CurrentUndoOrdinal(Buffer *buffer)
 function void
 MergeUndoHistory(Buffer *buffer, int64_t first_ordinal, int64_t last_ordinal)
 {
-    if (last_ordinal >= first_ordinal)
+    if (last_ordinal > first_ordinal)
     {
         FlushBufferedUndo(buffer);
 
@@ -779,6 +795,43 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
     }
 
     int64_t result = BufferReplaceRangeNoUndoHistory(buffer, range, text);
+    return result;
+}
+
+function Range
+FindNextOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0)
+{
+    pos = ClampToBufferRange(buffer, pos);
+    Range result = MakeRange(buffer->count);
+
+    String text = MakeString(buffer->count, buffer->text);
+    text = Advance(text, pos);
+
+    size_t found_pos = FindSubstring(text, query, flags);
+    if (found_pos != text.size)
+    {
+        int64_t real_pos = pos + (int64_t)found_pos;
+        result = MakeRangeStartLength(real_pos, (int64_t)query.size);
+    }
+
+    return result;
+}
+
+function Range
+FindPreviousOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0)
+{
+    pos = ClampToBufferRange(buffer, pos);
+    Range result = MakeRange(pos);
+
+    String text = MakeString(pos, buffer->text);
+
+    size_t found_pos = FindSubstringBackward(text, query, flags);
+    if (found_pos != text.size)
+    {
+        int64_t real_pos = found_pos;
+        result = MakeRangeStartLength(real_pos, (int64_t)query.size);
+    }
+
     return result;
 }
 

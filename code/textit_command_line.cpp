@@ -10,6 +10,8 @@ EndCommandLine()
     if (editor->command_line_count > 0)
     {
         CommandLine *cl = editor->command_lines[--editor->command_line_count];
+        if (cl->OnTerminate && !cl->accepted_entry) cl->OnTerminate(cl);
+
         EndTemporaryMemory(cl->temporary_memory);
 
         if (editor->command_line_count > 0)
@@ -96,8 +98,6 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
 {
     bool handled_any_events = false;
 
-    Assert(cl->AcceptEntry);
-
     auto AcceptPrediction = [](CommandLine *cl)
     {
         if (cl->prediction_selected_index == -1) return;
@@ -143,6 +143,11 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
                         cl->count += 1;
                     }
                 }
+            }
+
+            if (cl->OnText && text[0] != '\n')
+            {
+                text = cl->OnText(cl, text);
             }
         }
         else if (event->type == PlatformEvent_KeyDown)
@@ -240,9 +245,18 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
                         AcceptPrediction(cl);
                     }
 
-                    bool terminate = cl->AcceptEntry(cl);
-                    if (terminate && !editor->changed_command_line)
+                    if (cl->AcceptEntry)
                     {
+                        bool terminate = cl->AcceptEntry(cl);
+                        cl->accepted_entry = terminate;
+                        if (terminate && !editor->changed_command_line)
+                        {
+                            EndAllCommandLines();
+                        }
+                    }
+                    else
+                    {
+                        cl->accepted_entry = true;
                         EndAllCommandLines();
                     }
                 } break;
@@ -387,6 +401,11 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
             {
                 cl->prediction_index = cl->prediction_count;
             }
+        }
+
+        if (cl->terminate)
+        {
+            EndAllCommandLines();
         }
 
         handled_any_events |= handled_event;

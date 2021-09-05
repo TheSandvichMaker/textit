@@ -104,6 +104,21 @@ struct Token
 };
 
 function Range
+GetTokenRange(Token token)
+{
+    Range result;
+    result.start = token.pos;
+    result.end   = token.pos + token.length;
+    return result;
+}
+
+function bool
+IsInTokenRange(Token token, int64_t pos)
+{
+    return pos >= token.pos && pos < token.pos + token.length;
+}
+
+function Range
 GetInnerRange(Token token)
 {
     Range result;
@@ -171,6 +186,8 @@ enum GetTokenFlags_ENUM : GetTokenFlags
 
 struct NestHelper
 {
+    NestHelper *next;
+
     int depth;
     TokenKind opener;
     TokenKind closer;
@@ -178,12 +195,21 @@ struct NestHelper
     TokenKind last_seen_closer;
 };
 
+enum NestResult
+{
+    NestResult_NotInNest = 0,
+    NestResult_InNest,
+    NestResult_EnteringNest,
+    NestResult_ExitingNest,
+};
+
 function bool
 IsNestOpener(TokenKind t)
 {
     bool result = ((t == Token_LeftParen) ||
                    (t == Token_LeftScope) ||
-                   (t == '<'));
+                   (t == '<') ||
+                   (t == '['));
     return result;
 }
 
@@ -192,7 +218,8 @@ IsNestCloser(TokenKind t)
 {
     bool result = ((t == Token_RightParen) ||
                    (t == Token_RightScope) ||
-                   (t == '>'));
+                   (t == '>') ||
+                   (t == ']'));
     return result;
 }
 
@@ -207,6 +234,8 @@ GetOtherNestTokenKind(TokenKind kind)
         case Token_RightScope: return Token_LeftScope;
         case '<':              return '>';
         case '>':              return '<';
+        case '[':              return ']';
+        case ']':              return '[';
         INCOMPLETE_SWITCH;
     }
     return Token_None;

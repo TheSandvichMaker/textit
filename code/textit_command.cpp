@@ -58,6 +58,18 @@ LoadDefaultBindings()
     BindCommand(command, 'U',                      0,              "UndoOnce"_str);
     BindCommand(command, 'R',                      Modifier_Ctrl,  "RedoOnce"_str);
 
+    BindCommand(command, 'A',                      Modifier_Ctrl,                "AlignCursors"_str);
+    BindCommand(command, 'A',                      Modifier_Ctrl|Modifier_Shift, "UnalignCursors"_str);
+
+    BindCommand(command, 'F',                      0,              "FindChar"_str);
+    BindCommand(command, 'F',                      Modifier_Shift, "FindCharBackward"_str);
+    BindCommand(command, 'T',                      0,              "ToChar"_str);
+    BindCommand(command, 'T',                      Modifier_Shift, "ToCharBackward"_str);
+
+    BindCommand(command, PlatformInputCode_Oem2,   0,              "Search"_str);
+    BindCommand(command, 'N',                      0,              "RepeatLastSearch"_str);
+    BindCommand(command, 'N',                      Modifier_Shift, "RepeatLastSearchBackward"_str);
+
     BindCommand(command, 'O',                      0,              "OpenNewLineBelow"_str);
 
     BindCommand(command, 'V',                      Modifier_Ctrl,  "SplitWindowVertical"_str);

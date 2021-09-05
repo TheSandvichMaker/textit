@@ -103,6 +103,8 @@ UndoOnce(View *view)
 
         result = MakeRange(node->pos, Max(node->pos, node->pos + node->backward.size));
 
+        buffer->undo.current_ordinal = node->ordinal;
+
         if (node->parent->ordinal == node->ordinal)
         {
             node = node->parent;

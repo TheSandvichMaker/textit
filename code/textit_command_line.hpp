@@ -23,11 +23,17 @@ struct CommandLine
     Arena *arena;
     TemporaryMemory temporary_memory;
 
+    void *userdata;
+
     String name;
+
+    bool terminate;
+    bool accepted_entry;
 
     bool no_quickselect;
     bool no_autoaccept;
     bool sort_by_edit_distance;
+    bool auto_accept;
 
     int cursor;
     int count;
@@ -44,6 +50,8 @@ struct CommandLine
     SortKey sort_keys[35];
 
     void (*GatherPredictions)(CommandLine *cl);
+    String (*OnText)(CommandLine *cl, String text);
+    void (*OnTerminate)(CommandLine *cl);
     bool (*AcceptEntry)(CommandLine *cl);
 };
 
@@ -51,5 +59,11 @@ function String GetCommandString(CommandLine *cl);
 function CommandLine *BeginCommandLine();
 function void EndCommandLine();
 function bool AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key = 0);
+
+function void
+Terminate(CommandLine *cl)
+{
+    cl->terminate = true;
+}
 
 #endif /* TEXTIT_COMMAND_LINE_HPP */

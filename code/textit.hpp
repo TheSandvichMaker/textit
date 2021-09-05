@@ -188,8 +188,14 @@ struct EditorState
 
     uint8_t font_name_storage[256];
     StringContainer font_name;
+
     int font_size;
     PlatformFontQuality font_quality;
+
+    uint8_t search_storage[256];
+    StringContainer search;
+    StringMatchFlags search_flags;
+    bool show_search_highlight;
 
     IndentRules default_indent_rules;
 
@@ -229,7 +235,6 @@ struct EditorState
     V2i text_mouse_p;
 
     int64_t last_repeat;
-    MoveFlags last_move_flags;
     Command *last_movement;
     Command *last_movement_for_change;
     Command *last_change;

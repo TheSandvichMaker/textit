@@ -204,6 +204,8 @@ OpenNewBuffer(String buffer_name, BufferFlags flags = 0)
     result->tags                 = PushStruct(&result->arena, Tags);
     DllInit(&result->tags->sentinel);
 
+    result->last_save_undo_ordinal = result->undo.current_ordinal;
+
     AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
 
     editor->buffers[result->id.index] = result;
@@ -226,8 +228,6 @@ OpenBufferFromFile(String filename, BufferFlags flags)
             return buffer;
         }
     }
-
-    platform->DebugPrint("Opening: %.*s\n", StringExpand(filename));
 
     String leaf;
     SplitPath(filename, &leaf);
@@ -271,6 +271,8 @@ OpenBufferFromFile(String filename, BufferFlags flags)
 
     TokenizeBuffer(result);
     ParseTags(result);
+
+    result->inferred_language = result->language;
 
     return result;
 }
@@ -808,8 +810,7 @@ ExecuteCommand(View *view, Command *command)
                     Move move = command->movement();
                     ApplyMove(GetBuffer(view), cursor, move);
 
-                    editor->last_movement   = command; 
-                    editor->last_move_flags = move.flags;
+                    editor->last_movement = command; 
                 } break;
 
                 case Command_Change:
@@ -822,7 +823,8 @@ ExecuteCommand(View *view, Command *command)
                     if (editor->last_movement)
                     {
                         Assert(editor->last_movement->kind == Command_Movement);
-                        if (editor->last_move_flags & MoveFlag_NoAutoRepeat)
+
+                        if (editor->last_movement->flags & Movement_NoAutoRepeat)
                         {
                             cursor->selection = MakeSelection(cursor->pos);
                         }
@@ -1072,6 +1074,8 @@ AppUpdateAndRender(Platform *platform_)
         editor->root_window.view = scratch_view->id;
         editor->active_window = &editor->root_window;
 
+        editor->search = MakeStringContainer(ArrayCount(editor->search_storage), editor->search_storage);
+
         platform->PushTickEvent();
         platform->app_initialized = true;
     }
@@ -1124,7 +1128,7 @@ AppUpdateAndRender(Platform *platform_)
             {
                 // if we began a command line, it needs to be warmed up to not show a frame of lag for the predictions
                 CommandLine *cl = editor->command_lines[editor->command_line_count - 1];
-                cl->GatherPredictions(cl);
+                if (cl->GatherPredictions) cl->GatherPredictions(cl);
             }
         }
     }

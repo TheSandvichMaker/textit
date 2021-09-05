@@ -1,4 +1,4 @@
-// @FuckedLineStateStuff: between in_preprocessor, TokenizeState_C_InPreprocessor and LineTokenizeState_Preprocessor I think we have
+// tag:FuckedLineStateStuff: between in_preprocessor, TokenizeState_C_InPreprocessor and LineTokenizeState_Preprocessor I think we have
 // enough ways of specifying this shit. Same for in_string etc. And TokenizeState is junk. LineTokenizeState is relevant.
 
 function int
@@ -205,25 +205,28 @@ TokenizeCpp(Tokenizer *tok, Token *t)
         {
 parse_default:
             bool parse_string = false;
-            if (c == 'L' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; } 
-            if (c == 'u' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
-            if (c == 'U' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
-            if (c == 'u' && Match(tok, "8\""_str)) { tok_cpp->string_end_char = '"'; parse_string = true; }
-            if (HasFlag(tok->user_state, TokenizeState_C_InPreprocessor) && Peek(tok) == '<')
+            if (!tok->in_string)
             {
-                ScopedMemory temp;
-                String prev_token_string = PushTokenString(temp, tok->buffer, prev_t);
-                if (AreEqual(prev_token_string, "include"_str))
+                if (c == 'L' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; } 
+                if (c == 'u' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
+                if (c == 'U' && Match(tok, '"'))       { tok_cpp->string_end_char = '"'; parse_string = true; }
+                if (c == 'u' && Match(tok, "8\""_str)) { tok_cpp->string_end_char = '"'; parse_string = true; }
+                if (HasFlag(tok->user_state, TokenizeState_C_InPreprocessor) && Peek(tok) == '<')
                 {
-                    parse_string = true;
-                    tok_cpp->string_end_char = '>';
+                    ScopedMemory temp;
+                    String prev_token_string = PushTokenString(temp, tok->buffer, prev_t);
+                    if (AreEqual(prev_token_string, "include"_str))
+                    {
+                        parse_string = true;
+                        tok_cpp->string_end_char = '>';
+                    }
                 }
-            }
 
-            if (parse_string)
-            {
-                t->kind = Token_StartString;
-                break;
+                if (parse_string)
+                {
+                    t->kind = Token_StartString;
+                    break;
+                }
             }
 
             Revert(tok, t);
@@ -305,7 +308,8 @@ parse_default:
 
         case ':':
         {
-            if ((prev_t->kind == Token_Identifier) &&
+            if ((Peek(tok) != ':') &&
+                (prev_t->kind == Token_Identifier) &&
                 (prev_t->flags & TokenFlag_FirstInLine))
             {
                 prev_t->kind = Token_Label;
@@ -443,8 +447,6 @@ SkipComments(TagParser *parser)
 function void
 ParseTagsCpp(Buffer *buffer)
 {
-    PlatformHighResTime start = platform->GetTime();
-
     FreeAllTags(buffer);
 
     TagParser parser_;
@@ -547,9 +549,6 @@ ParseTagsCpp(Buffer *buffer)
             ParseBuiltinTag(parser);
         }
     }
-
-    PlatformHighResTime end = platform->GetTime();
-    platform->DebugPrint("Tag parse time: %fms\n", 1000.0*platform->SecondsElapsed(start, end));
 }
 
 BEGIN_REGISTER_LANGUAGE("c++", lang)
@@ -614,6 +613,7 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AddKeyword(lang, "using"_id, Token_Keyword);
     AddKeyword(lang, "template"_id, Token_Keyword);
     AddKeyword(lang, "typename"_id, Token_Keyword);
+    AddKeyword(lang, "namespace"_id, Token_Keyword);
 
     AddKeyword(lang, "case"_id, Token_FlowControl);
     AddKeyword(lang, "default"_id, Token_FlowControl);

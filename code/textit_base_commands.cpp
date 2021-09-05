@@ -2,16 +2,31 @@ COMMAND_PROC(ReportMetrics,
              "Report some metrics relevant to development"_str)
 {
     Buffer *buffer = GetActiveBuffer();
-    size_t buffer_bytes     = buffer->count;
+    size_t buffer_bytes = buffer->count;
+
+    Project *project = buffer->project;
 
     LineIndexCountResult index_stats = {};
     CountLineIndex(buffer->line_index_root, &index_stats);
 
-    platform->DebugPrint("Memory usage\n"
-                         "\tBuffer Text:\t\t%s/%s\n"
-                         "\tBuffer Arena:\t\t%s/%s\n"
-                         "\tLine Index:\t\t%s\n"
-                         "\tToken Blocks:\t\t%s (occupied: %zu/%zu (%.02f%%%%))\n",
+    size_t buffer_tag_count = 0;
+    size_t buffer_tag_bytes = 0;
+    {
+        Tags *tags = buffer->tags;
+        for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
+        {
+            buffer_tag_count += 1;
+            buffer_tag_bytes += sizeof(*tag);
+        }
+    }
+
+    platform->DebugPrint("Memory usage for buffer %.*s\n"
+                         "\tBuffer Text:    %s/%s\n"
+                         "\tBuffer Arena:   %s/%s\n"
+                         "\tLine Index:     %s\n"
+                         "\tToken Blocks:   %s (occupied: %zu/%zu (%.02f%%%%))\n"
+                         "\tTags:           %s (%zu tags)\n",
+                         StringExpand(buffer->name),
                          FormatHumanReadableBytes(buffer_bytes).data,
                          FormatHumanReadableBytes(TEXTIT_BUFFER_SIZE).data,
                          FormatHumanReadableBytes(buffer->arena.used).data,
@@ -20,7 +35,31 @@ COMMAND_PROC(ReportMetrics,
                          FormatHumanReadableBytes(index_stats.token_blocks_size).data,
                          index_stats.token_blocks_occupancy,
                          index_stats.token_blocks_capacity,
-                         100.0*((double)index_stats.token_blocks_occupancy / (double)index_stats.token_blocks_capacity));
+                         100.0*((double)index_stats.token_blocks_occupancy / (double)index_stats.token_blocks_capacity),
+                         FormatHumanReadableBytes(buffer_tag_bytes).data, 
+                         buffer_tag_count);
+
+    size_t project_tag_count = 0;
+    size_t project_tag_bytes = 0;
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        if (it.buffer->project != project) continue;
+
+        Tags *tags = it.buffer->tags;
+        for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
+        {
+            project_tag_count += 1;
+            project_tag_bytes += sizeof(*tag);
+        }
+    }
+
+    platform->DebugPrint("Memory usage for project %.*s\n"
+                         "\tProject struct: %s\n"
+                         "\tTags:           %s (%zu tags)\n",
+                         StringExpand(project->root),
+                         FormatHumanReadableBytes(sizeof(*project)).data,
+                         FormatHumanReadableBytes(project_tag_bytes).data,
+                         project_tag_count);
 }
 
 COMMAND_PROC(ResetGlyphCache,
@@ -138,12 +177,33 @@ COMMAND_PROC(OpenBuffer,
                 (FindSubstring(test_name, name, StringMatch_CaseInsensitive) != test_name.size &&
                  (!ext.size || FindSubstring(test_ext, ext, StringMatch_CaseInsensitive) != test_ext.size)))
             {
+                bool non_standard_language = (buffer->language != buffer->inferred_language);
+
                 Prediction prediction = {};
                 prediction.text = buffer->name;
+                // TODO: Undumb
                 if (buffer->project != active_project)
                 {
-                    prediction.preview_text = PushTempStringF("%-32.*s - (%.*s)", StringExpand(buffer->name), StringExpand(buffer->project->root));
+                    if (non_standard_language)
+                    {
+                        prediction.preview_text = PushTempStringF("%-32.*s (language: %.*s) - (%.*s)", 
+                                                                  StringExpand(buffer->name), 
+                                                                  StringExpand(buffer->language->name), 
+                                                                  StringExpand(buffer->project->root));
+                    }
+                    else
+                    {
+                        prediction.preview_text = PushTempStringF("%-32.*s - (%.*s)", 
+                                                                  StringExpand(buffer->name), 
+                                                                  StringExpand(buffer->project->root));
+                    }
                     prediction.color        = "command_line_option_directory"_id;
+                }
+                else if (non_standard_language)
+                {
+                    prediction.preview_text = PushTempStringF("%.*s (language: %.*s)", 
+                                                              StringExpand(buffer->name), 
+                                                              StringExpand(buffer->language->name));
                 }
 
                 if (!AddPrediction(cl, prediction))
@@ -463,6 +523,7 @@ COMMAND_PROC(SetLanguage,
                 Buffer *buffer = GetActiveBuffer();
                 buffer->language = language;
                 TokenizeBuffer(buffer);
+                ParseTags(buffer);
                 return true;
             }
         };
@@ -699,6 +760,244 @@ COMMAND_PROC(SetTheme,
     };
 }
 
+function void
+FindCharInternal(Direction direction)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Find Char"_str;
+    if (direction == Direction_Backward)
+    {
+        cl->name = "Find Char (Backward)"_str;
+    }
+
+    cl->userdata = IntToPointer(direction);
+
+    cl->OnText = [](CommandLine *cl, String text)
+    {
+        View   *view   = GetActiveView();
+        Buffer *buffer = GetBuffer(view);
+
+        Direction direction = (Direction)PointerToInt(cl->userdata);
+
+        uint8_t c = text[0];
+        if (!c) return text;
+
+        for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+        {
+            int64_t start = cursor->pos;
+            int64_t pos   = start + direction;
+            while (ReadBufferByte(buffer, pos) != c)
+            {
+                pos += direction;
+            }
+            if (pos < buffer->count)
+            {
+                SetCursor(cursor, pos, MakeRange(start, pos));
+            }
+        }
+
+        Terminate(cl);
+        return text;
+    };
+}
+
+function void
+ToCharInternal(Direction direction)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "To Char"_str;
+    if (direction == Direction_Backward)
+    {
+        cl->name = "To Char (Backward)"_str;
+    }
+
+    cl->userdata = IntToPointer(direction);
+
+    cl->OnText = [](CommandLine *cl, String text)
+    {
+        View   *view   = GetActiveView();
+        Buffer *buffer = GetBuffer(view);
+
+        Direction direction = (Direction)PointerToInt(cl->userdata);
+
+        uint8_t c = text[0];
+        if (!c) return text;
+
+        for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+        {
+            int64_t start = cursor->pos;
+            int64_t pos   = start + direction;
+            while (ReadBufferByte(buffer, pos + direction) != c)
+            {
+                pos += direction;
+            }
+            if (pos < buffer->count)
+            {
+                SetCursor(cursor, pos, MakeRange(start, pos));
+            }
+        }
+
+        Terminate(cl);
+        return text;
+    };
+}
+
+COMMAND_PROC(FindChar,
+             "Find the next occurrence of a character from the cursor"_str)
+{
+    FindCharInternal(Direction_Forward);
+}
+
+COMMAND_PROC(FindCharBackward,
+             "Find the previous occurrence of a character from the cursor"_str)
+{
+    FindCharInternal(Direction_Backward);
+}
+
+COMMAND_PROC(ToChar,
+             "Seek to the next occurrence of a character from the cursor"_str)
+{
+    ToCharInternal(Direction_Forward);
+}
+
+COMMAND_PROC(ToCharBackward,
+             "Seek to the previous occurrence of a character from the cursor"_str)
+{
+    ToCharInternal(Direction_Backward);
+}
+
+COMMAND_PROC(Search,
+             "Do a text search in the current buffer"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Search"_str;
+
+    View *view = GetActiveView();
+
+    // save a copy of the current cursors so we can revert to them
+    Cursor *first_cursor = nullptr, *last_cursor = nullptr;
+    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    {
+        Cursor *backup_cursor = PushStruct(cl->arena, Cursor);
+        CopyStruct(cursor, backup_cursor);
+        SllQueuePush(first_cursor, last_cursor, backup_cursor);
+    }
+
+    struct SearchData
+    {
+        String original_search;
+        Cursor *backup_cursors;
+        int64_t scroll;
+    };
+
+    SearchData *data = PushStruct(cl->arena, SearchData);
+    data->original_search = PushString(cl->arena, editor->search.as_string);
+    data->backup_cursors  = first_cursor;
+    data->scroll          = view->scroll_at;
+    cl->userdata = data;
+
+    cl->OnText = [](CommandLine *cl, String text)
+    {
+        View   *view   = GetActiveView();
+        Buffer *buffer = GetBuffer(view);
+
+        SearchData *data = (SearchData *)cl->userdata;
+        Cursor *backup_cursors = data->backup_cursors;
+        view->scroll_at = data->scroll;
+
+        String search = GetCommandString(cl);
+        Replace(&editor->search, search);
+
+        editor->show_search_highlight = true;
+        editor->search_flags = StringMatch_CaseInsensitive;
+
+        for (Cursor *cursor = IterateCursors(view), *backup_cursor = backup_cursors; 
+             cursor; 
+             cursor = cursor->next, backup_cursor = backup_cursor->next)
+        {
+            cursor->pos        = backup_cursor->pos;
+            cursor->selection  = backup_cursor->selection;
+            cursor->sticky_col = backup_cursor->sticky_col;
+
+            Range range = FindNextOccurrence(buffer, cursor->pos, search, editor->search_flags);
+            SetCursor(cursor, range.start, range);
+        }
+
+        return text;
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        // I'm just saving the old location of the first cursor in jump
+        // history if you accept the search.
+
+        View *view = GetActiveView();
+
+        SearchData *data = (SearchData *)cl->userdata;
+        SaveJump(view, view->buffer, data->backup_cursors->pos);
+
+        editor->last_movement = FindCommand("RepeatLastSearch"_str);
+
+        return true;
+    };
+
+    cl->OnTerminate = [](CommandLine *cl)
+    {
+        View *view = GetActiveView();
+
+        SearchData *data = (SearchData *)cl->userdata;
+        Cursor *backup_cursors = data->backup_cursors;
+        view->scroll_at = data->scroll;
+
+        Replace(&editor->search, data->original_search);
+
+        for (Cursor *cursor = IterateCursors(view), *backup_cursor = backup_cursors; 
+             cursor; 
+             cursor = cursor->next, backup_cursor = backup_cursor->next)
+        {
+            cursor->pos        = backup_cursor->pos;
+            cursor->selection  = backup_cursor->selection;
+            cursor->sticky_col = backup_cursor->sticky_col;
+        }
+    };
+}
+
+MOVEMENT_PROC(RepeatLastSearch, Movement_NoAutoRepeat)
+{
+    View   *view   = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    editor->show_search_highlight = true;
+    String search = editor->search.as_string;
+
+    Range range = FindNextOccurrence(buffer, cursor->pos + 1, search, editor->search_flags);
+
+    Move move = {};
+    move.pos = range.start;
+    move.selection.inner = range;
+    move.selection.outer = range;
+    return move;
+}
+
+MOVEMENT_PROC(RepeatLastSearchBackward, Movement_NoAutoRepeat)
+{
+    View   *view   = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+
+    editor->show_search_highlight = true;
+    String search = editor->search.as_string;
+
+    Range range = FindPreviousOccurrence(buffer, cursor->pos - 1, search, editor->search_flags);
+
+    Move move = {};
+    move.pos = range.start;
+    move.selection.inner = range;
+    move.selection.outer = range;
+    return move;
+}
+
 COMMAND_PROC(GoToDefinitionUnderCursor,
              "Go to the definition of the token under the cursor (type, function, file, etc)"_str,
              Command_Jump)
@@ -761,6 +1060,14 @@ CreateNewCursorOnNextLine(View *view, Direction direction)
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, relevant_cursor->pos);
     int64_t line = loc.line;
     int64_t col  = loc.col;
+
+    {
+        Range inner, outer;
+        GetLineRanges(buffer, line, &inner, &outer);
+
+        SetCursor(relevant_cursor, relevant_cursor->pos, inner, outer);
+    }
+
     for (;;)
     {
         line += delta;
@@ -788,7 +1095,11 @@ CreateNewCursorOnNextLine(View *view, Direction direction)
         {
             Cursor *new_cursor = CreateCursor(view);
             new_cursor->sticky_col = relevant_cursor->sticky_col;
-            SetCursor(new_cursor, CalculateBufferLocationFromLineCol(buffer, line, col).pos);
+
+            Range inner, outer;
+            GetLineRanges(buffer, line, &inner, &outer);
+
+            SetCursor(new_cursor, CalculateBufferLocationFromLineCol(buffer, line, col).pos, inner, outer);
             break;
         }
     }
@@ -829,6 +1140,8 @@ COMMAND_PROC(PreviousJump)
 
 COMMAND_PROC(ResetCursors)
 {
+    editor->show_search_highlight = false;
+
     View *view = GetActiveView();
     Cursor **slot = GetCursorSlot(view->id, view->buffer, true);
     for (Cursor *cursor = *slot; cursor->next; cursor = *slot)
@@ -878,8 +1191,10 @@ COMMAND_PROC(EnterTextMode,
 COMMAND_PROC(Append)
 {
     View *view = GetActiveView();
-    Cursor *cursor = GetCursor(view);
-    cursor->pos += 1;
+    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    {
+        cursor->pos += 1;
+    }
     CMD_EnterTextMode();
 }
 
@@ -887,8 +1202,10 @@ COMMAND_PROC(AppendAtEnd)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
-    cursor->pos = FindLineEnd(buffer, cursor->pos).inner;
+    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    {
+        cursor->pos = FindLineEnd(buffer, cursor->pos).inner;
+    }
     CMD_EnterTextMode();
 }
 
@@ -1116,7 +1433,6 @@ SelectSurroundingNest(View *view,
     Cursor *cursor = GetCursor(view);
 
     Move result = {};
-    result.flags     = MoveFlag_NoAutoRepeat;
     result.pos       = cursor->pos;
     result.selection = cursor->selection;
     
@@ -1204,13 +1520,13 @@ SelectSurroundingNest(View *view,
     return result;
 }
 
-MOVEMENT_PROC(EncloseSurroundingScope)
+MOVEMENT_PROC(EncloseSurroundingScope, Movement_NoAutoRepeat)
 {
     View *view = GetActiveView();
     return SelectSurroundingNest(view, Token_LeftScope, Token_RightScope, true);
 }
 
-MOVEMENT_PROC(EncloseSurroundingParen)
+MOVEMENT_PROC(EncloseSurroundingParen, Movement_NoAutoRepeat)
 {
     View *view = GetActiveView();
     return SelectSurroundingNest(view, Token_LeftParen, Token_RightParen, false);
@@ -1750,20 +2066,56 @@ CHANGE_PROC(PasteReplaceSelection)
     platform->WriteClipboard(replaced_string);
 }
 
+COMMAND_PROC(UnalignCursors, "Remove excess whitespace between the cursors and their previous tokens"_str)
+{
+    View   *view   = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+
+    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    {
+        uint8_t at_cursor = ReadBufferByte(buffer, cursor->pos);
+
+        size_t space_to_leave = 1;
+        if (at_cursor == ',')
+        {
+            space_to_leave = 0;
+        }
+
+        int64_t start = cursor->pos;
+        int64_t end   = cursor->pos;
+        while (start >= 0 && IsHorizontalWhitespaceAscii(ReadBufferByte(buffer, start - 1)))
+        {
+            start -= 1;
+        }
+
+        String space_string = " "_str;
+        space_string.size = space_to_leave;
+        BufferReplaceRange(buffer, MakeRange(start, end), space_string);
+    }
+}
+
 COMMAND_PROC(AlignCursors, "Insert whitespaces before all the cursors so that they line up vertically"_str)
 {
     View   *view   = GetActiveView();
     Buffer *buffer = GetBuffer(view);
 
-    int64_t align_col = 0;
+    bool all_cursors_have_same_alignment = true;
+    int64_t align_col = -1;
     for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
     {
-        // TODO: Handle tabs vs spaces
+        // TODO: Handle tabs vs spaces?
         BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+        if (align_col != -1 && loc.col != align_col) all_cursors_have_same_alignment = false;
         if (align_col < loc.col)
         {
             align_col = loc.col;
         }
+    }
+
+    if (all_cursors_have_same_alignment)
+    {
+        CMD_UnalignCursors();
+        return;
     }
 
     ScopedMemory temp;

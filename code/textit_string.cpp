@@ -509,6 +509,7 @@ MatchPrefix(String string, String prefix, StringMatchFlags flags = 0)
     return AreEqual(string, prefix, flags);
 }
 
+#if 1
 function size_t
 FindSubstring(String text, String pattern, StringMatchFlags flags = 0)
 {
@@ -542,6 +543,75 @@ FindSubstring(String text, String pattern, StringMatchFlags flags = 0)
 
     return text.size;
 }
+
+function size_t
+FindSubstringBackward(String text, String pattern, StringMatchFlags flags = 0)
+{
+    size_t m = pattern.size;
+    size_t R = ~1ull;
+    size_t pattern_mask[256];
+
+    if (m == 0) return 0;
+    if (m >= 8*sizeof(size_t)) return text.size; // too long
+
+    for (size_t i = 0; i < 256; i += 1) pattern_mask[i] = ~0ull;
+    for (size_t i = 0; i < m;   i += 1)
+    {
+        uint8_t c = pattern.data[m - i - 1];
+        if (flags & StringMatch_CaseInsensitive) c = ToLowerAscii(c);
+        pattern_mask[c] &= ~(1ull << i);
+    }
+
+    for (size_t i = 0; i < text.size; i += 1)
+    {
+        uint8_t c = text.data[text.size - i - 1];
+        if (flags & StringMatch_CaseInsensitive) c = ToLowerAscii(c);
+        R |= pattern_mask[c];
+        R <<= 1;
+
+        if ((R & (1ull << m)) == 0)
+        {
+            return text.size - i - 1;
+        }
+    }
+
+    return text.size;
+}
+#else
+function size_t
+FindSubstring(String text, String pattern, StringMatchFlags flags = 0)
+{
+    if (pattern.size > text.size) return text.size;
+
+    size_t result = text.size;
+    for (size_t i = 0; i < text.size - pattern.size; i += 1)
+    {
+        bool match = true;
+        for (size_t j = 0; j < pattern.size; j += 1)
+        {
+            uint8_t a = text.data[i];
+            uint8_t b = pattern.data[j];
+
+            if (flags & StringMatch_CaseInsensitive)
+            {
+                a = ToLowerAscii(a);
+                b = ToLowerAscii(b);
+            }
+
+            if (a != b)
+            {
+                match = false;
+                break;
+            }
+        }
+
+        result = i;
+        break;
+    }
+
+    return result;
+}
+#endif
 
 function int
 CalculateEditDistance(String s, String t)

@@ -680,10 +680,12 @@ Win32_SetWorkingDirectory(String path)
 static String
 Win32_PushFullPath(Arena *arena, String filename_utf8)
 {
-    wchar_t *filename = FormatWString(arena, L"%.*S", StringExpand(filename_utf8));
+    Arena *temp = platform->GetTempArena();
+
+    wchar_t *filename = FormatWString(temp, L"%.*S", StringExpand(filename_utf8));
 
     DWORD size = GetFullPathNameW(filename, 0, NULL, NULL);
-    wchar_t *buffer = PushArrayNoClear(arena, size, wchar_t);
+    wchar_t *buffer = PushArrayNoClear(temp, size, wchar_t);
 
     DWORD real_size = GetFullPathNameW(filename, size, buffer, NULL);
     Assert(real_size + 1 <= size);

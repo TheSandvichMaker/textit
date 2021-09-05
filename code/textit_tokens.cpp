@@ -297,6 +297,19 @@ Prev(TokenIterator *it, int offset = 1)
 }
 
 function Token
+Advance(TokenIterator *it, Direction direction)
+{
+    if (direction == Direction_Forward)
+    {
+        return Next(it);
+    }
+    else
+    {
+        return Prev(it);
+    }
+}
+
+function Token
 EncloseString(TokenLocator locator)
 {
     TokenIterator it = {};
@@ -385,26 +398,28 @@ Clear(NestHelper *nests)
     ZeroStruct(nests);
 }
 
-function bool
+function NestResult
 IsInNest(NestHelper *nests, TokenKind t, Direction dir)
 {
-    if (nests->depth < 0) return false;
+    if (nests->depth < 0) return NestResult_NotInNest;
 
-    bool result = nests->depth > 0;
+    NestResult result = (nests->depth > 0 ? NestResult_InNest : NestResult_NotInNest);
 
     if (nests->opener)
     {
-        if (dir == Direction_Forward && IsNestOpener(t))
+        if ((dir == Direction_Forward  && IsNestOpener(t)) ||
+            (dir == Direction_Backward && IsNestCloser(t)))
         {
             nests->last_seen_opener = t;
         }
-        else if (dir == Direction_Backward && IsNestCloser(t))
+        else if ((dir == Direction_Backward && IsNestCloser(t)) ||
+                 (dir == Direction_Forward  && IsNestOpener(t)))
         {
             if (t != GetOtherNestTokenKind(nests->last_seen_opener))
             {
                 // something smells fishy, time to give up
                 Clear(nests);
-                return false;
+                return NestResult_NotInNest;
             }
         }
 
@@ -419,6 +434,7 @@ IsInNest(NestHelper *nests, TokenKind t, Direction dir)
             {
                 Clear(nests);
                 nests->depth = -1;
+                result = NestResult_ExitingNest;
             }
         }
     }
@@ -433,7 +449,7 @@ IsInNest(NestHelper *nests, TokenKind t, Direction dir)
             nests->closer = GetOtherNestTokenKind(t);
             nests->depth += 1;
 
-            result = true;
+            result = NestResult_EnteringNest;
         }
     }
 

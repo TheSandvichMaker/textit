@@ -116,6 +116,9 @@ LoadDefaultDarkTheme()
     SetThemeColor(theme, "text_background_inactive"_id, MakeColor(12, 20, 32));
     SetThemeColor(theme, "text_background_unreachable"_id, MakeColor(24, 40, 64));
     SetThemeColor(theme, "text_background_highlighted"_id, MakeColor(48, 80, 128));
+    SetThemeColor(theme, "text_search_highlight"_id, MakeColor(12, 96, 96));
+    SetThemeColor(theme, "text_nest_highlight_foreground"_id, MakeColor(235, 235, 225));
+    SetThemeColor(theme, "text_nest_highlight_background"_id, MakeColor(96, 96, 64));
     SetThemeColor(theme, "unrenderable_text_foreground"_id, MakeColor(255, 255, 255));
     SetThemeColor(theme, "unrenderable_text_background"_id, MakeColor(192, 0, 0));
 
@@ -172,6 +175,7 @@ LoadDefaultLightTheme()
     SetThemeColor(theme, "unrenderable_text_background"_id, MakeColor(192, 0, 0));
 
     SetThemeColor(theme, "filebar_text_foreground"_id, MakeColor(0, 0, 0));
+    SetThemeColor(theme, "filebar_text_highlighted"_id, MakeColor(192, 128, 0));
     SetThemeColor(theme, "filebar_text_background"_id, MakeColor(92, 192, 92));
     SetThemeColor(theme, "filebar_text_inactive"_id, MakeColor(192, 192, 192));
     SetThemeColor(theme, "filebar_text_background_text_mode"_id, MakeColor(225, 128, 64));

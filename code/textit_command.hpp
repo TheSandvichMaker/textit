@@ -46,16 +46,10 @@ enum CommandKind
     Command_Change,
 };
 
-enum_flags(int, MoveFlags)
-{
-    MoveFlag_NoAutoRepeat = 0x1,
-};
-
 struct Move
 {
     int64_t pos;
     Selection selection;
-    MoveFlags flags;
 };
 
 function Move
@@ -91,9 +85,9 @@ typedef void (*TextCommandProc)(String text);
     static void Paste(CMD_, name)(String text)
 
 typedef Move (*MovementProc)(void);
-#define MOVEMENT_PROC(name)                                                                                                                  \
-    static Move Paste(MOV_, name)(void);                                                                                                     \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), (void *)&Paste(MOV_, name), ""_str, Command_Jump); \
+#define MOVEMENT_PROC(name, ...)                                                                                                            \
+    static Move Paste(MOV_, name)(void);                                                                                                    \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), (void *)&Paste(MOV_, name), ""_str, __VA_ARGS__); \
     static Move Paste(MOV_, name)(void)
 
 typedef void (*ChangeProc)(Selection selection);
@@ -104,8 +98,9 @@ typedef void (*ChangeProc)(Selection selection);
 
 enum_flags(int, CommandFlags)
 {
-    Command_Visible = 0x1,
-    Command_Jump    = 0x2,
+    Command_Visible       = 0x1,
+    Command_Jump          = 0x2,
+    Movement_NoAutoRepeat = 0x4,
 };
 
 struct Command
@@ -172,6 +167,10 @@ struct CommandRegisterHelper
             Command *command = &command_list->commands[command_list->command_count++];
             command->kind        = kind;
             command->flags       = flags;
+            if (command->kind == Command_Movement)
+            {
+                flags |= Command_Jump;
+            }
             command->name        = name;
             command->description = description;
             command->generic     = proc;
