@@ -23,6 +23,20 @@ static Platform platform_;
 
 static bool g_use_d3d = false;
 
+function bool
+Win32_FileExists(wchar_t *path)
+{
+    bool result = false;
+
+    WIN32_FILE_ATTRIBUTE_DATA gibberish;
+    if (GetFileAttributesExW(path, GetFileExInfoStandard, &gibberish))
+    {
+        result = true;
+    }
+
+    return result;
+}
+
 static PlatformHighResTime
 Win32_GetTime(void)
 {
@@ -804,14 +818,17 @@ Win32_WriteFile(size_t count, void *data, String filename)
         return result;
     }
 
+    // TODO: Robustify, 64 bit support
+
     ScopedMemory temp;
     wchar_t *filename16 = FormatWString(temp, L"\\\\?\\%.*S", StringExpand(filename));
     wchar_t *temp_filename16 = FormatWString(temp, L"%s.temp", filename16);
+    wchar_t *backup_filename16 = FormatWString(temp, L"%s.backup", filename16);
 
     HANDLE file = CreateFileW(temp_filename16, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, NULL);
     if (file != INVALID_HANDLE_VALUE)
     {
-        bool already_exists = (GetLastError() == ERROR_ALREADY_EXISTS);
+        bool already_exists = Win32_FileExists(filename16);
 
         DWORD count32 = (DWORD)count;
         DWORD written;
@@ -821,7 +838,7 @@ Win32_WriteFile(size_t count, void *data, String filename)
 
             if (already_exists)
             {
-                if (ReplaceFileW(filename16, temp_filename16, NULL, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL))
+                if (ReplaceFileW(filename16, temp_filename16, backup_filename16, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL))
                 {
                     result = true;
                 }
@@ -1431,20 +1448,6 @@ FindExeFolderLikeAMonkeyInAMonkeySuit(void)
     *last_backslash = 0;
 
     return exe_path;
-}
-
-function bool
-Win32_FileExists(wchar_t *path)
-{
-    bool result = false;
-
-    WIN32_FILE_ATTRIBUTE_DATA gibberish;
-    if (GetFileAttributesExW(path, GetFileExInfoStandard, &gibberish))
-    {
-        result = true;
-    }
-
-    return result;
 }
 
 function uint64_t

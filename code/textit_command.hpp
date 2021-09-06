@@ -184,6 +184,7 @@ struct CommandRegisterHelper
 
 enum_flags(int, Modifiers)
 {
+    Modifier_None  = 0x0,
     Modifier_Alt   = 0x1,
     Modifier_Shift = 0x2,
     Modifier_Ctrl  = 0x4,

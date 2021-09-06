@@ -97,6 +97,8 @@ function Buffer *OpenNewBuffer(String buffer_name, BufferFlags flags = 0);
 function Buffer *OpenBufferFromFile(String filename, BufferFlags flags = 0);
 function Buffer *OpenBufferFromFileAsync(PlatformJobQueue *queue, String filename, BufferFlags flags = 0);
 function Buffer *GetBuffer(BufferID id);
+function bool IsNullBuffer(Buffer *buffer);
+function bool DestroyBuffer(BufferID id);
 function Buffer *GetActiveBuffer(void);
 
 function Range BufferRange(Buffer *buffer);
@@ -143,6 +145,8 @@ function void PushUndo(Buffer *buffer, int64_t pos, String forward, String backw
 function void FlushBufferedUndo(Buffer *buffer);
 function void SelectNextUndoBranch(Buffer *buffer);
 function UndoNode *NextChild(UndoNode *node);
+
+function bool HasUnsavedChanges(Buffer *buffer);
 
 struct BufferIterator
 {

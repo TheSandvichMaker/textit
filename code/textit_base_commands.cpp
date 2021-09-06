@@ -327,8 +327,10 @@ COMMAND_PROC(ToggleProjectVisibility,
     {
         String string = GetCommandString(cl);
 
-        for (Project *project = editor->first_project; project; project = project->next)
+        for (ProjectIterator it = IterateProjects(); IsValid(&it); Next(&it))
         {
+            Project *project = it.project;
+
             if (string.size == 0 ||
                 (FindSubstring(project->root, string, StringMatch_CaseInsensitive) != project->root.size))
             {
@@ -357,8 +359,10 @@ COMMAND_PROC(ToggleProjectVisibility,
     {
         String string = GetCommandString(cl);
 
-        for (Project *project = editor->first_project; project; project = project->next)
+        for (ProjectIterator it = IterateProjects(); IsValid(&it); Next(&it))
         {
+            Project *project = it.project;
+
             if (AreEqual(project->root, string))
             {
                 if (HasFlag(project->flags, Project_Hidden))
@@ -2242,6 +2246,20 @@ COMMAND_PROC(SaveBuffer,
     Buffer *buffer = GetActiveBuffer();
     platform->WriteFile(buffer->count, buffer->text, buffer->full_path);
     buffer->last_save_undo_ordinal = CurrentUndoOrdinal(buffer);
+}
+
+COMMAND_PROC(SaveAllChangedBuffers,
+             "Save all buffers with changes to their respective files"_str)
+{
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (HasUnsavedChanges(buffer))
+        {
+            platform->WriteFile(buffer->count, buffer->text, buffer->full_path);
+            buffer->last_save_undo_ordinal = CurrentUndoOrdinal(buffer);
+        }
+    }
 }
 
 COMMAND_PROC(OpenNewLineBelow)

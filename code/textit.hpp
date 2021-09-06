@@ -56,7 +56,7 @@ enum EditMode
 #define CoreConfig(_, X)                                           \
     X(_, bool,   visualize_newlines              = false)          \
     X(_, bool,   right_align_visualized_newlines = false)          \
-    X(_, bool,   visualize_whitespace            = true)           \
+    X(_, bool,   visualize_whitespace            = false)          \
     X(_, bool,   show_line_numbers               = false)          \
     X(_, bool,   incremental_parsing             = false)          \
     X(_, bool,   show_scrollbar                  = false)          \
@@ -117,7 +117,8 @@ struct EditorState
     IndentRules default_indent_rules;
 
     Project *active_project;
-    Project *first_project;
+    Project *first_free_project;
+    Project project_sentinel;
 
     uint32_t buffer_count;
     Buffer *buffers[MAX_BUFFER_COUNT];

@@ -150,13 +150,24 @@ GetBuffer(BufferID id)
     return result;
 }
 
-function void
+function bool
+IsNullBuffer(Buffer *buffer)
+{
+    return buffer != editor->null_buffer;
+}
+
+function bool
 DestroyBuffer(BufferID id)
 {
     Buffer *buffer = GetBuffer(id);
+    if (IsNullBuffer(buffer))
+    {
+        return false;
+    }
+
     if (buffer->flags & Buffer_Indestructible)
     {
-        return;
+        return false;
     }
 
     RemoveProjectAssociation(buffer);
@@ -184,6 +195,8 @@ DestroyBuffer(BufferID id)
     editor->buffers[id.index] = nullptr;
 
     Release(&buffer->arena);
+
+    return true;
 }
 
 function BufferIterator
@@ -1050,6 +1063,12 @@ EndUndoBatch(Buffer *buffer)
         MergeUndoHistory(buffer, buffer->undo_batch_ordinal, buffer->undo.current_ordinal);
         buffer->undo_batch_ordinal = 0;
     }
+}
+
+function bool
+HasUnsavedChanges(Buffer *buffer)
+{
+    return buffer->last_save_undo_ordinal != CurrentUndoOrdinal(buffer);
 }
 
 function Buffer *

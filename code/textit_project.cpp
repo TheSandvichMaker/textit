@@ -127,19 +127,18 @@ FindOrOpenBuffer(Project *project, String name)
 }
 
 function Project *
-MakeNewProject(String search_start)
+CreateProject(String search_start)
 {
     Project *project = PushStruct(&editor->transient_arena, Project);
+    project->tag_table = PushArray(&editor->transient_arena, PROJECT_TAG_TABLE_SIZE, Tag *);
     project->root = FindProjectRoot(&editor->transient_arena, search_start);
 
-    bool is_first_project = !editor->first_project;
+    bool is_first_project = DllIsEmpty(&editor->project_sentinel);
     if (!is_first_project)
     {
         project->flags |= Project_Hidden;
     }
-
-    project->next = editor->first_project;
-    editor->first_project = project;
+    DllInsertBack(&editor->project_sentinel, project);
 
     PlatformHighResTime start = platform->GetTime();
 
@@ -188,22 +187,45 @@ MakeNewProject(String search_start)
 }
 
 function void
+DestroyProject(Project *project)
+{
+    Assert(project);
+    Assert(project != &editor->project_sentinel);
+
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (buffer->project == project)
+        {
+            DestroyBuffer(buffer->id);
+        }
+    }
+    Assert(project->associated_buffer_count == 0);
+
+    project->root = "FREE PROJECT"_str;
+
+    DllRemove(project);
+    SllStackPush(project, editor->first_free_project);
+}
+
+function void
 AssociateProject(Buffer *buffer)
 {
     if (buffer->project) return;
 
     Project *project = nullptr;
-    for (Project *test_proj = editor->first_project; test_proj; test_proj = test_proj->next)
+    for (ProjectIterator it = IterateProjects(); IsValid(&it); Next(&it))
     {
-        if (MatchPrefix(buffer->full_path, test_proj->root, StringMatch_CaseInsensitive))
+        if (MatchPrefix(buffer->full_path, it.project->root, StringMatch_CaseInsensitive))
         {
-            project = test_proj;
+            project = it.project;
+            break;
         }
     }
 
     if (!project)
     {
-        project = MakeNewProject(buffer->full_path);
+        project = CreateProject(buffer->full_path);
     }
 
     Tags *tags = buffer->tags;
@@ -221,7 +243,39 @@ AssociateProject(Buffer *buffer)
 function void
 RemoveProjectAssociation(Buffer *buffer)
 {
-    buffer->project->associated_buffer_count -= 1;
-    // TODO: Handle projects having 0 bufferss
-    buffer->project = nullptr;
+    Project *project = buffer->project;
+    project->associated_buffer_count -= 1;
+    project = nullptr;
+}
+
+//
+// ProjectIterator
+//
+
+function ProjectIterator
+IterateProjects()
+{
+    ProjectIterator it = {};
+    it.project = editor->project_sentinel.next;
+    return it;
+}
+
+function bool
+IsValid(ProjectIterator *it)
+{
+    return it->project != &editor->project_sentinel;
+}
+
+function void
+Next(ProjectIterator *it)
+{
+    it->project = it->project->next;
+}
+
+function void
+DestroyCurrent(ProjectIterator *it)
+{
+    Project *project = it->project;
+    it->project = it->project->next;
+    DestroyProject(project);
 }

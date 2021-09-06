@@ -45,7 +45,7 @@
 // editing big files without keeping them entirely in memory??
 // language support for multiple languages to test and refine things
 // manhandling of indentation (again)
-// macros
+// macros 
 
 //
 // PRIOR ART: https://github.com/helix-editor/helix <--- look at how this lad does things
@@ -68,9 +68,9 @@ MakeFont(Bitmap bitmap, int32_t glyph_w, int32_t glyph_h)
 {
     Font font = {};
 
-    font.w = bitmap.w;
-    font.h = bitmap.h;
-    font.pitch = bitmap.pitch;
+    font.w       = bitmap.w;
+    font.h       = bitmap.h;
+    font.pitch   = bitmap.pitch;
     font.glyph_w = glyph_w;
     font.glyph_h = glyph_h;
 
@@ -431,6 +431,8 @@ AppUpdateAndRender(Platform *platform_)
         editor->null_buffer = OpenNewBuffer("null"_str, Buffer_Indestructible|Buffer_ReadOnly);
         editor->null_view   = OpenNewView(BufferID::Null());
 
+        DllInit(&editor->project_sentinel);
+
         Buffer *scratch_buffer = OpenBufferFromFile("code/textit.cpp"_str);
         View   *scratch_view   = OpenNewView(scratch_buffer->id);
 
@@ -575,11 +577,19 @@ AppUpdateAndRender(Platform *platform_)
         platform->DebugPrint("Buffer move time: %fms\n", 1000.0*editor->debug.buffer_edit_timing);
 #endif
     }
-    editor->debug.line_index_insert_timing = 0.0;
-    editor->debug.line_index_lookup_timing = 0.0;
-    editor->debug.line_index_lookup_count = 0;
+    editor->debug.line_index_insert_timing          = 0.0;
+    editor->debug.line_index_lookup_timing          = 0.0;
+    editor->debug.line_index_lookup_count           = 0;
     editor->debug.line_index_lookup_recursion_count = 0;
-    editor->debug.buffer_edit_timing = 0.0;
+    editor->debug.buffer_edit_timing                = 0.0;
+
+    for (ProjectIterator it = IterateProjects(); IsValid(&it); Next(&it))
+    {
+        if (it.project->associated_buffer_count <= 0)
+        {
+            DestroyCurrent(&it);
+        }
+    }
 
     {
         Buffer *active_buffer = GetActiveBuffer();
@@ -604,6 +614,4 @@ AppUpdateAndRender(Platform *platform_)
         platform->SleepThread(editor->debug.delay);
         editor->debug.delay_frame_count -= 1;
     }
-}
-
 }

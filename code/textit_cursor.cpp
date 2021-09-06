@@ -152,4 +152,4 @@ SetSelection(Cursor *cursor, Range inner, Range outer)
     }
     cursor->selection.inner = inner;
     cursor->selection.outer = outer;
-}
+} 
