@@ -56,16 +56,16 @@ MakeString(size_t size, uint8_t *text)
     return result;
 }
 
-struct String_utf16
+struct String16
 {
     size_t size;
     wchar_t *data;
 };
 
-constexpr String_utf16
+constexpr String16
 operator ""_str16(const wchar_t *data, size_t size)
 {
-    String_utf16 result = {};
+    String16 result = {};
     result.size = size;
     result.data = (wchar_t *)data;
     return result;

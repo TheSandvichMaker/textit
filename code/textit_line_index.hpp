@@ -72,12 +72,10 @@ struct LineIndexNode
     };
 };
 
-struct LineIndexIterator
-{
-    LineIndexNode *record;
-    Range          range;
-    int64_t        line; 
-};
+function LineIndexNode *InsertLine(Buffer *buffer, Range range, LineData *data);
+function void RemoveLinesFromIndex(Buffer *buffer, Range line_range);
+function void MergeLines(Buffer *buffer, Range range);
+function void ClearLineIndex(Buffer *buffer);
 
 function void FindLineInfoByPos(Buffer *buffer, int64_t pos, LineInfo *out_info);
 function void FindLineInfoByLine(Buffer *buffer, int64_t line, LineInfo *out_info);
@@ -87,5 +85,33 @@ function int64_t GetLineCount(Buffer *buffer);
 function bool ValidateLineIndexFull(Buffer *buffer);
 function bool ValidateLineIndexTreeIntegrity(LineIndexNode *root);
 function bool ValidateTokenBlockChain(LineIndexNode *record);
+
+struct LineIndexCountResult
+{
+    size_t nodes;
+    size_t nodes_size;
+    size_t token_blocks;
+    size_t token_blocks_size;
+    size_t token_blocks_capacity;
+    size_t token_blocks_occupancy;
+};
+
+function void CountLineIndex(LineIndexNode *node, LineIndexCountResult *result);
+
+struct LineIndexIterator
+{
+    LineIndexNode *record;
+    Range          range;
+    int64_t        line; 
+};
+
+function LineIndexIterator IterateLineIndex(Buffer *buffer);
+function LineIndexIterator IterateLineIndexFromPos(Buffer *buffer, int64_t pos);
+function LineIndexIterator IterateLineIndexFromLine(Buffer *buffer, int64_t line);
+function bool IsValid(LineIndexIterator *it);
+function void Next(LineIndexIterator *it);
+function void Prev(LineIndexIterator *it);
+function LineIndexNode *RemoveCurrent(LineIndexIterator *it);
+function void GetLineInfo(LineIndexIterator *it, LineInfo *out_info);
 
 #endif /* TEXTIT_LINE_INDEX_HPP */

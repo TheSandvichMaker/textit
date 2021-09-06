@@ -137,6 +137,9 @@ struct TokenBlock
     Token tokens[16];
 };
 
+function TokenBlock *AllocateTokenBlock(Buffer *buffer);
+function void FreeTokenBlock(Buffer *buffer, TokenBlock *block);
+
 struct TokenLocator
 {
     TokenBlock *block;

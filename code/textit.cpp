@@ -29,8 +29,7 @@
 #include "textit_language_lua.cpp"
 
 // things missing:
-// saving lmao << do this asap
-// local search (and replace) << do this next? questions about threading input thing
+// local search and replace
 // autocomplete of any kind
 // multiple cursors -- needs to be thought about implementation robustness
 // project wide search (and replace)
@@ -605,4 +604,6 @@ AppUpdateAndRender(Platform *platform_)
         platform->SleepThread(editor->debug.delay);
         editor->debug.delay_frame_count -= 1;
     }
+}
+
 }

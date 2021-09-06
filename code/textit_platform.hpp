@@ -581,6 +581,7 @@ struct Platform
     String (*PushFullPath)(Arena *arena, String filename);
     String (*ReadFile)(Arena *arena, String filename);
     size_t (*ReadFileInto)(size_t buffer_size, void *buffer, String filename);
+    bool (*WriteFile)(size_t size, void *data, String filename);
     size_t (*GetFileSize)(String filename);
 
     PlatformFileIterator *(*FindFiles)(Arena *arena, String query);

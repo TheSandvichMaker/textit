@@ -240,10 +240,10 @@ Win32_Utf8ToUtf16(Arena *arena, const char *utf8, int length = -1)
     return result;
 }
 
-function String_utf16
+function String16
 Win32_Utf8ToUtf16(Arena *arena, String utf8)
 {
-    String_utf16 result = {};
+    String16 result = {};
     if (!utf8.size) return result;
 
     result.size = (size_t)MultiByteToWideChar(CP_UTF8, 0, (char *)utf8.data, (int)utf8.size, nullptr, 0);
@@ -290,7 +290,7 @@ Win32_Utf16ToUtf8(Arena *arena, wchar_t *string, int size = -1)
 }
 
 function String
-Win32_Utf16ToUtf8(Arena *arena, String_utf16 utf16)
+Win32_Utf16ToUtf8(Arena *arena, String16 utf16)
 {
     String result = Win32_Utf16ToUtf8(arena, utf16.data, (int)utf16.size);
     return result;
@@ -788,6 +788,64 @@ Win32_ReadFile(Arena *arena, String filename)
     else
     {
         Win32_DebugPrint("Could not open file '%s'\n", filename);
+    }
+
+    return result;
+}
+
+static bool
+Win32_WriteFile(size_t count, void *data, String filename)
+{
+    bool result = false;
+
+    if (count > UINT32_MAX)
+    {
+        Win32_ReportError(PlatformError_Nonfatal, "Sorry, file writes are 32 bit right now. 4GiB is max.");
+        return result;
+    }
+
+    ScopedMemory temp;
+    wchar_t *filename16 = FormatWString(temp, L"\\\\?\\%.*S", StringExpand(filename));
+    wchar_t *temp_filename16 = FormatWString(temp, L"%s.temp", filename16);
+
+    HANDLE file = CreateFileW(temp_filename16, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, NULL);
+    if (file != INVALID_HANDLE_VALUE)
+    {
+        bool already_exists = (GetLastError() == ERROR_ALREADY_EXISTS);
+
+        DWORD count32 = (DWORD)count;
+        DWORD written;
+        if (WriteFile(file, data, count32, &written, NULL))
+        {
+            CloseHandle(file);
+
+            if (already_exists)
+            {
+                if (ReplaceFileW(filename16, temp_filename16, NULL, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL))
+                {
+                    result = true;
+                }
+                else
+                {
+                    Win32_DisplayLastError();
+                }
+            }
+            else
+            {
+                if (MoveFileW(temp_filename16, filename16))
+                {
+                    result = true;
+                }
+                else
+                {
+                    Win32_DisplayLastError();
+                }
+            }
+        }
+        else
+        {
+            Win32_DisplayLastError();
+        }
     }
 
     return result;
@@ -1712,7 +1770,7 @@ static wchar_t codepage_437_ascii[] =
 function bool
 Win32_RegisterFontFile(String file_name_utf8)
 {
-    String_utf16 file_name = Win32_Utf8ToUtf16(platform->GetTempArena(), file_name_utf8);
+    String16 file_name = Win32_Utf8ToUtf16(platform->GetTempArena(), file_name_utf8);
     bool result = !!AddFontResourceExW(file_name.data, FR_PRIVATE, 0);
     return result;
 }
@@ -1775,7 +1833,7 @@ Win32_EnumerateFonts(Arena *arena, uint32_t max, String filter, uint32_t *out_co
 function PlatformFontHandle
 Win32_CreateFont(String font_name_utf8, TextStyleFlags flags, PlatformFontQuality quality, int height)
 {
-    String_utf16 font_name = Win32_Utf8ToUtf16(platform->GetTempArena(), font_name_utf8);
+    String16 font_name = Win32_Utf8ToUtf16(platform->GetTempArena(), font_name_utf8);
 
     bool bold      = !!(flags & TextStyle_Bold);
     bool italic    = !!(flags & TextStyle_Italic);
@@ -1885,7 +1943,7 @@ Win32_GetTextExtent(PlatformFontHandle handle, PlatformOffscreenBuffer *target, 
         INVALID_CODE_PATH;
     }
 
-    String_utf16 wtext = Win32_Utf8ToUtf16(platform->GetTempArena(), text);
+    String16 wtext = Win32_Utf8ToUtf16(platform->GetTempArena(), text);
 
     SIZE size;
     GetTextExtentPoint32W(dc, wtext.data, (int)wtext.size, &size);
@@ -1900,7 +1958,7 @@ Win32_DrawText(PlatformFontHandle handle, PlatformOffscreenBuffer *target, Strin
     HDC   dc   = (HDC)target->opaque[0];
     HFONT font = (HFONT)handle;
 
-    String_utf16 wtext = Win32_Utf8ToUtf16(platform->GetTempArena(), text);
+    String16 wtext = Win32_Utf8ToUtf16(platform->GetTempArena(), text);
 
     if (!SelectObject(dc, font))
     {
@@ -1951,7 +2009,7 @@ Win32_MakeAsciiFont(String font_name_utf8, Font *out_font, int font_size, Platfo
 
     ReleaseDC(NULL, screen_dc);
 
-    String_utf16 font_name = Win32_Utf8ToUtf16(platform->GetTempArena(), font_name_utf8);
+    String16 font_name = Win32_Utf8ToUtf16(platform->GetTempArena(), font_name_utf8);
 
     int height = font_size;
 
@@ -2262,7 +2320,7 @@ Win32_AppThread(LPVOID userdata)
             }
         }
 
-        String_utf16 user_title = Win32_Utf8ToUtf16(platform->GetTempArena(), platform->window_title);
+        String16 user_title = Win32_Utf8ToUtf16(platform->GetTempArena(), platform->window_title);
 
         wchar_t *title = FormatWString(platform->GetTempArena(),
                                        L"%.*s - frame time: %fms, vsync time: %fms (min/64: %fms), fps: %f\n - late latching: %s",
@@ -2379,6 +2437,7 @@ main(int, char **)
     platform->PushFullPath           = Win32_PushFullPath;
     platform->ReadFile               = Win32_ReadFile;
     platform->ReadFileInto           = Win32_ReadFileInto;
+    platform->WriteFile              = Win32_WriteFile;
     platform->GetFileSize            = Win32_GetFileSize;
 
     platform->FindFiles              = Win32_FindFiles;

@@ -10,17 +10,6 @@ struct Tags;
 struct Tag;
 struct Cursor;
 
-function String
-LineEndString(LineEndKind kind)
-{
-    switch (kind)
-    {
-        case LineEnd_LF:   return StringLiteral("\n");
-        case LineEnd_CRLF: return StringLiteral("\r\n");
-    }
-    return StringLiteral("");
-}
-
 struct UndoNode
 {
     UndoNode *parent;
@@ -104,61 +93,16 @@ struct Buffer : TextStorage
     LineIndexNode *first_free_line_index_node;
 };
 
-function TokenBlock *
-AllocateTokenBlock(Buffer *buffer)
-{
-    if (!buffer->first_free_token_block)
-    {
-        buffer->first_free_token_block = PushStructNoClear(&buffer->arena, TokenBlock);
-        buffer->first_free_token_block->next = nullptr;
-    }
-    TokenBlock *result = SllStackPop(buffer->first_free_token_block);
-    ZeroStruct(result);
-    return result;
-}
-
-function void
-FreeTokenBlock(Buffer *buffer, TokenBlock *block)
-{
-    block->token_count = TOKEN_BLOCK_FREE_TAG;
-    SllStackPush(buffer->first_free_token_block, block);
-}
-
-function Buffer *GetBuffer(BufferID id);
-function Range GetLineRange(Buffer *buffer, int64_t line);
-
-function bool
-IsInBufferRange(Buffer *buffer, int64_t pos)
-{
-    bool result = ((pos >= 0) && (pos < buffer->count));
-    return result;
-}
-
-function bool
-LineIsInBuffer(Buffer *buffer, int64_t line)
-{
-    return ((line >= 0) && (line < GetLineCount(buffer)));
-}
-
-function int64_t
-ClampToBufferRange(Buffer *buffer, int64_t pos)
-{
-    if (pos >= buffer->count) pos = buffer->count - 1;
-    if (pos < 0) pos = 0;
-    return pos;
-}
-
-function Range
-BufferRange(Buffer *buffer)
-{
-    return MakeRange(0, buffer->count);
-}
-
 function Buffer *OpenNewBuffer(String buffer_name, BufferFlags flags = 0);
 function Buffer *OpenBufferFromFile(String filename, BufferFlags flags = 0);
 function Buffer *OpenBufferFromFileAsync(PlatformJobQueue *queue, String filename, BufferFlags flags = 0);
+function Buffer *GetBuffer(BufferID id);
 function Buffer *GetActiveBuffer(void);
 
+function Range BufferRange(Buffer *buffer);
+function bool IsInBufferRange(Buffer *buffer, int64_t pos);
+function int64_t ClampToBufferRange(Buffer *buffer, int64_t pos);
+function bool LineIsInBuffer(Buffer *buffer, int64_t line);
 function uint8_t ReadBufferByte(Buffer *buffer, int64_t pos);
 function int64_t PeekNewline(Buffer *buffer, int64_t pos);
 function int64_t PeekNewlineBackward(Buffer *buffer, int64_t pos);

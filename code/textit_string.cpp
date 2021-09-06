@@ -509,7 +509,6 @@ MatchPrefix(String string, String prefix, StringMatchFlags flags = 0)
     return AreEqual(string, prefix, flags);
 }
 
-#if 1
 function size_t
 FindSubstring(String text, String pattern, StringMatchFlags flags = 0)
 {
@@ -577,41 +576,6 @@ FindSubstringBackward(String text, String pattern, StringMatchFlags flags = 0)
 
     return text.size;
 }
-#else
-function size_t
-FindSubstring(String text, String pattern, StringMatchFlags flags = 0)
-{
-    if (pattern.size > text.size) return text.size;
-
-    size_t result = text.size;
-    for (size_t i = 0; i < text.size - pattern.size; i += 1)
-    {
-        bool match = true;
-        for (size_t j = 0; j < pattern.size; j += 1)
-        {
-            uint8_t a = text.data[i];
-            uint8_t b = pattern.data[j];
-
-            if (flags & StringMatch_CaseInsensitive)
-            {
-                a = ToLowerAscii(a);
-                b = ToLowerAscii(b);
-            }
-
-            if (a != b)
-            {
-                match = false;
-                break;
-            }
-        }
-
-        result = i;
-        break;
-    }
-
-    return result;
-}
-#endif
 
 function int
 CalculateEditDistance(String s, String t)
@@ -789,6 +753,17 @@ FormatHumanReadableBytes(size_t bytes)
         string = PushTempStringF("%zuTiB", bytes / 1024 / 1024 / 1024 / 1024);
     }
     return string;
+}
+
+function String
+LineEndString(LineEndKind kind)
+{
+    switch (kind)
+    {
+        case LineEnd_LF:   return StringLiteral("\n");
+        case LineEnd_CRLF: return StringLiteral("\r\n");
+    }
+    return StringLiteral("");
 }
 
 function LineEndKind

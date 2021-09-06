@@ -456,16 +456,6 @@ ClearLineIndex(Buffer *buffer)
     buffer->line_index_root = nullptr;
 }
 
-struct LineIndexCountResult
-{
-    size_t nodes;
-    size_t nodes_size;
-    size_t token_blocks;
-    size_t token_blocks_size;
-    size_t token_blocks_capacity;
-    size_t token_blocks_occupancy;
-};
-
 function void
 CountLineIndex(LineIndexNode *node, LineIndexCountResult *result)
 {

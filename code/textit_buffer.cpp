@@ -217,6 +217,33 @@ GetActiveBuffer(void)
     return GetBuffer(GetView(editor->active_window->view)->buffer);
 }
 
+function Range
+BufferRange(Buffer *buffer)
+{
+    return MakeRange(0, buffer->count);
+}
+
+function bool
+IsInBufferRange(Buffer *buffer, int64_t pos)
+{
+    bool result = ((pos >= 0) && (pos < buffer->count));
+    return result;
+}
+
+function int64_t
+ClampToBufferRange(Buffer *buffer, int64_t pos)
+{
+    if (pos >= buffer->count) pos = buffer->count - 1;
+    if (pos < 0) pos = 0;
+    return pos;
+}
+
+function bool
+LineIsInBuffer(Buffer *buffer, int64_t line)
+{
+    return ((line >= 0) && (line < GetLineCount(buffer)));
+}
+
 function uint8_t
 ReadBufferByte(Buffer *buffer, int64_t pos)
 {
@@ -499,8 +526,8 @@ FindLineEnd(Buffer *buffer, int64_t pos, int64_t *out_inner, int64_t *out_outer)
         }
     }
 
-    *out_inner = inner;
-    *out_outer = outer;
+    if (out_inner) *out_inner = inner;
+    if (out_outer) *out_outer = outer;
 }
 
 function int64_t

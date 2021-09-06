@@ -2236,6 +2236,14 @@ TEXT_COMMAND_PROC(WriteText)
     }
 }
 
+COMMAND_PROC(SaveBuffer,
+             "Save the current buffer to its respective file"_str)
+{
+    Buffer *buffer = GetActiveBuffer();
+    platform->WriteFile(buffer->count, buffer->text, buffer->full_path);
+    buffer->last_save_undo_ordinal = CurrentUndoOrdinal(buffer);
+}
+
 COMMAND_PROC(OpenNewLineBelow)
 {
     View *view = GetActiveView();

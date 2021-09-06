@@ -1,3 +1,23 @@
+function TokenBlock *
+AllocateTokenBlock(Buffer *buffer)
+{
+    if (!buffer->first_free_token_block)
+    {
+        buffer->first_free_token_block = PushStructNoClear(&buffer->arena, TokenBlock);
+        buffer->first_free_token_block->next = nullptr;
+    }
+    TokenBlock *result = SllStackPop(buffer->first_free_token_block);
+    ZeroStruct(result);
+    return result;
+}
+
+function void
+FreeTokenBlock(Buffer *buffer, TokenBlock *block)
+{
+    block->token_count = TOKEN_BLOCK_FREE_TAG;
+    SllStackPush(buffer->first_free_token_block, block);
+}
+
 //
 // Token Locator
 //
