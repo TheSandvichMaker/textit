@@ -18,8 +18,13 @@ struct Project
 
     String root;
 
-    TicketMutex tag_table_mutex;
     Tag *tag_table[4096];
 };
+
+function void AssociateProject(Buffer *buffer);
+function void RemoveProjectAssociation(Buffer *buffer);
+
+function Project *MakeNewProject(String search_start);
+function Buffer *FindOrOpenBuffer(Project *project, String name);
 
 #endif /* TEXTIT_PROJECT_HPP */

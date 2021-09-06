@@ -501,12 +501,22 @@ ParseTagsCpp(Buffer *buffer)
         }
         else if (ConsumeToken(parser, Token_Keyword, "typedef"_str))
         {
+            // TODO: to handle C style struct typedefs this should be more clever.
+            // ConsumeCppType should be something which can actually parse struct
+            // declarations and emit the tag for it. Aka turn this more into a 
+            // proper recursive descent parser.
+            TokenLocator rewind = GetLocator(parser);
+
             ConsumeCppType(parser);
             if (Token t = ConsumeToken(parser, Token_Identifier))
             {
                 Tag *tag = AddTag(buffer, &t);
                 tag->kind     = Tag_Declaration;
                 tag->sub_kind = Tag_C_Typedef;
+            }
+            else
+            {
+                Rewind(parser, rewind);
             }
         }
         else if (ConsumeCppType(parser)) // TODO: More robust function parsing

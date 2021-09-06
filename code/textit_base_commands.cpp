@@ -1204,7 +1204,7 @@ COMMAND_PROC(AppendAtEnd)
     Buffer *buffer = GetBuffer(view);
     for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
     {
-        cursor->pos = FindLineEnd(buffer, cursor->pos).inner;
+        FindLineEnd(buffer, cursor->pos, &cursor->pos);
     }
     CMD_EnterTextMode();
 }
@@ -1291,7 +1291,7 @@ MOVEMENT_PROC(MoveLeftIdentifier)
     Cursor *cursor = GetCursor(view);
 
     int64_t pos = cursor->pos;
-    Selection selection = ScanWordBackward2(buffer, pos);
+    Selection selection = ScanWordBackward(buffer, pos);
 
     Move result = {};
     result.pos = selection.outer.end;
@@ -1310,7 +1310,7 @@ MOVEMENT_PROC(MoveRightIdentifier)
     Cursor *cursor = GetCursor(view);
 
     int64_t pos = cursor->pos;
-    Selection selection = ScanWordForward2(buffer, pos);
+    Selection selection = ScanWordForward(buffer, pos);
 
     Move result = {};
     result.pos = selection.outer.end;
@@ -1344,7 +1344,9 @@ MOVEMENT_PROC(MoveLineEnd)
     cursor->sticky_col = 9999;
 
     int64_t pos = cursor->pos;
-    auto [inner, outer] = FindLineEnd(buffer, pos);
+
+    int64_t inner, outer;
+    FindLineEnd(buffer, pos, &inner, &outer);
 
     Move move = {};
     move.selection.inner.start = pos;
@@ -1754,7 +1756,7 @@ COMMAND_PROC(BackspaceWord)
 
     int64_t pos = cursor->pos;
     int64_t start_pos = pos;
-    int64_t end_pos = ScanWordBackward(buffer, pos).end;
+    int64_t end_pos = ScanWordBackward(buffer, pos).inner.end;
     int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
     SetCursor(view, final_pos);
 }
@@ -2018,7 +2020,9 @@ COMMAND_PROC(Copy)
     Cursor *cursor = GetCursor(view);
 
     Range range = SanitizeRange(cursor->selection.outer);
-    String string = BufferSubstring(buffer, range);
+
+    ScopedMemory temp;
+    String string = PushBufferRange(temp, buffer, range);
 
     platform->WriteClipboard(string);
 }
@@ -2240,7 +2244,9 @@ COMMAND_PROC(OpenNewLineBelow)
 
     CMD_EnterTextMode();
 
-    int64_t insert_pos = FindLineEnd(buffer, cursor->pos).inner;
+    int64_t insert_pos;
+    FindLineEnd(buffer, cursor->pos, &insert_pos);
+
     SetCursor(cursor, insert_pos);
     CMD_WriteText("\n"_str); // NOTE: CRLF line endings are correctly expanded in WriteText
 }

@@ -791,6 +791,37 @@ FormatHumanReadableBytes(size_t bytes)
     return string;
 }
 
+function LineEndKind
+GuessLineEndKind(String string)
+{
+    int64_t lf   = 0;
+    int64_t crlf = 0;
+    for (size_t i = 0; i < string.size; i += 1)
+    {
+        if (string.data[i + 0] == '\r' &&
+            string.data[i + 1] == '\n')
+        {
+            crlf += 1;
+            i += 1;
+        }
+        else if (string.data[i] == '\n')
+        {
+            lf += 1;
+        }
+    }
+
+    LineEndKind result = LineEnd_LF;
+    if (crlf > lf)
+    {
+        result = LineEnd_CRLF;
+    }
+    return result;
+}
+
+//
+// StringContainer
+//
+
 function size_t
 GetSizeLeft(StringContainer *container)
 {
@@ -862,6 +893,10 @@ Clear(StringContainer *container)
 {
     container->size = 0;
 }
+
+//
+// StringList
+//
 
 function bool
 IsEmpty(StringList *list)

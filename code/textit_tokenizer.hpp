@@ -54,5 +54,6 @@ struct Tokenizer
 };
 
 function int64_t TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data);
+function void TokenizeBuffer(Buffer *buffer);
 
 #endif /* TEXTIT_TOKENIZER_HPP */

@@ -55,7 +55,7 @@ DrawText(V2i p, String line, Color foreground, Color background, size_t max = 0)
 function int64_t
 DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 {
-    ScopedMemory temp;
+    Arena *arena = platform->GetTempArena();
 
     Buffer *buffer = GetBuffer(view);
     Project *project = buffer->project;
@@ -127,7 +127,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     TokenIterator token_it = IterateLineTokens(&info);
 
     int nest_highlight_count = 0;
-    Range *nest_highlights = PushArrayNoClear(temp, 64, Range);
+    Range *nest_highlights = PushArrayNoClear(arena, 64, Range);
 
     for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
     {
@@ -274,6 +274,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                             token.kind = kind; // TODO: questionable! deferring the lookup to only do visible areas is good,
                                                 // but maybe it should be moved outside of the actual drawing function
                         }
+
+                        ScopedMemory temp;
                         // TODO: Bit excessive
                         for (Tag *tag = PushTagsWithName(temp, project, token_name); tag; tag = tag->next)
                         {
@@ -423,13 +425,19 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             }
 
             bool nest_highlight = false;
-            if (nest_highlight_count > 0 &&
-                IsInRange(nest_highlights[nest_highlight_count - 1], pos))
+            if (nest_highlight_count > 0)
             {
-                nest_highlight = true;
-                foreground = text_nest_highlight_foreground;
-                background = text_nest_highlight_background;
-                nest_highlight_count -= 1;
+                Range highlight_range = nest_highlights[nest_highlight_count - 1];
+                if (IsInRange(highlight_range, pos))
+                {
+                    nest_highlight = true;
+                    foreground = text_nest_highlight_foreground;
+                    background = text_nest_highlight_background;
+                    if (pos + 1 == highlight_range.end)
+                    {
+                        nest_highlight_count -= 1;
+                    }
+                }
             }
 
             if (draw_cursor)
@@ -680,4 +688,109 @@ DrawView(View *view, bool is_active_window)
     }
 
     return actual_line_height;
+}
+
+function void
+DrawCommandLines()
+{
+    PushLayer(Layer_OverlayForeground);
+
+    Color text_foreground           = GetThemeColor("command_line_foreground"_id);
+    Color text_background           = GetThemeColor("command_line_background"_id);
+    Color color_name                = GetThemeColor("command_line_name"_id);
+    Color color_option              = GetThemeColor("command_line_option"_id);
+    Color color_selected            = GetThemeColor("command_line_option_selected"_id);
+    Color color_numbers             = GetThemeColor("command_line_option_numbers"_id);
+    Color color_numbers_highlighted = GetThemeColor("command_line_option_numbers_highlighted"_id);
+    Color overlay_background        = GetThemeColor("command_line_background"_id);
+
+    V2i p = MakeV2i(render_state->viewport.min.x, render_state->viewport.max.y - 1);
+
+    V2i text_p = p;
+
+    Arena *arena = platform->GetTempArena();
+
+    StringList name_list = {};
+    for (int i = 0; i < editor->command_line_count; i += 1)
+    {
+        CommandLine *cl = editor->command_lines[i];
+        PushString(&name_list, arena, cl->name);
+    }
+    String names = PushFlattenedString(&name_list, arena, " > "_str, StringSeparator_AfterLast);
+
+    text_p = DrawText(text_p, names, color_name, text_background);
+
+    CommandLine *cl = editor->command_lines[editor->command_line_count - 1];
+
+    int64_t total_width  = 0;
+    int64_t total_height = cl->prediction_count + cl->prediction_overflow;
+
+    if (cl->highlight_numbers)
+    {
+        color_numbers = color_numbers_highlighted;
+    }
+
+    Prediction *active_prediction = nullptr;
+
+    if (cl->prediction_count > 0)
+    {
+        active_prediction = GetPrediction(cl, 0);
+
+        int prediction_offset = 1;
+        for (int i = 0; i < cl->prediction_count; i += 1)
+        {
+            Prediction *prediction = GetPrediction(cl, i);
+            String text = prediction->preview_text;
+
+            Color color = GetThemeColor(prediction->color ? prediction->color : "command_line_option"_id);
+            if (i == cl->prediction_selected_index)
+            {
+                active_prediction = prediction;
+                color = color_selected;
+            }
+
+            if (i < 9 + 26)
+            {
+                int c = (i < 9 ? '1' + i : 'A' + i - 9);
+                DrawText(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
+            }
+
+            DrawText(p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
+
+            total_width = Max(total_width, 2 + (int64_t)text.size);
+
+            prediction_offset += 1;
+        }
+        
+        if (cl->prediction_overflow)
+        {
+            DrawText(p + MakeV2i(2, -prediction_offset), "... and more"_str, color_option, overlay_background);
+        }
+    }
+
+    PushLayer(Layer_OverlayBackground);
+
+    PushRect(MakeRect2iMinDim(p + MakeV2i(0, -total_height), MakeV2i(total_width, total_height)), overlay_background);
+
+    PushLayer(Layer_OverlayForeground);
+
+    int cursor_at = cl->cursor;
+    String text = MakeString(cl->count, cl->text); if (cl->prediction_selected_index != -1)
+    {
+        text = GetPrediction(cl, cl->prediction_selected_index)->text;
+        cursor_at = (int)text.size;
+    }
+
+    DrawText(text_p, text, text_foreground, text_background);
+    DrawGlyph(text_p + MakeV2i(cursor_at, 0), ' ', text_background, text_foreground);
+
+    if (active_prediction)
+    {
+        Command *cmd = FindCommand(active_prediction->text, StringMatch_CaseInsensitive);
+        if (cmd != NullCommand())
+        {
+            String desc = cmd->description;
+            DrawText(MakeV2i(render_state->viewport.max.x - desc.size, text_p.y), desc, text_foreground, text_background);
+        }
+    }
 }

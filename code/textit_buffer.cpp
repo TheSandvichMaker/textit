@@ -1,28 +1,220 @@
-function LineEndKind
-GuessLineEndKind(String string)
+function Buffer *
+OpenNewBuffer(String buffer_name, BufferFlags flags)
 {
-    int64_t lf   = 0;
-    int64_t crlf = 0;
-    for (size_t i = 0; i < string.size; i += 1)
+    BufferID id = {};
+    if (editor->buffer_count < MAX_BUFFER_COUNT)
     {
-        if (string.data[i + 0] == '\r' &&
-            string.data[i + 1] == '\n')
+        id = editor->free_buffer_ids[MAX_BUFFER_COUNT - editor->buffer_count - 1];
+        id.generation += 1;
+
+        editor->used_buffer_ids[editor->buffer_count] = id;
+        editor->buffer_count += 1;
+    }
+
+    Buffer *result = BootstrapPushStruct(Buffer, arena);
+    result->id                   = id;
+    result->flags                = flags;
+    result->name                 = PushString(&result->arena, buffer_name);
+    result->undo.at              = &result->undo.root;
+    result->undo.run_pos         = -1;
+    result->undo.insert_pos      = -1;
+    result->undo.current_ordinal = 1;
+    result->indent_rules         = &editor->default_indent_rules;
+    result->language             = &language_registry->null_language;
+    result->tags                 = PushStruct(&result->arena, Tags);
+    DllInit(&result->tags->sentinel);
+
+    result->last_save_undo_ordinal = result->undo.current_ordinal;
+
+    AllocateTextStorage(result, TEXTIT_BUFFER_SIZE);
+
+    editor->buffers[result->id.index] = result;
+
+    return result;
+}
+
+function Buffer *
+BeginOpenBufferFromFile(String filename, BufferFlags flags, bool *already_exists = nullptr)
+{
+    if (already_exists) *already_exists = false;
+
+    ScopedMemory temp;
+    String full_path = platform->PushFullPath(temp, filename);
+
+    for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
+    {
+        Buffer *buffer = it.buffer;
+        if (AreEqual(buffer->full_path, full_path))
         {
-            crlf += 1;
-            i += 1;
-        }
-        else if (string.data[i] == '\n')
-        {
-            lf += 1;
+            if (already_exists) *already_exists = true;
+            buffer->flags = flags;
+            return buffer;
         }
     }
 
-    LineEndKind result = LineEnd_LF;
-    if (crlf > lf)
+    String leaf;
+    SplitPath(filename, &leaf);
+
+    Buffer *buffer = OpenNewBuffer(leaf);
+
+    buffer->full_path = PushString(&buffer->arena, full_path);
+    buffer->flags |= flags;
+
+    AssociateProject(buffer);
+
+    return buffer;
+}
+
+function void
+FinalizeOpenBufferFromFile(Buffer *buffer)
+{
+    //
+    // All work done in this function must be threadsafe, as of writing
+    // it just concerns itself with the provided buffer and therefore
+    // doesn't need any synchronization. All the memory for it is allocated
+    // from the buffer's arena. -06/09/2021
+    //
+
+    size_t file_size = platform->GetFileSize(buffer->full_path);
+    EnsureSpace(buffer, file_size + 1); // + 1 for null terminator but this is fucking jank I want this code to die
+    if (platform->ReadFileInto(TEXTIT_BUFFER_SIZE, buffer->text, buffer->full_path) != file_size)
     {
-        result = LineEnd_CRLF;
+        INVALID_CODE_PATH;
+    }
+    buffer->count = (int64_t)file_size;
+    buffer->line_end = GuessLineEndKind(MakeString(buffer->count, (uint8_t *)buffer->text));
+
+    String ext;
+    SplitExtension(buffer->full_path, &ext);
+
+    for (LanguageSpec *spec = language_registry->first_language; spec; spec = spec->next)
+    {
+        for (int extension_index = 0; extension_index < spec->associated_extension_count; extension_index += 1)
+        {
+            if (AreEqual(spec->associated_extensions[extension_index], ext))
+            {
+                buffer->language          = spec;
+                buffer->inferred_language = buffer->language;
+                break;
+            }
+        }
+    }
+
+    TokenizeBuffer(buffer);
+    ParseTags(buffer);
+}
+
+function
+PLATFORM_JOB(FinalizeOpenBufferFromFileJob)
+{
+    Buffer *buffer = (Buffer *)userdata;
+    FinalizeOpenBufferFromFile(buffer);
+}
+
+function Buffer *
+OpenBufferFromFile(String filename, BufferFlags flags)
+{
+    bool already_exists;
+    Buffer *buffer = BeginOpenBufferFromFile(filename, flags, &already_exists);
+    if (!already_exists)
+    {
+        FinalizeOpenBufferFromFile(buffer);
+    }
+    return buffer;
+}
+
+function Buffer *
+OpenBufferFromFileAsync(PlatformJobQueue *queue, String filename, BufferFlags flags)
+{
+    bool already_exists;
+    Buffer *buffer = BeginOpenBufferFromFile(filename, flags, &already_exists);
+    if (!already_exists)
+    {
+        platform->AddJob(queue, buffer, FinalizeOpenBufferFromFileJob);
+    }
+    return buffer;
+}
+
+function Buffer *
+GetBuffer(BufferID id)
+{
+    Buffer *result = editor->buffers[0];
+    if (id.index > 0 && id.index < MAX_BUFFER_COUNT)
+    {
+        Buffer *buffer = editor->buffers[id.index];
+        if (buffer && buffer->id == id)
+        {
+            result = buffer;
+        }
     }
     return result;
+}
+
+function void
+DestroyBuffer(BufferID id)
+{
+    Buffer *buffer = GetBuffer(id);
+    if (buffer->flags & Buffer_Indestructible)
+    {
+        return;
+    }
+
+    RemoveProjectAssociation(buffer);
+    FreeAllTags(buffer);
+
+    size_t used_id_index = 0;
+    for (size_t i = 0; i < editor->buffer_count; i += 1)
+    {
+        BufferID test_id = editor->used_buffer_ids[i];
+        if (test_id == id)
+        {
+            used_id_index = i;
+            break;
+        }
+    }
+    editor->free_buffer_ids[MAX_BUFFER_COUNT - editor->buffer_count] = id;
+    editor->used_buffer_ids[used_id_index] = editor->used_buffer_ids[--editor->buffer_count];
+
+    for (size_t i = 0; i < editor->view_count; i += 1)
+    {
+        ViewID view_id = editor->used_view_ids[i];
+        DestroyCursors(view_id, id);
+    }
+
+    editor->buffers[id.index] = nullptr;
+
+    Release(&buffer->arena);
+}
+
+function BufferIterator
+IterateBuffers(void)
+{
+    BufferIterator result = {};
+    result.index  = 1;
+    result.buffer = GetBuffer(editor->used_buffer_ids[result.index]);
+    return result;
+}
+
+function bool
+IsValid(BufferIterator *iter)
+{
+    return (iter->index < editor->buffer_count);
+}
+
+function void
+Next(BufferIterator *iter)
+{
+    iter->index += 1;
+    if (iter->index < editor->buffer_count)
+    {
+        iter->buffer = GetBuffer(editor->used_buffer_ids[iter->index]);
+    }
+}
+
+function Buffer *
+GetActiveBuffer(void)
+{
+    return GetBuffer(GetView(editor->active_window->view)->buffer);
 }
 
 function uint8_t
@@ -51,6 +243,21 @@ PeekNewline(Buffer *buffer, int64_t pos)
     return 0;
 }
 
+function int64_t
+PeekNewlineBackward(Buffer *buffer, int64_t pos)
+{
+    if (ReadBufferByte(buffer, pos - 0) == '\n' &&
+        ReadBufferByte(buffer, pos - 1) == '\r')
+    {
+        return 2;
+    }
+    if (ReadBufferByte(buffer, pos) == '\n')
+    {
+        return 1;
+    }
+    return 0;
+}
+
 function bool
 AdvanceOverNewline(Buffer *buffer, int64_t *pos)
 {
@@ -66,21 +273,6 @@ AdvanceOverNewline(Buffer *buffer, int64_t *pos)
         *pos = *pos + 1;
     }
     return result;
-}
-
-function int64_t
-PeekNewlineBackward(Buffer *buffer, int64_t pos)
-{
-    if (ReadBufferByte(buffer, pos - 0) == '\n' &&
-        ReadBufferByte(buffer, pos - 1) == '\r')
-    {
-        return 2;
-    }
-    if (ReadBufferByte(buffer, pos) == '\n')
-    {
-        return 1;
-    }
-    return 0;
 }
 
 function int64_t
@@ -121,7 +313,7 @@ ScanWordEndForward(Buffer *buffer, int64_t pos)
 }
 
 function Selection
-ScanWordForward2(Buffer *buffer, int64_t pos)
+ScanWordForward(Buffer *buffer, int64_t pos)
 {
     Selection result = {};
     result.inner = MakeRange(pos);
@@ -158,8 +350,9 @@ ScanWordForward2(Buffer *buffer, int64_t pos)
 
     return result;
 }
+
 function Selection
-ScanWordBackward2(Buffer *buffer, int64_t pos)
+ScanWordBackward(Buffer *buffer, int64_t pos)
 {
     Selection result = {};
     result.inner = MakeRange(pos);
@@ -180,12 +373,6 @@ ScanWordBackward2(Buffer *buffer, int64_t pos)
 
     result.inner.start = pos + 1;
 
-    if (skipped_whitespace)
-    {
-        result.inner.end = result.outer.end = pos;
-        return result;
-    }
-
     CharacterClassFlags match_class = CharacterizeByteLoosely(ReadBufferByte(buffer, pos));
     while (IsInBufferRange(buffer, pos - 1) &&
            CharacterizeByteLoosely(ReadBufferByte(buffer, pos - 1)) == match_class)
@@ -198,6 +385,7 @@ ScanWordBackward2(Buffer *buffer, int64_t pos)
     return result;
 }
 
+#if 0
 function Range
 ScanWordForward(Buffer *buffer, int64_t pos)
 {
@@ -276,6 +464,7 @@ ScanWordBackward(Buffer *buffer, int64_t pos)
     result.end = pos;
     return result;
 }
+#endif
 
 function int64_t
 FindLineStart(Buffer *buffer, int64_t pos)
@@ -290,8 +479,8 @@ FindLineStart(Buffer *buffer, int64_t pos)
     return result;
 }
 
-function struct { int64_t inner; int64_t outer; }
-FindLineEnd(Buffer *buffer, int64_t pos)
+function void
+FindLineEnd(Buffer *buffer, int64_t pos, int64_t *out_inner, int64_t *out_outer)
 {
     int64_t inner = pos;
     int64_t outer = pos;
@@ -310,7 +499,8 @@ FindLineEnd(Buffer *buffer, int64_t pos)
         }
     }
 
-    return { inner, outer };
+    *out_inner = inner;
+    *out_outer = outer;
 }
 
 function int64_t
@@ -325,7 +515,7 @@ FindFirstNonHorzWhitespace(Buffer *buffer, int64_t pos)
 }
 
 function Range
-EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false)
+EncloseLine(Buffer *buffer, int64_t pos, bool including_newline)
 {
     Range result = MakeRange(pos, pos);
     while (IsInBufferRange(buffer, result.start - 1) && !PeekNewlineBackward(buffer, result.start - 1))
@@ -456,132 +646,13 @@ CalculateRelativeMove(Buffer *buffer, Cursor *cursor, V2i delta)
     return result;
 }
 
-function void
-PushUndoInternal(Buffer *buffer, int64_t pos, String forward, String backward)
-{
-    auto undo = &buffer->undo;
-
-    UndoNode *node = PushStruct(&buffer->arena, UndoNode);
-
-    node->parent = undo->at;
-    node->next_child = node->parent->first_child;
-    node->parent->first_child = node;
-
-    undo->current_ordinal += 1;
-    node->ordinal = undo->current_ordinal;
-
-    node->pos = pos;
-    node->forward = forward;
-    node->backward = backward;
-
-    undo->at = node;
-    undo->depth += 1;
-}
-
-function void
-FlushBufferedUndo(Buffer *buffer)
-{
-    UNUSED_VARIABLE(buffer);
-    /* TODO: Reimplement */
-}
-
-function void
-PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
-{
-    FlushBufferedUndo(buffer);
-    PushUndoInternal(buffer, pos, forward, backward);
-}
-
-function UndoNode *
-CurrentUndoNode(Buffer *buffer)
-{
-    auto undo = &buffer->undo;
-    return undo->at;
-}
-
-function void
-SelectNextUndoBranch(Buffer *buffer)
-{
-    UndoNode *node = CurrentUndoNode(buffer);
-
-    uint32_t child_count = 0;
-    for (UndoNode *child = node->first_child;
-         child;
-         child = child->next_child)
-    {
-        child_count += 1;
-    }
-
-    node->selected_branch = (node->selected_branch + 1) % child_count;
-}
-
-function UndoNode *
-NextChild(UndoNode *node)
-{
-    UndoNode *result = node->first_child;
-    for (uint32_t i = 0; i < node->selected_branch; i += 1)
-    {
-        result = result->next_child;
-    }
-    return result;
-}
-
-function int64_t
-CurrentUndoOrdinal(Buffer *buffer)
-{
-    return buffer->undo.current_ordinal;
-}
-
-function void
-MergeUndoHistory(Buffer *buffer, int64_t first_ordinal, int64_t last_ordinal)
-{
-    if (last_ordinal > first_ordinal)
-    {
-        FlushBufferedUndo(buffer);
-
-        UndoNode *node = buffer->undo.at;
-        while (node && node->ordinal > last_ordinal)
-        {
-            node = node->parent;
-        }
-        while (node && node->ordinal > first_ordinal)
-        {
-            node->ordinal = first_ordinal;
-            node = node->parent;
-        }
-        if (buffer->undo.current_ordinal == last_ordinal)
-        {
-            buffer->undo.current_ordinal = first_ordinal + 1;
-        }
-    }
-}
-
-function void
-BeginUndoBatch(Buffer *buffer)
-{
-    if (!buffer->undo_batch_ordinal)
-    {
-        buffer->undo_batch_ordinal = buffer->undo.current_ordinal;
-    }
-}
-
-function void
-EndUndoBatch(Buffer *buffer)
-{
-    if (buffer->undo_batch_ordinal)
-    {
-        MergeUndoHistory(buffer, buffer->undo_batch_ordinal, buffer->undo.current_ordinal);
-        buffer->undo_batch_ordinal = 0;
-    }
-}
-
-function String
-BufferSubstring(Buffer *buffer, Range range)
-{
-    int64_t range_size = range.end - range.start;
-    String result = MakeString(range_size, buffer->text + range.start);
-    return result;
-}
+// function String
+// BufferSubstring(Buffer *buffer, Range range)
+// {
+//     int64_t range_size = range.end - range.start;
+//     String result = MakeString(range_size, buffer->text + range.start);
+//     return result;
+// }
 
 function String
 PushBufferRange(Arena *arena, Buffer *buffer, Range range)
@@ -593,18 +664,18 @@ PushBufferRange(Arena *arena, Buffer *buffer, Range range)
 }
 
 function String
-PushTokenString(Arena *arena, Buffer *buffer, Token *t)
-{
-    return PushBufferRange(arena, buffer, MakeRangeStartLength(t->pos, t->length));
-}
-
-function String
 PushBufferRange(StringContainer *container, Buffer *buffer, Range range)
 {
     int64_t range_size = range.end - range.start;
     String string = MakeString(range_size, buffer->text + range.start);
     Append(container, string);
     return container->as_string;
+}
+
+function String
+PushTokenString(Arena *arena, Buffer *buffer, Token *t)
+{
+    return PushBufferRange(arena, buffer, MakeRangeStartLength(t->pos, t->length));
 }
 
 function String
@@ -799,7 +870,7 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
 }
 
 function Range
-FindNextOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0)
+FindNextOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags flags)
 {
     pos = ClampToBufferRange(buffer, pos);
     Range result = MakeRange(buffer->count);
@@ -818,7 +889,7 @@ FindNextOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags f
 }
 
 function Range
-FindPreviousOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0)
+FindPreviousOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags flags)
 {
     pos = ClampToBufferRange(buffer, pos);
     Range result = MakeRange(pos);
@@ -833,6 +904,125 @@ FindPreviousOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFla
     }
 
     return result;
+}
+
+function void
+PushUndoInternal(Buffer *buffer, int64_t pos, String forward, String backward)
+{
+    auto undo = &buffer->undo;
+
+    UndoNode *node = PushStruct(&buffer->arena, UndoNode);
+
+    node->parent = undo->at;
+    node->next_child = node->parent->first_child;
+    node->parent->first_child = node;
+
+    node->ordinal = undo->current_ordinal;
+    undo->current_ordinal += 1;
+
+    node->pos = pos;
+    node->forward = forward;
+    node->backward = backward;
+
+    undo->at = node;
+    undo->depth += 1;
+}
+
+function void
+FlushBufferedUndo(Buffer *buffer)
+{
+    UNUSED_VARIABLE(buffer);
+    /* TODO: Reimplement */
+}
+
+function void
+PushUndo(Buffer *buffer, int64_t pos, String forward, String backward)
+{
+    FlushBufferedUndo(buffer);
+    PushUndoInternal(buffer, pos, forward, backward);
+}
+
+function UndoNode *
+CurrentUndoNode(Buffer *buffer)
+{
+    auto undo = &buffer->undo;
+    return undo->at;
+}
+
+function void
+SelectNextUndoBranch(Buffer *buffer)
+{
+    UndoNode *node = CurrentUndoNode(buffer);
+
+    uint32_t child_count = 0;
+    for (UndoNode *child = node->first_child;
+         child;
+         child = child->next_child)
+    {
+        child_count += 1;
+    }
+
+    node->selected_branch = (node->selected_branch + 1) % child_count;
+}
+
+function UndoNode *
+NextChild(UndoNode *node)
+{
+    UndoNode *result = node->first_child;
+    for (uint32_t i = 0; i < node->selected_branch; i += 1)
+    {
+        result = result->next_child;
+    }
+    return result;
+}
+
+function int64_t
+CurrentUndoOrdinal(Buffer *buffer)
+{
+    return buffer->undo.current_ordinal;
+}
+
+function void
+MergeUndoHistory(Buffer *buffer, int64_t first_ordinal, int64_t last_ordinal)
+{
+    if (last_ordinal > first_ordinal)
+    {
+        FlushBufferedUndo(buffer);
+
+        UndoNode *node = buffer->undo.at;
+        while (node && node->ordinal > last_ordinal)
+        {
+            node = node->parent;
+        }
+        while (node && node->ordinal > first_ordinal)
+        {
+            node->ordinal = first_ordinal;
+            node = node->parent;
+        }
+        if (buffer->undo.current_ordinal == last_ordinal)
+        {
+            buffer->undo.current_ordinal = first_ordinal + 1;
+        }
+    }
+}
+
+function void
+BeginUndoBatch(Buffer *buffer)
+{
+    if (!buffer->undo_batch_ordinal)
+    {
+        buffer->undo_batch_ordinal = buffer->undo.current_ordinal;
+    }
+}
+
+function void
+EndUndoBatch(Buffer *buffer)
+{
+    if (buffer->undo_batch_ordinal)
+    {
+        MergeUndoHistory(buffer, buffer->undo_batch_ordinal, buffer->undo.current_ordinal);
+        buffer->undo_batch_ordinal = 0;
+    }
 }
 
 function Buffer *

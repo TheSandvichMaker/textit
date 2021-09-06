@@ -55,5 +55,17 @@ GetJump(View *view, uint32_t index)
 }
 
 function View *GetView(ViewID id);
+function View *OpenNewView(BufferID buffer);
+function View *GetActiveView(void);
+
+struct ViewIterator
+{
+    size_t index;
+    View *view;
+};
+
+function ViewIterator IterateViews(void);
+function bool IsValid(ViewIterator *iter);
+function void Next(ViewIterator *iter);
 
 #endif /* TEXTIT_VIEW_HPP */

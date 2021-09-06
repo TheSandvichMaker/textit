@@ -173,7 +173,7 @@ struct TicketMutex
 function void
 BeginTicketMutex(TicketMutex *mutex)
 {
-    uint32_t ticket = AtomicAdd(&mutex->ticket, 1);
+    uint32_t ticket = AtomicIncrement(&mutex->ticket);
     while (ticket != mutex->serving)
     {
         _mm_pause();
@@ -183,7 +183,7 @@ BeginTicketMutex(TicketMutex *mutex)
 function void
 EndTicketMutex(TicketMutex *mutex)
 {
-    AtomicAdd(&mutex->serving, 1);
+    AtomicIncrement(&mutex->serving); // AtomicAdd(&mutex->serving, 1);
 }
 
 struct PlatformHighResTime

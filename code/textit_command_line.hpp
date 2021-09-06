@@ -55,10 +55,13 @@ struct CommandLine
     bool (*AcceptEntry)(CommandLine *cl);
 };
 
-function String GetCommandString(CommandLine *cl);
 function CommandLine *BeginCommandLine();
 function void EndCommandLine();
+function void EndAllCommandLines();
+function bool HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event);
+function String GetCommandString(CommandLine *cl);
 function bool AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key = 0);
+function Prediction *GetPrediction(CommandLine *cl, int index);
 
 function void
 Terminate(CommandLine *cl)

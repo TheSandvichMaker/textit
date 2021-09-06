@@ -33,4 +33,10 @@ struct ParseUtf8Result
     uint32_t advance;
 };
 
+enum LineEndKind
+{
+    LineEnd_LF,
+    LineEnd_CRLF,
+};
+
 #endif /* TEXTIT_STRING_HPP */

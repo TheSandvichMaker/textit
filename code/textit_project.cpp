@@ -62,14 +62,9 @@ OpenCodeFilesRecursively(String search_start, BufferFlags buffer_flags = 0)
 
             if (GetLanguageFromExtension(ext))
             {
-#if 1
-                OpenBufferFromFileJobArgs *args = PushStruct(temp, OpenBufferFromFileJobArgs);
-                args->name  = PushStringF(temp, "%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name));
-                args->flags = buffer_flags;
-                platform->AddJob(platform->high_priority_queue, args, OpenBufferFromFileJob);
-#else
-                OpenBufferFromFile(PushStringF(temp, "%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name)), buffer_flags);
-#endif
+                OpenBufferFromFileAsync(platform->high_priority_queue, 
+                                        PushStringF(temp, "%.*s%.*s", StringExpand(search_path), StringExpand(it->info.name)), 
+                                        buffer_flags);
             }
         }
     }

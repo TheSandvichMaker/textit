@@ -208,7 +208,8 @@ IsNestOpener(TokenKind t)
 {
     bool result = ((t == Token_LeftParen) ||
                    (t == Token_LeftScope) ||
-                   (t == '<') ||
+                   // (t == '<') ||
+                   (t == '{') ||
                    (t == '['));
     return result;
 }
@@ -218,7 +219,8 @@ IsNestCloser(TokenKind t)
 {
     bool result = ((t == Token_RightParen) ||
                    (t == Token_RightScope) ||
-                   (t == '>') ||
+                   // (t == '>') ||
+                   (t == '}') ||
                    (t == ']'));
     return result;
 }
@@ -232,10 +234,12 @@ GetOtherNestTokenKind(TokenKind kind)
         case Token_RightParen: return Token_LeftParen;
         case Token_LeftScope:  return Token_RightScope;
         case Token_RightScope: return Token_LeftScope;
-        case '<':              return '>';
-        case '>':              return '<';
+        // case '<':              return '>';
+        // case '>':              return '<';
         case '[':              return ']';
         case ']':              return '[';
+        case '{':              return '}';
+        case '}':              return '{';
         INCOMPLETE_SWITCH;
     }
     return Token_None;

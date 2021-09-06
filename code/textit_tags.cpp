@@ -201,7 +201,7 @@ PeekToken(TagParser *parser)
 }
 
 function Token
-MatchToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, String match_text = {})
+MatchToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, String match_text)
 {
     Token t = parser->it.token;
     if (AcceptToken(parser, kind, sub_kind, &t))
@@ -223,13 +223,13 @@ MatchToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, String matc
 }
 
 function Token
-MatchToken(TagParser *parser, TokenKind kind, String match_text = {})
+MatchToken(TagParser *parser, TokenKind kind, String match_text)
 {
     return MatchToken(parser, kind, 0, match_text);
 }
 
 function Token
-ConsumeToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, String match_text = {})
+ConsumeToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, String match_text)
 {
     Token result = MatchToken(parser, kind, sub_kind, match_text);
     if (result.kind)
@@ -240,7 +240,7 @@ ConsumeToken(TagParser *parser, TokenKind kind, TokenSubKind sub_kind, String ma
 }
 
 function Token
-ConsumeToken(TagParser *parser, TokenKind kind, String match_text = {})
+ConsumeToken(TagParser *parser, TokenKind kind, String match_text)
 {
     Token result = MatchToken(parser, kind, match_text);
     if (result.kind)

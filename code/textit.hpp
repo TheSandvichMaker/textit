@@ -31,6 +31,9 @@
 #include "textit_tags.hpp"
 #include "textit_project.hpp"
 #include "textit_view.hpp"
+#include "textit_window.hpp"
+#include "textit_cursor.hpp"
+#include "textit_draw.hpp"
 #include "textit_command_line.hpp"
 #include "textit_auto_indent.hpp"
 
@@ -49,27 +52,6 @@ enum EditMode
     EditMode_Text,
     EditMode_COUNT,
 };
-
-enum WindowSplitKind
-{
-    WindowSplit_Leaf,
-    WindowSplit_Horz,
-    WindowSplit_Vert,
-};
-
-struct Window
-{
-    WindowSplitKind split;
-
-    Window *parent;
-    Window *first_child;
-    Window *last_child;
-    Window *next, *prev;
-
-    ViewID view;
-};
-
-function void DestroyWindow(Window *window);
 
 #define CoreConfig(_, X)                                           \
     X(_, bool,   visualize_newlines              = false)          \
@@ -91,71 +73,6 @@ function void DestroyWindow(Window *window);
     X(_, String, theme_name                      = "textit-light"_str)
 DeclareIntrospectedStruct(CoreConfig);
 GLOBAL_STATE(CoreConfig, core_config);
-
-struct Cursor
-{
-    Cursor *next;
-    int64_t sticky_col;
-
-    int64_t pos;
-    Selection selection;
-};
-
-function void
-SetCursor(Cursor *cursor, int64_t pos, Range inner = {}, Range outer = {})
-{
-    if (inner.start == 0 &&
-        inner.end   == 0)
-    {
-        inner = MakeRange(pos);
-    }
-    if (outer.start == 0 &&
-        outer.end   == 0)
-    {
-        outer = inner;
-    }
-    cursor->pos             = pos;
-    cursor->selection.inner = inner;
-    cursor->selection.outer = outer;
-}
-
-function void
-SetSelection(Cursor *cursor, Range inner, Range outer = {})
-{
-    if (outer.start == 0 &&
-        outer.end   == 0)
-    {
-        outer = inner;
-    }
-    cursor->selection.inner = inner;
-    cursor->selection.outer = outer;
-}
-
-struct CursorHashKey
-{
-    union
-    {
-        struct
-        {
-            ViewID view;
-            BufferID buffer;
-        };
-
-        uint64_t value;
-    };
-};
-
-struct CursorHashEntry
-{
-    union
-    {
-        CursorHashEntry *next_in_hash;
-        CursorHashEntry *next_free;
-    };
-
-    CursorHashKey key;
-    Cursor *cursor;
-};
 
 struct EditorState
 {
@@ -199,6 +116,7 @@ struct EditorState
 
     IndentRules default_indent_rules;
 
+    Project *active_project;
     Project *first_project;
 
     uint32_t buffer_count;
@@ -257,98 +175,8 @@ struct EditorState
 static EditorState *editor;
 
 function void ExecuteCommand(View *view, Command *command);
-function Buffer *OpenBufferFromFile(String filename, BufferFlags flags = 0);
-
-function Cursor *CreateCursor(View *view);
-function void FreeCursor(Cursor *cursor);
-function Cursor **GetCursorSlot(ViewID view, BufferID buffer, bool make_if_missing);
-function Cursor *GetCursor(ViewID view, BufferID buffer);
-function Cursor *GetCursor(View *view, Buffer *buffer = nullptr);
-function Cursor *IterateCursors(ViewID view, BufferID buffer);
-function Cursor *IterateCursors(View *view);
 
 function void SetEditorFont(String name, int size, PlatformFontQuality quality);
-
-struct OpenBufferFromFileJobArgs
-{
-    String name;
-    BufferFlags flags;
-};
-function PLATFORM_JOB(OpenBufferFromFileJob);
-
-struct BufferIterator
-{
-    size_t index;
-    Buffer *buffer;
-};
-
-function BufferIterator
-IterateBuffers(void)
-{
-    BufferIterator result = {};
-    result.index  = 1;
-    result.buffer = GetBuffer(editor->used_buffer_ids[result.index]);
-    return result;
-}
-
-function bool
-IsValid(BufferIterator *iter)
-{
-    return (iter->index < editor->buffer_count);
-}
-
-function void
-Next(BufferIterator *iter)
-{
-    iter->index += 1;
-    if (iter->index < editor->buffer_count)
-    {
-        iter->buffer = GetBuffer(editor->used_buffer_ids[iter->index]);
-    }
-}
-
-struct ViewIterator
-{
-    size_t index;
-    View *view;
-};
-
-function ViewIterator
-IterateViews(void)
-{
-    ViewIterator result = {};
-    result.index = 1;
-    result.view  = GetView(editor->used_view_ids[result.index]);
-    return result;
-}
-
-function bool
-IsValid(ViewIterator *iter)
-{
-    return (iter->index < editor->view_count);
-}
-
-function void
-Next(ViewIterator *iter)
-{
-    iter->index += 1;
-    if (iter->index < editor->view_count)
-    {
-        iter->view = GetView(editor->used_view_ids[iter->index]);
-    }
-}
-
-function View *
-GetActiveView(void)
-{
-    return GetView(editor->active_window->view);
-}
-
-function Buffer *
-GetActiveBuffer(void)
-{
-    return GetBuffer(GetView(editor->active_window->view)->buffer);
-}
 
 function void SplitWindow(Window *window, WindowSplitKind split);
 function void SetDebugDelay(int milliseconds, int frame_count);
