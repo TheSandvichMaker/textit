@@ -624,6 +624,7 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AddKeyword(lang, "template"_id, Token_Keyword);
     AddKeyword(lang, "typename"_id, Token_Keyword);
     AddKeyword(lang, "namespace"_id, Token_Keyword);
+    AddKeyword(lang, "auto"_id, Token_Keyword);
 
     AddKeyword(lang, "case"_id, Token_FlowControl);
     AddKeyword(lang, "default"_id, Token_FlowControl);

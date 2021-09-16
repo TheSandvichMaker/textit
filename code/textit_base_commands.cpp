@@ -1127,6 +1127,7 @@ COMMAND_PROC(NextJump)
     if (Jump *jump = NextJump(view))
     {
         JumpToLocation(view, jump->buffer, jump->pos);
+        view->center_view_next_time_we_calculate_scroll = true;
     }
 }
 
@@ -1140,6 +1141,7 @@ COMMAND_PROC(PreviousJump)
     }
     Jump jump = PreviousJump(view);
     JumpToLocation(view, jump.buffer, jump.pos);
+    view->center_view_next_time_we_calculate_scroll = true;
 }
 
 COMMAND_PROC(ResetCursors)
@@ -1253,7 +1255,9 @@ COMMAND_PROC(JumpToBufferEnd, "Jump to the end of the buffer"_str)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    SetCursor(view, buffer->count - 1);
+    int64_t jump_pos = buffer->count - 1;
+    jump_pos -= PeekNewlineBackward(buffer, jump_pos);
+    SetCursor(view, jump_pos);
 }
 
 MOVEMENT_PROC(MoveLeft)
@@ -1692,14 +1696,27 @@ COMMAND_PROC(PageUp)
 {
     View *view = GetActiveView();
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
-    MoveCursorRelative(view, MakeV2i(0, -Max(0, viewport_height - 4)));
+    int64_t scroll_amount = Max(0, viewport_height - 4);
+
+    view->scroll_at -= scroll_amount;
+    if (view->scroll_at < 0) view->scroll_at = 0;
+
+    view->adjust_cursor_to_view = true;
 }
 
 COMMAND_PROC(PageDown)
 {
     View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
     int64_t viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
-    MoveCursorRelative(view, MakeV2i(0, Max(0, viewport_height - 4)));
+    int64_t scroll_amount = Max(0, viewport_height - 4);
+
+    int64_t line_count = GetLineCount(buffer);
+
+    view->scroll_at += scroll_amount;
+    if (view->scroll_at > line_count) view->scroll_at = line_count;
+    
+    view->adjust_cursor_to_view = true;
 }
 
 COMMAND_PROC(BackspaceChar)

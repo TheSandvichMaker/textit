@@ -39,8 +39,8 @@ if "%TEXTIT_USE_LLVM%" equ "1" goto build_llvm
 
 :build_msvc
 echo COMPILER: CL
-cl code\textit.cpp       -DTEXTIT_BUILD_DLL=1 %FLAGS% %SANTIZE_FLAGS% %MSVC_FLAGS% /Fe"textit.dll" /LD /link %LINKER_FLAGS%
-cl code\win32_textit.cpp -DTEXTIT_BUILD_DLL=1 %FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_debug.exe" %LINKER_LIBRARIES% 
+cl code\textit.cpp       -DTEXTIT_BUILD_DLL=1 %FLAGS% %DEBUG_FLAGS% %MSVC_FLAGS% /Fe"textit.dll" /LD /link %LINKER_FLAGS%
+cl code\win32_textit.cpp -DTEXTIT_BUILD_DLL=1 %FLAGS% %DEBUG_FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_debug.exe" %LINKER_LIBRARIES% 
 echo built win32_textit_msvc_debug.exe
 del textit_lock.temp
 cl code\win32_textit.cpp code\textit.cpp %FLAGS% %RELEASE_FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_release.exe" /link %LINKER_FLAGS% %LINKER_LIBRARIES%

@@ -214,33 +214,89 @@ DrawWindows(Window *window)
     if (window->split == WindowSplit_Leaf)
     {
         View *view = GetView(window->view);
+        Buffer *buffer = GetBuffer(view);
 
-        int64_t estimated_viewport_height = view->actual_viewport_line_height;
-        if (!estimated_viewport_height)
+        int64_t estimated_viewport_line_height = view->actual_viewport_line_height;
+        if (!estimated_viewport_line_height)
         {
-            estimated_viewport_height = view->viewport.max.y - view->viewport.min.y - 3;
+            estimated_viewport_line_height = Max(0, view->viewport.max.y - view->viewport.min.y - 1);
         }
 
         {
-            int64_t top = view->scroll_at;
-            int64_t bot = view->scroll_at + estimated_viewport_height;
+            int64_t top = Max(0, view->scroll_at + core_config->view_autoscroll_margin);
+            int64_t bot = Max(0, view->scroll_at + estimated_viewport_line_height - 2 - core_config->view_autoscroll_margin);
 
-            Cursor *cursor = GetCursor(view);
-            BufferLocation loc = CalculateBufferLocationFromPos(GetBuffer(view), cursor->pos);
-
-            if (loc.line < top)
+            int64_t cursors_min_line = INT64_MAX;
+            int64_t cursors_max_line = INT64_MIN;
+            for (Cursor *cursor = IterateCursors(view);
+                 cursor;
+                 cursor = cursor->next)
             {
-                view->scroll_at += loc.line - top;
+                BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+                if (cursors_min_line > loc.line)
+                {
+                    cursors_min_line = loc.line;
+                }
+                if (cursors_max_line < loc.line)
+                {
+                    cursors_max_line = loc.line;
+                }
             }
-            if (loc.line > bot)
+
+            int64_t delta = 0;
+
+            if (cursors_min_line < top)
             {
-                view->scroll_at += loc.line - bot;
+                delta = cursors_min_line - top;
+            }
+            if (cursors_max_line > bot)
+            {
+                delta = cursors_max_line - bot;
+            }
+
+            if (view->adjust_cursor_to_view)
+            {
+                view->adjust_cursor_to_view = false;
+                for (Cursor *cursor = IterateCursors(view);
+                     cursor;
+                     cursor = cursor->next)
+                {
+                    int64_t pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, -delta)).pos;
+                    cursor->pos = pos;
+                }
+            }
+            else if (delta != 0)
+            {
+                view->scroll_at += delta;
+                if (delta < 0)
+                {
+                    if (view->scroll_at < 0) view->scroll_at = 0;
+                }
+                else
+                {
+                    int64_t maximum_viewport_line_height = Max(0, view->viewport.max.y - view->viewport.min.y - 1);
+                    int64_t line_count = GetLineCount(buffer);
+                    int64_t maximum_line = line_count - maximum_viewport_line_height;
+                    if (view->scroll_at > maximum_line) view->scroll_at = maximum_line;
+                }
             }
 
             if (view->center_view_next_time_we_calculate_scroll)
             {
+                int64_t cursor_count = 0;
+                int64_t line_mean = 0;
+                for (Cursor *cursor = IterateCursors(view);
+                     cursor;
+                     cursor = cursor->next)
+                {
+                    BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+                    cursor_count += 1;
+                    line_mean    += loc.line;
+                }
+                line_mean /= cursor_count;
+
                 view->center_view_next_time_we_calculate_scroll = false;
-                view->scroll_at = loc.line;
+                view->scroll_at = line_mean - estimated_viewport_line_height / 2;
             }
         }
 

@@ -562,6 +562,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         {
             DrawGlyph(MakeV2i(top_left.x, y), '~', text_foreground_dimmer, text_background);
         }
+        actual_line_height += bounds.max.y - (top_left.y + row) + 1;
     }
 
     return actual_line_height;
@@ -629,6 +630,9 @@ DrawView(View *view, bool is_active_window)
     }
 
     String right_string = PushTempStringF("[%.*s] %lld%% %lld:%lld ", StringExpand(buffer->language->name), line_percentage, loc.line + 1, loc.col);
+#if TEXTIT_INTERNAL
+    right_string = PushTempStringF("*DEBUG BUILD* %.*s", StringExpand(right_string));
+#endif
 
     int cursor_count = 0;
     for (Cursor *it_cursor = IterateCursors(view); it_cursor; it_cursor = it_cursor->next)

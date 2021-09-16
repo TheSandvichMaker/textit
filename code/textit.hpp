@@ -70,7 +70,8 @@ enum EditMode
     X(_, int,    font_size                       = 15)             \
     X(_, bool,   use_cached_cleartype_blend      = true)           \
     X(_, bool,   auto_line_comments              = true)           \
-    X(_, String, theme_name                      = "textit-light"_str)
+    X(_, String, theme_name                      = "textit-light"_str) \
+    X(_, int,    view_autoscroll_margin          = 1)
 DeclareIntrospectedStruct(CoreConfig);
 GLOBAL_STATE(CoreConfig, core_config);
 

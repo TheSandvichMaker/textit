@@ -23,7 +23,7 @@ FreeTokenBlock(Buffer *buffer, TokenBlock *block)
 //
 
 function TokenLocator
-LocateTokenAtPos(LineInfo *info, int64_t pos)
+LocateTokenAtPos(LineInfo *info, int64_t pos, bool include_whitespace = false)
 {
     TokenLocator result = {};
 
@@ -37,7 +37,7 @@ LocateTokenAtPos(LineInfo *info, int64_t pos)
         for (int64_t index = 0; index < block->token_count; index += 1)
         {
             Token *token = &block->tokens[index];
-            if (token->kind != Token_Whitespace && (at_pos + token->length > pos))
+            if ((include_whitespace || token->kind != Token_Whitespace) && (at_pos + token->length > pos))
             {
                 result.block = block;
                 result.index = index;
@@ -52,7 +52,7 @@ LocateTokenAtPos(LineInfo *info, int64_t pos)
 }
 
 function bool
-ValidateTokenLocatorIntegrity(TokenLocator locator)
+ValidateTokenLocatorIntegrity(TokenLocator locator, bool include_whitespace)
 {
     if (!IsValid(locator))
     {
@@ -63,7 +63,7 @@ ValidateTokenLocatorIntegrity(TokenLocator locator)
 
     LineInfo info;
     FindLineInfoByPos(buffer, locator.pos, &info);
-    TokenLocator test_locator = LocateTokenAtPos(&info, locator.pos);
+    TokenLocator test_locator = LocateTokenAtPos(&info, locator.pos, include_whitespace);
     
     Assert(test_locator.block == locator.block);
     Assert(test_locator.index == locator.index);
@@ -91,7 +91,7 @@ IterateTokens(TokenLocator locator)
     Rewind(&it, locator);
 
 #if TEXTIT_SLOW
-    ValidateTokenLocatorIntegrity(locator);
+    ValidateTokenLocatorIntegrity(locator, it.include_whitespace);
 #endif
 
     return it;
@@ -196,7 +196,7 @@ LocateNext(TokenIterator *it, int offset = 1)
             Token *t = &block->tokens[index];
             length = t->length;
 
-            if (offset <= 0 && t->kind != Token_Whitespace)
+            if (offset <= 0 && (it->include_whitespace || t->kind != Token_Whitespace))
             {
                 break;
             }
@@ -212,7 +212,7 @@ LocateNext(TokenIterator *it, int offset = 1)
     result.pos   = pos;
 
 #if TEXTIT_SLOW
-    ValidateTokenLocatorIntegrity(it->buffer, result);
+    ValidateTokenLocatorIntegrity(result, it->include_whitespace);
     it->iteration_index += 1;
 #endif
 
@@ -275,7 +275,7 @@ LocatePrev(TokenIterator *it, int offset = 1)
 
             pos -= length;
 
-            if (offset <= 0 && t->kind != Token_Whitespace)
+            if (offset <= 0 && (it->include_whitespace || t->kind != Token_Whitespace))
             {
                 break;
             }
@@ -291,7 +291,7 @@ LocatePrev(TokenIterator *it, int offset = 1)
     result.pos   = pos;
 
 #if TEXTIT_SLOW
-    ValidateTokenLocatorIntegrity(it->buffer, result);
+    ValidateTokenLocatorIntegrity(result, it->include_whitespace);
     it->iteration_index += 1;
 #endif
 
@@ -393,9 +393,16 @@ GetTokenAt(Buffer *buffer, int64_t pos, GetTokenFlags flags = 0)
 }
 
 function bool
-ValidateTokenIteration(Buffer *buffer)
+ValidateTokenIteration(Buffer *)
 {
+    return true;
+
+    // TODO: Reimplement
+
+#if 0
     TokenIterator it = IterateTokens(buffer);
+    it.include_whitespace = true;
+
     while (IsValidForward(&it))
     {
         Next(&it);
@@ -406,6 +413,8 @@ ValidateTokenIteration(Buffer *buffer)
         Prev(&it);
     }
     Assert(it.token.pos == 0);
+    return true;
+#endif
 }
 
 //

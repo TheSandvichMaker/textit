@@ -179,6 +179,7 @@ struct TokenIterator
     TokenBlock    *block;
     int64_t        index;
     Token          token;
+    bool           include_whitespace;
 };
 
 typedef int GetTokenFlags;

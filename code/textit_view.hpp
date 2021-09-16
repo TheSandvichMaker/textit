@@ -21,6 +21,7 @@ struct View
     int64_t repeat_value;
 
     bool center_view_next_time_we_calculate_scroll; // terrible
+    bool adjust_cursor_to_view; // terrible
 
     Rect2i viewport;
     int64_t actual_viewport_line_height;

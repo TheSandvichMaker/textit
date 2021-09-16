@@ -146,6 +146,13 @@ MoveCursorRelative(View *view, V2i delta)
 }
 
 function void
+MoveCursorRelative(View *view, Cursor *cursor, V2i delta)
+{
+    int64_t pos = CalculateRelativeMove(GetBuffer(view), cursor, delta).pos;
+    SetCursor(cursor, pos);
+}
+
+function void
 SaveJump(View *view, BufferID buffer_id, int64_t pos)
 {
     Buffer *buffer = GetBuffer(buffer_id);

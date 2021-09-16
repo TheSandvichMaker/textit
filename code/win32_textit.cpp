@@ -1269,7 +1269,7 @@ D3D_Initialize(HWND window)
         swap_chain_desc.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         swap_chain_desc.BufferCount        = 2;
         swap_chain_desc.Scaling            = DXGI_SCALING_NONE;
-        swap_chain_desc.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        swap_chain_desc.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
         swap_chain_desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
         swap_chain_desc.Flags              = 0;
 

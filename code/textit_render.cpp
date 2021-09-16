@@ -222,9 +222,9 @@ BlitBitmapSubpixelBlend(Bitmap *dest, Bitmap *source, V2i p, Color blend_color)
             float source_g = 1.0f - (1.0f / 255.0f)*source_color.g;
             float source_b = 1.0f - (1.0f / 255.0f)*source_color.b;
 
-            float dest_r   = (1.0f / 255.0f)*dest_color.r;
-            float dest_g   = (1.0f / 255.0f)*dest_color.g;
-            float dest_b   = (1.0f / 255.0f)*dest_color.b;
+            float dest_r = (1.0f / 255.0f)*dest_color.r;
+            float dest_g = (1.0f / 255.0f)*dest_color.g;
+            float dest_b = (1.0f / 255.0f)*dest_color.b;
 
             Color blend;
             blend.r = (uint8_t)(255.0f*((1.0f - source_r)*dest_r + source_r*blend_r));
