@@ -6,15 +6,18 @@ struct Prediction
     String text;
     String preview_text;
     StringID color;
+    uint8_t quickselect_char;
     bool incomplete;
+    void *userdata;
 };
 
 function Prediction
-MakePrediction(String text, StringID color = "command_line_option"_id)
+MakePrediction(String text, StringID color = "command_line_option"_id, uint8_t quickselect_char = 0)
 {
     Prediction result = {};
-    result.text     = text;
-    result.color    = color;
+    result.text  = text;
+    result.color = color;
+    result.quickselect_char = quickselect_char;
     return result;
 }
 
@@ -61,7 +64,7 @@ function void EndAllCommandLines();
 function bool HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event);
 function String GetCommandString(CommandLine *cl);
 function bool AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key = 0);
-function Prediction *GetPrediction(CommandLine *cl, int index);
+function Prediction *GetPrediction(CommandLine *cl, int index = -1);
 
 function void
 Terminate(CommandLine *cl)

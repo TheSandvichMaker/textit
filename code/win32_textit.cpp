@@ -70,9 +70,7 @@ Win32_NextEvent(PlatformEventIterator *it, PlatformEvent *out_event)
 {
     bool result = false;
 
-    static uint32_t last_event_index = UINT32_MAX;
-
-    uint32_t write_index = win32_state.working_write_index;
+    uint32_t write_index = win32_state.working_event_write_index;
     while (it->index != write_index)
     {
         int event_index = it->index % ArrayCount(win32_state.events);
@@ -114,6 +112,13 @@ Win32_PushEvent(PlatformEvent *event)
 
         win32_state.event_write_index = write_index + 1;
     }
+}
+
+function void
+Win32_CycleEvents()
+{
+    win32_state.event_read_index = win32_state.working_event_write_index;
+    win32_state.working_event_write_index = win32_state.event_write_index;
 }
 
 static void
@@ -2210,8 +2215,6 @@ Win32_AppThread(LPVOID userdata)
             should_resize = true;
         }
 
-        win32_state.working_write_index = win32_state.event_write_index;
-
         if (g_use_d3d)
         {
             platform->backbuffer.bitmap = D3D_AcquireCpuBuffer(platform->render_w, platform->render_h);
@@ -2230,6 +2233,7 @@ Win32_AppThread(LPVOID userdata)
 
             PlatformHighResTime start = platform->GetTime();
 
+            Win32_CycleEvents();
 #if TEXTIT_BUILD_DLL
             app_code->UpdateAndRender(platform);
 #else
@@ -2340,8 +2344,6 @@ Win32_AppThread(LPVOID userdata)
         {
             platform->dt = 1.0f / 15.0f;
         }
-
-        win32_state.event_read_index = win32_state.working_write_index;
 
 #if TEXTIT_BUILD_DLL
         uint64_t last_write_time = Win32_GetLastWriteTime(win32_state.dll_path);

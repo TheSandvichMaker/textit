@@ -58,6 +58,8 @@ LoadDefaultBindings()
     BindCommand(command, 'U',                      Modifier_None,                "UndoOnce"_str);
     BindCommand(command, 'R',                      Modifier_Ctrl,                "RedoOnce"_str);
 
+    BindCommand(command, PlatformInputCode_Space,  Modifier_None,                "QuickActionMenu"_str);
+
     BindCommand(command, 'A',                      Modifier_Ctrl,                "AlignCursors"_str);
     BindCommand(command, 'A',                      Modifier_Ctrl|Modifier_Shift, "UnalignCursors"_str);
 

@@ -753,7 +753,11 @@ DrawCommandLines()
                 color = color_selected;
             }
 
-            if (i < 9 + 26)
+            if (prediction->quickselect_char)
+            {
+                DrawText(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", prediction->quickselect_char), color_numbers, overlay_background);
+            }
+            else if (i < 9 + 26)
             {
                 int c = (i < 9 ? '1' + i : 'A' + i - 9);
                 DrawText(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);

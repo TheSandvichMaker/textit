@@ -53,23 +53,23 @@ enum EditMode
     EditMode_COUNT,
 };
 
-#define CoreConfig(_, X)                                           \
-    X(_, bool,   visualize_newlines              = false)          \
-    X(_, bool,   right_align_visualized_newlines = false)          \
-    X(_, bool,   visualize_whitespace            = false)          \
-    X(_, bool,   show_line_numbers               = false)          \
-    X(_, bool,   incremental_parsing             = false)          \
-    X(_, bool,   show_scrollbar                  = false)          \
-    X(_, bool,   indent_with_tabs                = true)           \
-    X(_, int,    indent_width                    = 4)              \
-    X(_, bool,   syntax_highlighting             = true)           \
-    X(_, bool,   debug_show_glyph_cache          = false)          \
-    X(_, bool,   debug_show_line_index           = false)          \
-    X(_, bool,   debug_show_jump_history         = false)          \
-    X(_, String, font_name                       = "Consolas"_str) \
-    X(_, int,    font_size                       = 15)             \
-    X(_, bool,   use_cached_cleartype_blend      = true)           \
-    X(_, bool,   auto_line_comments              = true)           \
+#define CoreConfig(_, X)                                               \
+    X(_, bool,   visualize_newlines              = false)              \
+    X(_, bool,   right_align_visualized_newlines = false)              \
+    X(_, bool,   visualize_whitespace            = false)              \
+    X(_, bool,   show_line_numbers               = false)              \
+    X(_, bool,   incremental_parsing             = false)              \
+    X(_, bool,   show_scrollbar                  = false)              \
+    X(_, bool,   indent_with_tabs                = true)               \
+    X(_, int,    indent_width                    = 4)                  \
+    X(_, bool,   syntax_highlighting             = true)               \
+    X(_, bool,   debug_show_glyph_cache          = false)              \
+    X(_, bool,   debug_show_line_index           = false)              \
+    X(_, bool,   debug_show_jump_history         = false)              \
+    X(_, String, font_name                       = "Consolas"_str)     \
+    X(_, int,    font_size                       = 15)                 \
+    X(_, bool,   use_cached_cleartype_blend      = true)               \
+    X(_, bool,   auto_line_comments              = true)               \
     X(_, String, theme_name                      = "textit-light"_str) \
     X(_, int,    view_autoscroll_margin          = 1)
 DeclareIntrospectedStruct(CoreConfig);

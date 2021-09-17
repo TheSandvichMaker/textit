@@ -74,10 +74,12 @@ AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key)
     {
         int index = cl->prediction_count++;
         Prediction *dest = &cl->predictions[index];
-        dest->text         = PushString(cl->arena, prediction.text);
-        dest->preview_text = (prediction.preview_text.size ? PushString(cl->arena, prediction.preview_text) : dest->text);
-        dest->color        = prediction.color;
-        dest->incomplete   = prediction.incomplete;
+        dest->text             = PushString(cl->arena, prediction.text);
+        dest->preview_text     = (prediction.preview_text.size ? PushString(cl->arena, prediction.preview_text) : dest->text);
+        dest->color            = prediction.color;
+        dest->quickselect_char = ToUpperAscii(prediction.quickselect_char);
+        dest->incomplete       = prediction.incomplete;
+        dest->userdata         = prediction.userdata;
         cl->sort_keys[index].key = sort_key;
         return true;
     }
@@ -88,6 +90,7 @@ AddPrediction(CommandLine *cl, const Prediction &prediction, uint32_t sort_key)
 function Prediction *
 GetPrediction(CommandLine *cl, int index)
 {
+    if (index == -1) index = cl->prediction_selected_index;
     if (index <  0)                    index = 0;
     if (index >= cl->prediction_count) index = cl->prediction_count - 1;
     return &cl->predictions[cl->sort_keys[index].index];
@@ -118,36 +121,57 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
         {
             String text = GetText(event);
 
-            for (size_t i = 0; i < text.size; i += 1)
+            bool handled_quickselect = false;
+            for (int i = 0; i < cl->prediction_count; i += 1)
             {
-                if (IsPrintableAscii(text.data[i]))
+                Prediction *pred = &cl->predictions[i];
+                if (pred->quickselect_char == ToUpperAscii(text[0]))
                 {
+                    cl->prediction_selected_index = i;
                     AcceptPrediction(cl);
+                    bool terminate = cl->AcceptEntry(cl);
+                    if (terminate && !editor->changed_command_line)
+                    {
+                        EndAllCommandLines();
+                    }
+                    handled_quickselect = true;
                     break;
                 }
             }
 
-            for (size_t i = 0; i < text.size; i += 1)
+            if (!handled_quickselect)
             {
-                if (IsPrintableAscii(text.data[i]))
+                for (size_t i = 0; i < text.size; i += 1)
                 {
-                    cl->cycling_predictions = false;
-
-                    size_t left = ArrayCount(cl->text) - cl->count;
-                    if (left > 0)
+                    if (IsPrintableAscii(text.data[i]))
                     {
-                        memmove(cl->text + cl->cursor + 1,
-                                cl->text + cl->cursor,
-                                left);
-                        cl->text[cl->cursor++] = text.data[i];
-                        cl->count += 1;
+                        AcceptPrediction(cl);
+                        break;
                     }
                 }
-            }
 
-            if (cl->OnText && text[0] != '\n')
-            {
-                text = cl->OnText(cl, text);
+                if (cl->OnText && text[0] != '\n')
+                {
+                    text = cl->OnText(cl, text);
+                }
+
+                for (size_t i = 0; i < text.size; i += 1)
+                {
+                    if (IsPrintableAscii(text.data[i]))
+                    {
+                        cl->cycling_predictions = false;
+
+                        size_t left = ArrayCount(cl->text) - cl->count;
+                        if (left > 0)
+                        {
+                            memmove(cl->text + cl->cursor + 1,
+                                    cl->text + cl->cursor,
+                                    left);
+                            cl->text[cl->cursor++] = text.data[i];
+                            cl->count += 1;
+                        }
+                    }
+                }
             }
         }
         else if (event->type == PlatformEvent_KeyDown)
@@ -361,51 +385,60 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
             }
         }
 
-        if (handled_event &&
-            !cl->cycling_predictions &&
-            cl->GatherPredictions)
+        CommandLine *top_cl = editor->command_lines[editor->command_line_count - 1];
+
+        auto ClPostEvent = [](CommandLine *cl)
         {
-            cl->prediction_overflow = false;
-            cl->prediction_count = 0;
-            cl->prediction_index = 0;
-            cl->prediction_selected_index = -1;
-            ZeroArray(ArrayCount(cl->sort_keys), cl->sort_keys);
-
-            Clear(cl->arena);
-            cl->GatherPredictions(cl);
-
-            String cl_string = TrimSpaces(MakeString(cl->count, cl->text));
-
-            SortKey *sort_keys = cl->sort_keys;
-            SortKey temp_sort_keys[35];
-            for (int i = 0; i < cl->prediction_count; i += 1)
+            if (!cl->cycling_predictions &&
+                cl->GatherPredictions)
             {
-                Prediction *prediction = &cl->predictions[i];
-                if (cl->sort_by_edit_distance)
+                cl->prediction_overflow = false;
+                cl->prediction_count = 0;
+                cl->prediction_index = 0;
+                cl->prediction_selected_index = -1;
+                ZeroArray(ArrayCount(cl->sort_keys), cl->sort_keys);
+
+                Clear(cl->arena);
+                cl->GatherPredictions(cl);
+
+                String cl_string = TrimSpaces(MakeString(cl->count, cl->text));
+
+                SortKey *sort_keys = cl->sort_keys;
+                SortKey temp_sort_keys[35];
+                for (int i = 0; i < cl->prediction_count; i += 1)
                 {
-                    sort_keys[i].key = CalculateEditDistance(cl_string, prediction->preview_text);
+                    Prediction *prediction = &cl->predictions[i];
+                    if (cl->sort_by_edit_distance)
+                    {
+                        sort_keys[i].key = CalculateEditDistance(cl_string, prediction->preview_text);
+                    }
+                    if (!AreEqual(cl_string, prediction->preview_text, StringMatch_CaseInsensitive) &&
+                        !AreEqual(cl_string, prediction->text,         StringMatch_CaseInsensitive))
+                    {
+                        sort_keys[i].key += 100;
+                    }
+                    sort_keys[i].index = i;
                 }
-                if (!AreEqual(cl_string, prediction->preview_text, StringMatch_CaseInsensitive) &&
-                    !AreEqual(cl_string, prediction->text,         StringMatch_CaseInsensitive))
+                if (cl_string.size > 0)
                 {
-                    sort_keys[i].key += 100;
+                    RadixSort(cl->prediction_count, sort_keys, temp_sort_keys);
                 }
-                sort_keys[i].index = i;
-            }
-            if (cl_string.size > 0)
-            {
-                RadixSort(cl->prediction_count, sort_keys, temp_sort_keys);
+
+                if (cl->prediction_index > cl->prediction_count)
+                {
+                    cl->prediction_index = cl->prediction_count;
+                }
             }
 
-            if (cl->prediction_index > cl->prediction_count)
+            if (cl->terminate)
             {
-                cl->prediction_index = cl->prediction_count;
+                EndAllCommandLines();
             }
-        }
+        };
 
-        if (cl->terminate)
+        if (handled_event && top_cl)
         {
-            EndAllCommandLines();
+            ClPostEvent(top_cl);
         }
 
         handled_any_events |= handled_event;

@@ -297,6 +297,12 @@ DrawWindows(Window *window)
 
                 view->center_view_next_time_we_calculate_scroll = false;
                 view->scroll_at = line_mean - estimated_viewport_line_height / 2;
+
+                int64_t maximum_viewport_line_height = Max(0, view->viewport.max.y - view->viewport.min.y - 1);
+                int64_t line_count = GetLineCount(buffer);
+                int64_t maximum_line = line_count - maximum_viewport_line_height;
+                if (view->scroll_at < 0) view->scroll_at = 0;
+                if (view->scroll_at > maximum_line) view->scroll_at = maximum_line;
             }
         }
 

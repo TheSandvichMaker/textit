@@ -103,7 +103,7 @@ struct Win32State
 
     uint32_t event_read_index;
     uint32_t event_write_index;
-    uint32_t working_write_index;
+    uint32_t working_event_write_index;
     PlatformEvent null_event;
     PlatformEvent events[4096];
 };

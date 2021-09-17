@@ -636,6 +636,78 @@ COMMAND_PROC(SetFontSize,
     };
 }
 
+COMMAND_PROC(FilesMenu,
+             "Open the files menu"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Files"_str;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+
+        auto AddOption = [string, cl](String option_name, uint8_t quickselect_char, String command_name)
+        {
+            if (FindSubstring(option_name, string, StringMatch_CaseInsensitive) != option_name.size)
+            {
+                Prediction pred = {};
+                pred.text             = option_name;
+                pred.quickselect_char = quickselect_char;
+                pred.userdata         = FindCommand(command_name);
+                AddPrediction(cl, pred);
+            }
+        };
+
+        AddOption("Close Window"_str, 'Q', "DestroyWindow"_str);
+        AddOption("Open File"_str, 'E', "OpenFile"_str);
+        AddOption("Open Buffer"_str, 'B', "OpenBuffer"_str);
+        AddOption("Save Buffer"_str, 'W', "SaveBuffer"_str);
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+        Prediction *pred = GetPrediction(cl);
+        Command *command = (Command *)pred->userdata;
+        ExecuteCommand(GetActiveView(), command);
+        return true;
+    };
+}
+
+COMMAND_PROC(QuickActionMenu,
+             "Open the quick action menu"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Quick Action"_str;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+
+        auto AddOption = [string, cl](String option_name, uint8_t quickselect_char, String command_name)
+        {
+            if (FindSubstring(option_name, string, StringMatch_CaseInsensitive) != option_name.size)
+            {
+                Prediction pred = {};
+                pred.text             = option_name;
+                pred.quickselect_char = quickselect_char;
+                pred.userdata         = FindCommand(command_name);
+                AddPrediction(cl, pred);
+            }
+        };
+
+        AddOption("Files"_str, 'F', "FilesMenu"_str);
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+        Prediction *pred = GetPrediction(cl);
+        Command *command = (Command *)pred->userdata;
+        ExecuteCommand(GetActiveView(), command);
+        return true;
+    };
+}
 COMMAND_PROC(GoToFileUnderCursor,
              "Go to the file under the cursor, if there is one"_str,
              Command_Jump)
@@ -702,7 +774,8 @@ COMMAND_PROC(Tags,
                                                               StringExpand(sub_kind_name), 
                                                               StringExpand(kind_name), 
                                                               StringExpand(buffer->name),
-                                                              line);
+                                                              line + 1);
+                    prediction.userdata = tag;
                     if (!AddPrediction(cl, prediction))
                     {
                         break;
@@ -717,15 +790,14 @@ COMMAND_PROC(Tags,
         String string = GetCommandString(cl);
 
         View *view = GetActiveView();
-        Buffer *buffer = GetBuffer(view);
 
-        // TODO: How do we know which tag you really wanted?
-        ScopedMemory temp;
-        if (Tag *tag = PushTagsWithName(temp, buffer->project, string))
-        {
-            JumpToLocation(view, tag->buffer, tag->pos);
-            view->center_view_next_time_we_calculate_scroll = true; // this is terrible
-        }
+        Prediction *pred = GetPrediction(cl);
+        Tag *tag = (Tag *)pred->userdata;
+
+        SaveJump(view, view->buffer, GetCursor(view)->pos);
+
+        JumpToLocation(view, tag->buffer, tag->pos);
+        view->center_view_next_time_we_calculate_scroll = true; // this is terrible
 
         return true;
     };

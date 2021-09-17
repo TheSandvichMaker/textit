@@ -220,7 +220,7 @@ HandleViewEvent(ViewID view_id, PlatformEvent *event)
 {
     bool result = true;
 
-    View *view = GetView(view_id);
+    View   *view   = GetView(view_id);
     Buffer *buffer = GetBuffer(view);
 
     BindingMap *bindings = &editor->bindings[editor->edit_mode];
