@@ -29,10 +29,10 @@
 #include "textit_language_lua.cpp"
 
 // things missing:
-// local search and replace
+// local search and replace (specifically the replace part)
 // autocomplete of any kind
 // multiple cursors -- needs to be thought about implementation robustness
-// project wide search (and replace)
+// project wide search and replace
 // not making undo history take up one billion megabytes, have a way to flush it to disk
 // undo tree visualization / ux (I mean that was supposed to be a thing)
 // yank behaviour (yank inner vs outer / yank on delete / etc)

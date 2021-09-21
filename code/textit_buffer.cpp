@@ -47,7 +47,6 @@ BeginOpenBufferFromFile(String filename, BufferFlags flags, bool *already_exists
         if (AreEqual(buffer->full_path, full_path))
         {
             if (already_exists) *already_exists = true;
-            buffer->flags = flags;
             return buffer;
         }
     }
@@ -758,6 +757,7 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
             cursor->selection.outer.end   = ApplyPositionDelta(cursor->selection.outer.end,   pos, delta);
         }
 
+		// TODO: Test if this behaves correctly
         for (uint32_t jump_index = OldestJumpIndex(view); jump_index < view->jump_top; jump_index += 1)
         {
             Jump *jump = GetJump(view, jump_index);

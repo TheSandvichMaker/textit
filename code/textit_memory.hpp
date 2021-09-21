@@ -45,8 +45,11 @@ Release(Arena *arena)
     if (arena->capacity)
     {
         Assert(arena->temp_count == 0);
-        platform->DeallocateMemory(arena->base);
+		
+        char *base = arena->base;
         ZeroStruct(arena);
+		
+        platform->DeallocateMemory(base);
     }
 }
 

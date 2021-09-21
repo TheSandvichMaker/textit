@@ -156,7 +156,7 @@ COMMAND_PROC(OpenBuffer,
         String name = SplitExtension(leaf, &ext);
 
         // FindSubstring implementation is limited to patterns smaller than bit count of size_t
-        // so for now I'll just do this
+        // so for now I'll just do this, but this should be handled by the function instead.
         size_t size_bits = 8*sizeof(size_t);
         if (ext.size  >= size_bits) ext.size  = size_bits - 1;
         if (name.size >= size_bits) name.size = size_bits - 1;
@@ -181,6 +181,7 @@ COMMAND_PROC(OpenBuffer,
 
                 Prediction prediction = {};
                 prediction.text = buffer->name;
+				prediction.userdata = buffer;
                 // TODO: Undumb
                 if (buffer->project != active_project)
                 {
@@ -197,7 +198,7 @@ COMMAND_PROC(OpenBuffer,
                                                                   StringExpand(buffer->name), 
                                                                   StringExpand(buffer->project->root));
                     }
-                    prediction.color        = "command_line_option_directory"_id;
+                    prediction.color = "command_line_option_directory"_id;
                 }
                 else if (non_standard_language)
                 {
@@ -216,18 +217,10 @@ COMMAND_PROC(OpenBuffer,
 
     cl->AcceptEntry = [](CommandLine *cl)
     {
-        String string = GetCommandString(cl);
-
-        for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))
-        {
-            Buffer *buffer = it.buffer;
-            if (AreEqual(buffer->name, string))
-            {
-                View *view = GetActiveView();
-                view->next_buffer = buffer->id;
-                return true;
-            }
-        }
+		Prediction *prediction = GetPrediction(cl);
+		Buffer *buffer = (Buffer *)prediction->userdata;
+        View *view = GetActiveView();
+        view->next_buffer = buffer->id;
         return true;
     };
 }
