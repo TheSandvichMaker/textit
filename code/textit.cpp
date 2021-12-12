@@ -443,6 +443,8 @@ AppUpdateAndRender(Platform *platform_)
 
         platform->PushTickEvent();
         platform->app_initialized = true;
+
+        platform->DebugPrint("boop->chad: %d, lizard->chad: %d\n", CalculateEditDistance("boop"_str, "chad"_str), CalculateEditDistance("lizard"_str, "chard"_str));
     }
 
     editor->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);

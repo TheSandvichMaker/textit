@@ -98,6 +98,7 @@ LoadDefaultDarkTheme()
     SetThemeColor(theme, "text_string_special"_id, MakeColor(255, 128, 64));
     SetThemeColor(theme, "text_number"_id, MakeColor(64, 192, 255));
     SetThemeColor(theme, "text_literal"_id, MakeColor(192, 212, 255));
+	SetThemeColor(theme, "text_global"_id, MakeColor(245, 215, 196));
     SetThemeColor(theme, "text_function"_id, MakeColor(128, 196, 255));
     SetThemeColor(theme, "text_unknown_function"_id, MakeColor(192, 212, 255));
     SetThemeColor(theme, "text_macro"_id, MakeColor(224, 128, 224), TextStyle_Bold);

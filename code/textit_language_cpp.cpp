@@ -408,6 +408,22 @@ ConsumeCppType(TagParser *parser)
            ConsumeToken(parser, Token_Keyword, "volatile"_str) ||
            ConsumeToken(parser, '*')                           ||
            ConsumeToken(parser, '&'));
+	
+	if (ConsumeToken(parser, '['))
+	{
+		for (;;)
+		{
+			if (!TokensLeft(parser)) goto bail;
+			if (ConsumeToken(parser, ']'))
+			{
+				break;
+			}
+			else
+			{
+				Advance(parser);
+			}
+		}
+	}
 
     result = true;
 
@@ -452,10 +468,19 @@ ParseTagsCpp(Buffer *buffer)
     TagParser parser_;
     TagParser *parser = &parser_;
     InitializeTagParser(parser, buffer);
+	
+	// NestHelper scope_nest = {};
 
     while (TokensLeft(parser))
     {
         ScopedMemory temp;
+		
+		// Token peek_t = PeekToken(parser);
+		// if (IsInNest(&scope_nest, peek_t.kind, Direction_Forward))
+		// {
+		// 	Advance(parser);
+		// 	continue;
+		// }
 
         SetFlags(parser, 0, TokenFlag_IsComment|TokenFlag_IsPreprocessor);
         TagSubKind match_kind = Tag_C_None;
@@ -496,6 +521,10 @@ ParseTagsCpp(Buffer *buffer)
                             }
                         }
                     }
+                    else
+                    {
+                        ConsumeUpToAndIncluding(parser, Token_RightScope);
+                    }
                 }
             }
         }
@@ -521,7 +550,8 @@ ParseTagsCpp(Buffer *buffer)
         }
         else if (ConsumeCppType(parser)) // TODO: More robust function parsing
         {
-            if (Token t = ConsumeToken(parser, Token_Function))
+			Token t = {};
+            if (t = ConsumeToken(parser, Token_Function))
             {
                 Tag *tag = AddTag(buffer, &t);
                 tag->kind     = Tag_Declaration;
@@ -532,6 +562,24 @@ ParseTagsCpp(Buffer *buffer)
                     tag->kind = Tag_Definition;
                 }
             }
+			/*
+			else if (t = ConsumeToken(parser, Token_Identifier))
+			{
+                if (t = ConsumeToken(parser, ';'))
+                {
+                    Tag *tag = AddTag(buffer, &t);
+                    tag->kind     = Tag_Declaration;
+                    tag->sub_kind = Tag_C_Global;
+                }
+                else if (t = ConsumeToken(parser, '='))
+                {
+                    Tag *tag = AddTag(buffer, &t);
+                    tag->kind     = Tag_Declaration;
+                    tag->sub_kind = Tag_C_Global;
+                    if (t.kind == '=') ConsumeUpToAndIncluding(parser, ';');
+                }
+			}
+			*/
         }
         else if (SetFlags(parser, TokenFlag_IsPreprocessor, TokenFlag_IsComment), ConsumeToken(parser, Token_Preprocessor))
         {
@@ -584,6 +632,7 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AddTagSubKind(lang, Tag_C_Macro,         "macro"_str,          "text_macro"_id);
     AddTagSubKind(lang, Tag_C_FunctionMacro, "function-macro"_str, "text_function_macro"_id);
     AddTagSubKind(lang, Tag_Cpp_Class,       "class"_str,          "text_type"_id);
+	AddTagSubKind(lang, Tag_C_Global,        "global-variable"_str, "text_global"_id);
 
     AddOperator(lang, "{"_str, Token_LeftScope);
     AddOperator(lang, "}"_str, Token_RightScope);

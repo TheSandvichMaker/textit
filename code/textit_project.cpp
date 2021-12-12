@@ -155,7 +155,7 @@ CreateProject(String search_start)
         Tags *tags = buffer->tags;
         for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
         {
-            Tag **slot = &project->tag_table[tag->hash.u32[0] % ArrayCount(project->tag_table)];
+            Tag **slot = &project->tag_table[tag->hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
             tag->next_in_hash = *slot;
             *slot = tag;
         }

@@ -24,7 +24,7 @@ FreeTag(Buffer *buffer, Tag *tag)
 function Tag **
 GetTagSlot(Project *project, Tag *tag)
 {
-    Tag **result = &project->tag_table[tag->hash.u32[0] % ArrayCount(project->tag_table)];
+    Tag **result = &project->tag_table[tag->hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
     while (*result && *result != tag)
     {
         result = &(*result)->next_in_hash;
@@ -45,7 +45,7 @@ AddTagInternal(Buffer *buffer, String name)
 
     if (!project->opening)
     {
-        Tag **slot = &project->tag_table[hash.u32[0] % ArrayCount(project->tag_table)];
+        Tag **slot = &project->tag_table[hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
         result->next_in_hash = *slot;
         *slot = result;
     }
@@ -99,7 +99,7 @@ PushTagsWithName(Arena *arena, Project *project, String name)
 
     Tag *result = nullptr;
 
-    Tag *tag = project->tag_table[hash.u32[0] % ArrayCount(project->tag_table)];
+    Tag *tag = project->tag_table[hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
     while (tag)
     {
         if (tag->hash == hash)
@@ -274,6 +274,38 @@ ConsumeBalancedPair(TagParser *parser, TokenKind left_kind)
     Rewind(parser, rewind);
 
     return false;
+}
+
+function bool
+ConsumeUpTo(TagParser *parser, TokenKind kind)
+{
+	TokenLocator rewind = GetLocator(parser);
+	
+	for (;;)
+	{
+		if (!TokensLeft(parser)) break;
+		
+		if (Token t = MatchToken(parser, kind))
+		{
+			return true;
+		}
+		Advance(parser);
+	}
+	
+	Rewind(parser, rewind);
+	
+	return false;
+}
+
+function bool
+ConsumeUpToAndIncluding(TagParser *parser, TokenKind kind)
+{
+	bool result = ConsumeUpTo(parser, kind);
+	if (result)
+	{
+		Advance(parser);
+	}
+	return result;
 }
 
 //

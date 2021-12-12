@@ -28,6 +28,7 @@ enum TagKind_C : TagSubKind
     Tag_C_Function,
     Tag_C_Macro,
     Tag_C_FunctionMacro,
+	Tag_C_Global,
 
     Tag_Cpp_Class,
 };

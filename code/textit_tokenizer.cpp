@@ -409,8 +409,10 @@ EndTokenizeLine(Tokenizer *tok, LineData *line, LineTokenizeState previous_line_
 function int64_t
 TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data)
 {
+	ScopedMemory temp;
+	
     Tokenizer tok_, *tok = &tok_;
-    BeginTokenizeLine(platform->GetTempArena(), tok, buffer, MakeRange(pos, buffer->count), previous_line_state);
+    BeginTokenizeLine(temp, tok, buffer, MakeRange(pos, buffer->count), previous_line_state);
 
     while (CharsLeft(tok))
     {

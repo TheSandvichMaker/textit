@@ -29,7 +29,6 @@ rem     set FLAGS=%FLAGS% %DEBUG_FLAGS%
 rem )
 
 if not exist ctm mkdir ctm
-misc\ctime.exe -begin ctm\textit.ctm
 
 echo I'm here to be depressed and I'm not out of that at all > textit_lock.temp
 
@@ -38,12 +37,16 @@ if not exist build mkdir build
 if "%TEXTIT_USE_LLVM%" equ "1" goto build_llvm
 
 :build_msvc
+misc\ctime.exe -begin ctm\textit_msvc_debug.ctm
 echo COMPILER: CL
 cl code\textit.cpp       -DTEXTIT_BUILD_DLL=1 %FLAGS% %DEBUG_FLAGS% %MSVC_FLAGS% /Fe"textit.dll" /LD /link %LINKER_FLAGS%
 cl code\win32_textit.cpp -DTEXTIT_BUILD_DLL=1 %FLAGS% %DEBUG_FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_debug.exe" %LINKER_LIBRARIES% 
+misc\ctime.exe -end ctm\textit_msvc_debug.ctm
 echo built win32_textit_msvc_debug.exe
 del textit_lock.temp
+misc\ctime.exe -begin ctm\textit_msvc_release.ctm
 cl code\win32_textit.cpp code\textit.cpp %FLAGS% %RELEASE_FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_release.exe" /link %LINKER_FLAGS% %LINKER_LIBRARIES%
+misc\ctime.exe -end ctm\textit_msvc_release.ctm
 echo built win32_textit_msvc_release.exe
 goto build_finished
 
@@ -61,5 +64,3 @@ del *.obj
 del *.ilk
 del *.exp
 del temp_textit_*.dll
-
-misc\ctime.exe -end ctm\textit.ctm

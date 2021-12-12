@@ -805,6 +805,12 @@ GetSizeLeft(StringContainer *container)
 }
 
 function bool
+IsEmpty(StringContainer *container)
+{
+    return container->size == 0;
+}
+
+function bool
 CanFitAppend(StringContainer *container, String string)
 {
     size_t left = container->capacity - container->size;

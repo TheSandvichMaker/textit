@@ -691,6 +691,38 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
+    {
+        ScopedRenderLayer layer(Layer_OverlayForeground);
+
+        PushRect(MakeRect2iMinMax(bounds.min.x, bounds.min.y, bounds.max.x, bounds.min.y + 1), COLOR_BLACK);
+
+        V2i p = MakeV2i(bounds.min.x, bounds.min.y);
+        p = DrawText(p, "Jump History: "_str, GetThemeColor("command_line_foreground"_id), COLOR_BLACK);
+        for (uint32_t i = OldestJumpIndex(view); i < view->jump_top; i += 1)
+        {
+            Jump *jump = GetJump(view, i);
+            Buffer *jump_buffer = GetBuffer(jump->buffer);
+            int64_t jump_line = GetLineNumber(jump_buffer, jump->pos);
+
+            Color color = GetThemeColor("command_line_option"_id);
+            if (view->jump_at == i) color = MakeColor(255, 0, 0);
+
+            String jump_name = PushTempStringF("%.*s l:%lld", StringExpand(jump_buffer->name), jump_line);
+            if (!IsEmpty(&jump->desc))
+            {
+                jump_name = jump->desc.as_string;
+            }
+
+            p = DrawText(p, jump_name, color, COLOR_BLACK);
+            p.x += 1;
+
+            if (i + 1 != view->jump_top)
+            {
+                p = DrawText(p, "> "_str, COLOR_WHITE, COLOR_BLACK);
+            }
+        }
+    }
+
     return actual_line_height;
 }
 

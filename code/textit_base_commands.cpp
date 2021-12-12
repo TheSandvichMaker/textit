@@ -787,7 +787,13 @@ COMMAND_PROC(Tags,
         Prediction *pred = GetPrediction(cl);
         Tag *tag = (Tag *)pred->userdata;
 
-        SaveJump(view, view->buffer, GetCursor(view)->pos);
+        Buffer *buffer = GetBuffer(tag->buffer);
+
+        ScopedMemory temp;
+
+        String name = PushBufferRange(temp, buffer, MakeRangeStartLength(tag->pos, tag->length));
+
+        SaveJump(view, view->buffer, GetCursor(view)->pos, name);
 
         JumpToLocation(view, tag->buffer, tag->pos);
         view->center_view_next_time_we_calculate_scroll = true; // this is terrible
@@ -1068,8 +1074,7 @@ MOVEMENT_PROC(RepeatLastSearchBackward, Movement_NoAutoRepeat)
 }
 
 COMMAND_PROC(GoToDefinitionUnderCursor,
-             "Go to the definition of the token under the cursor (type, function, file, etc)"_str,
-             Command_Jump)
+             "Go to the definition of the token under the cursor (type, function, file, etc)"_str)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
@@ -1093,7 +1098,12 @@ COMMAND_PROC(GoToDefinitionUnderCursor,
                     best_tag = tag;
                 }
             }
+
+            String tag_name = PushBufferRange(temp, GetBuffer(best_tag->buffer), MakeRangeStartLength(best_tag->pos, best_tag->length));
+
+            SaveJump(view, buffer->id, cursor->pos, tag_name);
             JumpToLocation(view, best_tag->buffer, best_tag->pos);
+
             view->center_view_next_time_we_calculate_scroll = true; // this is terrible
         }
     }
@@ -1202,7 +1212,6 @@ COMMAND_PROC(PreviousJump)
     if (view->jump_at + 1 > view->jump_top)
     {
         SaveJump(view, view->buffer, GetCursor(view)->pos);
-        PreviousJump(view);
     }
     Jump jump = PreviousJump(view);
     JumpToLocation(view, jump.buffer, jump.pos);
@@ -1607,7 +1616,7 @@ MOVEMENT_PROC(EncloseSurroundingParen, Movement_NoAutoRepeat)
     return SelectSurroundingNest(view, Token_LeftParen, Token_RightParen, false);
 }
 
-MOVEMENT_PROC(EncloseParameter)
+MOVEMENT_PROC(EncloseParameter, Movement_NoAutoRepeat)
 {
     View   *view   = GetActiveView();
     Buffer *buffer = GetBuffer(view);

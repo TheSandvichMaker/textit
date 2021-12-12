@@ -7,6 +7,9 @@ struct Jump
 {
     BufferID buffer;
     int64_t  pos;
+
+    StringContainer desc;
+    uint8_t desc_storage[256];
 };
 
 struct View

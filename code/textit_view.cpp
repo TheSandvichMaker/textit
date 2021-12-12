@@ -153,7 +153,7 @@ MoveCursorRelative(View *view, Cursor *cursor, V2i delta)
 }
 
 function void
-SaveJump(View *view, BufferID buffer_id, int64_t pos)
+SaveJump(View *view, BufferID buffer_id, int64_t pos, String desc = {})
 {
     Buffer *buffer = GetBuffer(buffer_id);
     int64_t this_line = GetLineNumber(buffer, pos);
@@ -176,9 +176,15 @@ SaveJump(View *view, BufferID buffer_id, int64_t pos)
             }
         }
     }
+
     Jump *jump = &view->jump_buffer[view->jump_at++ % ArrayCount(view->jump_buffer)];
+
     jump->buffer = buffer_id;
-    jump->pos    = pos;
+    jump->pos = pos;
+
+    jump->desc = MakeStringContainer(ArrayCount(jump->desc_storage), jump->desc_storage);
+    Replace(&jump->desc, desc);
+
     view->jump_top = view->jump_at;
 }
 
