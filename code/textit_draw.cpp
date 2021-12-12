@@ -604,7 +604,7 @@ DrawView(View *view, bool is_active_window)
     Cursor *cursor = GetCursor(view);
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
 
-    Rect2i text_bounds = MakeRect2iMinMax(bounds.min, MakeV2i(bounds.max.x, bounds.max.y - 1));
+    Rect2i text_bounds = MakeRect2iMinMax(MakeV2i(bounds.min.x, bounds.min.y + 1), MakeV2i(bounds.max.x, bounds.max.y - 1));
 
     int64_t actual_line_height = DrawTextArea(view, text_bounds, is_active_window);
     int64_t line = loc.line + 1;
