@@ -114,6 +114,7 @@ LoadDefaultDarkTheme()
     SetThemeColor(theme, "text_foreground_dimmer"_id, MakeColor(128, 128, 128));
     SetThemeColor(theme, "text_foreground_dimmest"_id, MakeColor(4*12, 4*20, 4*32));
     SetThemeColor(theme, "text_background"_id, MakeColor(12, 20, 32));
+    SetThemeColor(theme, "text_background_popup"_id, MakeColor(24, 40, 64));
     SetThemeColor(theme, "text_background_inactive"_id, MakeColor(12, 20, 32));
     SetThemeColor(theme, "text_background_unreachable"_id, MakeColor(24, 40, 64));
     SetThemeColor(theme, "text_background_highlighted"_id, MakeColor(48, 80, 128));

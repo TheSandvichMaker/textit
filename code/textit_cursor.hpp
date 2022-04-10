@@ -3,6 +3,8 @@
 
 struct Cursor
 {
+    V2i visual_pos;
+
     Cursor *next;
     int64_t sticky_col;
 

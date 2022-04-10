@@ -2368,6 +2368,22 @@ COMMAND_PROC(OpenNewLineBelow)
     CMD_WriteText("\n"_str); // NOTE: CRLF line endings are correctly expanded in WriteText
 }
 
+COMMAND_PROC(TryCompleteOrTab)
+{
+    View *view = GetActiveView();
+    Buffer *buffer = GetBuffer(view);
+    Cursor *cursor = GetCursor(view);
+    
+    if (TryApplySnippet(buffer, cursor->pos))
+    {
+        // we did a snippet
+    }
+    else
+    {
+        CMD_WriteText("\t"_str);
+    }
+}
+
 function void
 OnMouseDown(void)
 {

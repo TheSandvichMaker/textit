@@ -374,23 +374,59 @@ TrimSpaces(String string)
     return result;
 }
 
+static const struct CharToDigitValues
+{
+    uint8_t values[256] = {};
+    constexpr CharToDigitValues()
+    {
+        values['0'] = 0;
+        values['1'] = 1;
+        values['2'] = 2;
+        values['3'] = 3;
+        values['4'] = 4;
+        values['5'] = 5;
+        values['6'] = 6;
+        values['7'] = 7;
+        values['8'] = 8;
+        values['9'] = 9;
+        values['a'] = 10; values['A'] = 10;
+        values['b'] = 11; values['B'] = 11;
+        values['c'] = 12; values['C'] = 12;
+        values['d'] = 13; values['D'] = 13;
+        values['e'] = 14; values['E'] = 14;
+        values['f'] = 15; values['F'] = 15;
+    }
+} char_to_digit;
+
 function bool
 ParseInt(String in_string, String *out_string, int64_t *out_value)
 {
+    bool result = false;
+
     size_t i = 0;
     String string = in_string;
 
     int64_t sign = 1;
-    while (Peek(string, i) == '-' ||
-           Peek(string, i) == '+')
+    for (; i < string.size; i += 1)
     {
-        sign = string.data[i] == '-' ? -1 : 1;
-        i += 1;
+        if      (string.data[i] == '-') { sign = -1; }
+        else if (string.data[i] == '+') { sign =  1; }
+        else break;
     }
 
     int64_t base = 10;
-    if (string.data[i] == '0')                          { base = 8;  i += 1; }
-    if (string.data[i] == 'x' || string.data[i] == 'X') { base = 16; i += 1; }
+    if (string.data[i] == '0')
+    { 
+        base = 8; i += 1; 
+        if (string.data[i] == 'x' || string.data[i] == 'X') 
+        {
+            base = 16; i += 1; 
+        }
+        else if (string.data[i] == 'b')
+        {
+            base = 2; i += 1;
+        }
+    }
 
     string.data += i;
     string.size -= i;
@@ -400,18 +436,29 @@ ParseInt(String in_string, String *out_string, int64_t *out_value)
     for (; i < string.size; i += 1)
     {
         uint8_t c = string.data[i];
-        if (c >= '0' && c <= ('0' + base))
+        int64_t digit = char_to_digit.values[c];
+        if (digit == 0 && c != '0')
         {
-            int64_t digit = c - '0';
-            // TODO: Overflow protection
-            value *= base;
-            value += digit;
+            // non-numeric character
+            break;
         }
+        if (digit >= base)
+        {
+            // digit out of range
+            break;
+        }
+        if (value > (INT64_MAX - digit) / base)
+        {
+            // overflow
+            i = 0;
+            break;
+        }
+        value *= base;
+        value += digit;
     }
 
     value *= sign;
 
-    bool result = false;
     if (i != 0)
     {
         result = true;
@@ -507,6 +554,23 @@ MatchPrefix(String string, String prefix, StringMatchFlags flags = 0)
     if (prefix.size > string.size) return false;
     if (string.size > prefix.size) string.size = prefix.size;
     return AreEqual(string, prefix, flags);
+}
+
+function size_t
+Find(String str, uint8_t c)
+{
+    size_t result = str.size;
+
+    for (size_t i = 0; i < str.size; i++)
+    {
+        if (str.data[i] == c)
+        {
+            result = i;
+            break;
+        }
+    }
+
+    return result;
 }
 
 function size_t
@@ -1049,4 +1113,12 @@ function String
 PushFlattenedTempString(StringList *list, String separator = {}, StringSeparatorFlags flags = 0)
 {
     return PushFlattenedString(list, platform->GetTempArena(), separator, flags);
+}
+
+function String
+Substring(String str, size_t start, size_t end = SIZE_MAX)
+{
+    start = Min(str.size, start);
+    end   = Min(str.size, end);
+    return MakeString(end - start, str.data + start);
 }

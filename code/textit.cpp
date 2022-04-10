@@ -21,6 +21,7 @@
 #include "textit_command.cpp"
 #include "textit_theme.cpp"
 #include "textit_auto_indent.cpp"
+#include "textit_snippet.cpp"
 #include "textit_base_commands.cpp"
 #include "textit_draw.cpp"
 #include "textit_command_line.cpp"
@@ -441,10 +442,20 @@ AppUpdateAndRender(Platform *platform_)
 
         editor->search = MakeStringContainer(ArrayCount(editor->search_storage), editor->search_storage);
 
+        AddSnippet({ 
+            "Separator comment"_str,
+            "//-"_str, 
+            "// --------------------------------------------------------------------------------"_str ,
+        });
+
+        AddSnippet({ 
+            "TODO with user"_str,
+            "//!"_str, 
+            "// TODO({core_config:user}): "_str,
+        });
+
         platform->PushTickEvent();
         platform->app_initialized = true;
-
-        platform->DebugPrint("boop->chad: %d, lizard->chad: %d\n", CalculateEditDistance("boop"_str, "chad"_str), CalculateEditDistance("lizard"_str, "chard"_str));
     }
 
     editor->screen_mouse_p = MakeV2i(platform->mouse_x, platform->mouse_y);

@@ -132,6 +132,15 @@ MakeRange(int64_t start, int64_t end)
 }
 
 function Range
+MakeRangeInclusive(int64_t start, int64_t end)
+{
+    Range result;
+    result.start = start;
+    result.end = end + 1;
+    return result;
+}
+
+function Range
 MakeRange(int64_t pos)
 {
     return MakeRange(pos, pos);

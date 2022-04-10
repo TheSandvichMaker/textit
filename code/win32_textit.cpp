@@ -828,7 +828,7 @@ Win32_WriteFile(size_t count, void *data, String filename)
     ScopedMemory temp;
     wchar_t *filename16 = FormatWString(temp, L"\\\\?\\%.*S", StringExpand(filename));
     wchar_t *temp_filename16 = FormatWString(temp, L"%s.temp", filename16);
-    wchar_t *backup_filename16 = FormatWString(temp, L"%s.backup", filename16);
+    // wchar_t *backup_filename16 = FormatWString(temp, L"%s.backup", filename16);
 
     HANDLE file = CreateFileW(temp_filename16, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, NULL);
     if (file != INVALID_HANDLE_VALUE)
@@ -843,7 +843,7 @@ Win32_WriteFile(size_t count, void *data, String filename)
 
             if (already_exists)
             {
-                if (ReplaceFileW(filename16, temp_filename16, backup_filename16, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL))
+                if (ReplaceFileW(filename16, temp_filename16, /* backup_filename16 */ NULL, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL))
                 {
                     result = true;
                 }

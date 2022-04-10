@@ -128,6 +128,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 
     int nest_highlight_count = 0;
     Range *nest_highlights = PushArrayNoClear(arena, 64, Range);
+	Range *nest_preambles  = PushArrayNoClear(arena, 64, Range);
 
     for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
     {
@@ -141,6 +142,10 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
             if (IsInNest(&nests, nest_it.token.kind, direction) == NestResult_EnteringNest)
             {
                 Token start_token = nest_it.token;
+				Token prev = PeekPrev(&nest_it);
+				Range prev_line_range = EncloseLine(buffer, prev.pos, false);
+				nest_preambles[nest_highlight_count] = prev_line_range;
+				
                 Advance(&nest_it, direction);
 
                 for (; IsValid(&nest_it); Advance(&nest_it, direction))
@@ -448,6 +453,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 {
                     if (pos == cursor->pos)
                     {
+                        cursor->visual_pos = MakeV2i(col, row);
                         if (string.size == 0)
                         {
                             background = text_foreground;
@@ -578,6 +584,7 @@ DrawView(View *view, bool is_active_window)
 
     Color text_foreground          = GetThemeColor("text_foreground"_id);
     Color text_background          = GetThemeColor(is_active_window ? "text_background"_id : "text_background_inactive"_id);
+    Color text_background_popup    = GetThemeColor("text_background_popup"_id);
     Color filebar_text_foreground  = GetThemeColor("filebar_text_foreground"_id);
     Color filebar_text_highlighted = GetThemeColor("filebar_text_highlighted"_id);
 
@@ -604,7 +611,7 @@ DrawView(View *view, bool is_active_window)
     Cursor *cursor = GetCursor(view);
     BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
 
-    Rect2i text_bounds = MakeRect2iMinMax(MakeV2i(bounds.min.x, bounds.min.y + 1), MakeV2i(bounds.max.x, bounds.max.y - 1));
+    Rect2i text_bounds = MakeRect2iMinMax(MakeV2i(bounds.min.x, bounds.min.y), MakeV2i(bounds.max.x, bounds.max.y - 1));
 
     int64_t actual_line_height = DrawTextArea(view, text_bounds, is_active_window);
     int64_t line = loc.line + 1;
@@ -660,6 +667,12 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
+    if (Snippet *snip = TryFindSnippet(buffer, cursor->pos))
+    {
+        ScopedRenderLayer layer(Layer_OverlayForeground);
+        DrawText(cursor->visual_pos + MakeV2i(0, 1), PushTempStringF("Snippet: %.*s", StringExpand(snip->desc.description)), text_foreground, text_background_popup);
+    }
+
     if (core_config->debug_show_line_index)
     {
         int64_t at_line = Clamp(view->scroll_at, 0, GetLineCount(buffer));
@@ -691,13 +704,14 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
+	/*
     {
         ScopedRenderLayer layer(Layer_OverlayForeground);
 
-        PushRect(MakeRect2iMinMax(bounds.min.x, bounds.min.y, bounds.max.x, bounds.min.y + 1), COLOR_BLACK);
+        // PushRect(MakeRect2iMinMax(bounds.min.x, bounds.min.y, bounds.max.x, bounds.min.y + 1), COLOR_BLACK);
 
-        V2i p = MakeV2i(bounds.min.x, bounds.min.y);
-        p = DrawText(p, "Jump History: "_str, GetThemeColor("command_line_foreground"_id), COLOR_BLACK);
+        V2i p = MakeV2i(bounds.min.x + 32, filebar_y);
+        p = DrawText(p, "|>Jump History: "_str, GetThemeColor("command_line_option_selected"_id), filebar_text_background);
         for (uint32_t i = OldestJumpIndex(view); i < view->jump_top; i += 1)
         {
             Jump *jump = GetJump(view, i);
@@ -713,7 +727,7 @@ DrawView(View *view, bool is_active_window)
                 jump_name = jump->desc.as_string;
             }
 
-            p = DrawText(p, jump_name, color, COLOR_BLACK);
+            p = DrawText(p, jump_name, color, filebar_text_background);
             p.x += 1;
 
             if (i + 1 != view->jump_top)
@@ -722,6 +736,7 @@ DrawView(View *view, bool is_active_window)
             }
         }
     }
+	*/
 
     return actual_line_height;
 }

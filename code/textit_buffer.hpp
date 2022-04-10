@@ -93,60 +93,60 @@ struct Buffer : TextStorage
     LineIndexNode *first_free_line_index_node;
 };
 
-function Buffer *OpenNewBuffer(String buffer_name, BufferFlags flags = 0);
-function Buffer *OpenBufferFromFile(String filename, BufferFlags flags = 0);
-function Buffer *OpenBufferFromFileAsync(PlatformJobQueue *queue, String filename, BufferFlags flags = 0);
-function Buffer *GetBuffer(BufferID id);
-function bool IsNullBuffer(Buffer *buffer);
-function bool DestroyBuffer(BufferID id);
-function Buffer *GetActiveBuffer(void);
+function Buffer         *OpenNewBuffer                    (String buffer_name, BufferFlags flags = 0);
+function Buffer         *OpenBufferFromFile               (String filename, BufferFlags flags = 0);
+function Buffer         *OpenBufferFromFileAsync          (PlatformJobQueue *queue, String filename, BufferFlags flags = 0);
+function Buffer         *GetBuffer                        (BufferID id);
+function bool           IsNullBuffer                      (Buffer *buffer);
+function bool           DestroyBuffer                     (BufferID id);
+function Buffer         *GetActiveBuffer                  (void);
 
-function Range BufferRange(Buffer *buffer);
-function bool IsInBufferRange(Buffer *buffer, int64_t pos);
-function int64_t ClampToBufferRange(Buffer *buffer, int64_t pos);
-function bool LineIsInBuffer(Buffer *buffer, int64_t line);
-function uint8_t ReadBufferByte(Buffer *buffer, int64_t pos);
-function int64_t PeekNewline(Buffer *buffer, int64_t pos);
-function int64_t PeekNewlineBackward(Buffer *buffer, int64_t pos);
-function bool AdvanceOverNewline(Buffer *buffer, int64_t *pos);
-function Selection ScanWordForward(Buffer *buffer, int64_t pos);
-function int64_t ScanWordEndForward(Buffer *buffer, int64_t pos);
-function Selection ScanWordBackward(Buffer *buffer, int64_t pos);
-function int64_t FindLineStart(Buffer *buffer, int64_t pos);
-function void FindLineEnd(Buffer *buffer, int64_t pos, int64_t *inner, int64_t *outer = nullptr);
-function int64_t FindFirstNonHorzWhitespace(Buffer *buffer, int64_t pos);
-function Range EncloseLine(Buffer *buffer, int64_t pos, bool including_newline = false);
-function Range GetLineRange(Buffer *buffer, int64_t line);
-function Range GetInnerLineRange(Buffer *buffer, int64_t line);
-function int64_t GetLineNumber(Buffer *buffer, int64_t pos);
-function Range GetLineRange(Buffer *buffer, Range range);
-function void GetLineRanges(Buffer *buffer, int64_t line, Range *inner, Range *outer);
-function BufferLocation CalculateBufferLocationFromPos(Buffer *buffer, int64_t pos);
+function Range          BufferRange                       (Buffer *buffer);
+function bool           IsInBufferRange                   (Buffer *buffer, int64_t pos);
+function int64_t        ClampToBufferRange                (Buffer *buffer, int64_t pos);
+function bool           LineIsInBuffer                    (Buffer *buffer, int64_t line);
+function uint8_t        ReadBufferByte                    (Buffer *buffer, int64_t pos);
+function int64_t        PeekNewline                       (Buffer *buffer, int64_t pos);
+function int64_t        PeekNewlineBackward               (Buffer *buffer, int64_t pos);
+function bool           AdvanceOverNewline                (Buffer *buffer, int64_t *pos);
+function Selection      ScanWordForward                   (Buffer *buffer, int64_t pos);
+function int64_t        ScanWordEndForward                (Buffer *buffer, int64_t pos);
+function Selection      ScanWordBackward                  (Buffer *buffer, int64_t pos);
+function int64_t        FindLineStart                     (Buffer *buffer, int64_t pos);
+function void           FindLineEnd                       (Buffer *buffer, int64_t pos, int64_t *inner, int64_t *outer = nullptr);
+function int64_t        FindFirstNonHorzWhitespace        (Buffer *buffer, int64_t pos);
+function Range          EncloseLine                       (Buffer *buffer, int64_t pos, bool including_newline = false);
+function Range          GetLineRange                      (Buffer *buffer, int64_t line);
+function Range          GetInnerLineRange                 (Buffer *buffer, int64_t line);
+function int64_t        GetLineNumber                     (Buffer *buffer, int64_t pos);
+function Range          GetLineRange                      (Buffer *buffer, Range range);
+function void           GetLineRanges                     (Buffer *buffer, int64_t line, Range *inner, Range *outer);
+function BufferLocation CalculateBufferLocationFromPos    (Buffer *buffer, int64_t pos);
 function BufferLocation CalculateBufferLocationFromLineCol(Buffer *buffer, int64_t line, int64_t col);
-function BufferLocation CalculateRelativeMove(Buffer *buffer, Cursor *cursor, V2i delta);
-function void MergeUndoHistory(Buffer *buffer, int64_t first_ordinal, int64_t last_ordinal);
-function void BeginUndoBatch(Buffer *buffer);
-function void EndUndoBatch(Buffer *buffer);
+function BufferLocation CalculateRelativeMove             (Buffer *buffer, Cursor *cursor, V2i delta);
+function void           MergeUndoHistory                  (Buffer *buffer, int64_t first_ordinal, int64_t last_ordinal);
+function void           BeginUndoBatch                    (Buffer *buffer);
+function void           EndUndoBatch                      (Buffer *buffer);
 
-function String PushBufferRange(Arena *arena, Buffer *buffer, Range range);
-function String PushBufferRange(StringContainer *container, Buffer *buffer, Range range);
-function String PushTokenString(Arena *arena, Buffer *buffer, Token *t);
-function String PushTokenString(StringContainer *container, Buffer *buffer, Token *t);
+function String         PushBufferRange                   (Arena *arena, Buffer *buffer, Range range);
+function String         PushBufferRange                   (StringContainer *container, Buffer *buffer, Range range);
+function String         PushTokenString                   (Arena *arena, Buffer *buffer, Token *t);
+function String         PushTokenString                   (StringContainer *container, Buffer *buffer, Token *t);
 
-function int64_t BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text);
-function int64_t BufferReplaceRange(Buffer *buffer, Range range, String text);
+function int64_t        BufferReplaceRangeNoUndoHistory   (Buffer *buffer, Range range, String text);
+function int64_t        BufferReplaceRange                (Buffer *buffer, Range range, String text);
 
-function Range FindNextOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0);
-function Range FindPreviousOccurrence(Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0);
+function Range          FindNextOccurrence                (Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0);
+function Range          FindPreviousOccurrence            (Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0);
 
-function UndoNode *CurrentUndoNode(Buffer *buffer);
-function int64_t CurrentUndoOrdinal(Buffer *buffer);
-function void PushUndo(Buffer *buffer, int64_t pos, String forward, String backward);
-function void FlushBufferedUndo(Buffer *buffer);
-function void SelectNextUndoBranch(Buffer *buffer);
-function UndoNode *NextChild(UndoNode *node);
+function UndoNode       *CurrentUndoNode                  (Buffer *buffer);
+function int64_t        CurrentUndoOrdinal                (Buffer *buffer);
+function void           PushUndo                          (Buffer *buffer, int64_t pos, String forward, String backward);
+function void           FlushBufferedUndo                 (Buffer *buffer);
+function void           SelectNextUndoBranch              (Buffer *buffer);
+function UndoNode       *NextChild                        (UndoNode *node);
 
-function bool HasUnsavedChanges(Buffer *buffer);
+function bool           HasUnsavedChanges                 (Buffer *buffer);
 
 struct BufferIterator
 {

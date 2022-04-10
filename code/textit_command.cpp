@@ -118,6 +118,8 @@ LoadDefaultBindings()
 
     BindCommand(command, PlatformInputCode_Oem1,   Modifier_Shift,               "EnterCommandLineMode"_str);
 
+    // -------------------------------------------------------------------------------------------------------
+
     BindingMap *text = &editor->bindings[EditMode_Text];
     text->text_command = FindCommand("WriteText"_str);
     BindCommand(text, PlatformInputCode_Left,   Modifier_None, "MoveLeft"_str);
@@ -133,4 +135,5 @@ LoadDefaultBindings()
     BindCommand(text, PlatformInputCode_Back,   Modifier_Ctrl, "BackspaceWord"_str);
     BindCommand(text, PlatformInputCode_Delete, Modifier_None, "DeleteChar"_str);
     BindCommand(text, PlatformInputCode_Delete, Modifier_Ctrl, "DeleteWord"_str);
+    BindCommand(text, PlatformInputCode_Tab,    Modifier_None, "TryCompleteOrTab"_str);
 }

@@ -34,6 +34,7 @@
 #include "textit_window.hpp"
 #include "textit_cursor.hpp"
 #include "textit_draw.hpp"
+#include "textit_snippet.hpp"
 #include "textit_command_line.hpp"
 #include "textit_auto_indent.hpp"
 
@@ -71,7 +72,8 @@ enum EditMode
     X(_, bool,   use_cached_cleartype_blend      = true)               \
     X(_, bool,   auto_line_comments              = true)               \
     X(_, String, theme_name                      = "textit-light"_str) \
-    X(_, int,    view_autoscroll_margin          = 1)
+    X(_, int,    view_autoscroll_margin          = 1)                  \
+    X(_, String, user                            = "daniel"_str)
 DeclareIntrospectedStruct(CoreConfig);
 GLOBAL_STATE(CoreConfig, core_config);
 

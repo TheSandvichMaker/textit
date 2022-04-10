@@ -22,10 +22,35 @@ struct Introspection;
         static const inline size_t member_count = ArrayCount(members);                         \
     };
 
+template <typename T>
+function const MemberInfo *
+FindMember(String name)
+{
+    const MemberInfo *result = nullptr;
+
+    for (const MemberInfo &member : Introspection<T>::members)
+    {
+        if (MatchPrefix(member.name, name))
+        {
+            result = &member;
+            break;
+        }
+    }
+
+    return result;
+}
+
 function void *
 GetMemberPointer(void *data, const MemberInfo *info)
 {
     return (char *)data + info->offset;
+}
+
+template <typename T> 
+function void
+ReadMemberAs(void *data, const MemberInfo *member, T *out)
+{
+    *out = *(T *)GetMemberPointer(data, member);
 }
 
 #endif /* TEXTIT_INTROSPECTION_MACROS_HPP */
