@@ -509,6 +509,8 @@ struct PlatformOffscreenBuffer
     void *opaque[2];
 };
 
+struct Heap;
+
 struct Platform
 {
     bool exit_requested;
@@ -557,6 +559,14 @@ struct Platform
     void (*DecommitMemory)(void *location, size_t size);
     void (*DeallocateMemory)(void *memory);
 
+    Heap *(*CreateHeap)(size_t initial_size, size_t max_size);
+    void (*DestroyHeap)(Heap *heap);
+
+    void *(*HeapAlloc)(Heap *heap, size_t size);
+    size_t (*HeapGetAllocSize)(Heap *heap, void *data);
+    void *(*HeapReAlloc)(Heap *heap, void *data, size_t size);
+    void (*HeapFree)(Heap *heap, void *data);
+
     bool (*RegisterFontFile)(String file_name);
     bool (*MakeAsciiFont)(String font_name, Font *out_font, int font_size, PlatformFontQuality quality);
 
@@ -577,12 +587,14 @@ struct Platform
     void (*AddJob)(PlatformJobQueue *queue, void *arg, PlatformJobProc *proc);
     void (*WaitForJobs)(PlatformJobQueue *queue);
 
+    String (*GetExeDirectory)(void);
     bool (*SetWorkingDirectory)(String path);
     String (*PushFullPath)(Arena *arena, String filename);
     String (*ReadFile)(Arena *arena, String filename);
     size_t (*ReadFileInto)(size_t buffer_size, void *buffer, String filename);
     bool (*WriteFile)(size_t size, void *data, String filename);
     size_t (*GetFileSize)(String filename);
+    uint64_t (*GetLastFileWriteTime)(String path);
 
     PlatformFileIterator *(*FindFiles)(Arena *arena, String query);
     bool (*FileIteratorIsValid)(PlatformFileIterator *it);

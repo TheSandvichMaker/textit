@@ -1,0 +1,4 @@
+#ifndef TEXTIT_TABLE_HPP
+#define TEXTIT_TABLE_HPP
+
+#endif /* TEXTIT_TABLE_HPP */

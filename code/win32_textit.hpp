@@ -91,6 +91,8 @@ struct Win32State
     wchar_t *dll_path;
     Win32AppCode app_code;
 
+    String exe_folder_utf8;
+
     DWORD thread_local_index;
 
     TicketMutex allocation_mutex;

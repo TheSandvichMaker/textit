@@ -14,6 +14,11 @@ FindProjectRoot(Arena *arena, String search_start)
         {
             if (it->info.directory) continue;
 
+            if (AreEqual(it->info.name, "project.textit"_str))
+            {
+                break;
+            }
+
             String ext;
             SplitExtension(it->info.name, &ext);
 
@@ -98,6 +103,12 @@ RecursivelyFindAndOpenBuffer(String search_path, String name)
     return result;
 }
 
+function Project *GetActiveProject()
+{
+    Buffer *buffer = GetActiveBuffer();
+    return buffer->project;
+}
+
 function Buffer *
 FindOrOpenBuffer(Project *project, String name)
 {
@@ -111,7 +122,8 @@ FindOrOpenBuffer(Project *project, String name)
          Next(&it))
     {
         Buffer *buffer = it.buffer;
-        if (AreEqual(name, buffer->name, StringMatch_CaseInsensitive))
+        if (AreEqual(name, buffer->name, StringMatch_CaseInsensitive) ||
+            PathsAreEqual(name, buffer->full_path, StringMatch_CaseInsensitive))
         {
             result = buffer;
             break;

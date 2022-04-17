@@ -94,31 +94,6 @@ DuplicateView(ViewID id)
     return result;
 }
 
-function ViewIterator
-IterateViews(void)
-{
-    ViewIterator result = {};
-    result.index = 1;
-    result.view  = GetView(editor->used_view_ids[result.index]);
-    return result;
-}
-
-function bool
-IsValid(ViewIterator *iter)
-{
-    return (iter->index < editor->view_count);
-}
-
-function void
-Next(ViewIterator *iter)
-{
-    iter->index += 1;
-    if (iter->index < editor->view_count)
-    {
-        iter->view = GetView(editor->used_view_ids[iter->index]);
-    }
-}
-
 function View *
 GetActiveView(void)
 {
@@ -132,7 +107,13 @@ GetBuffer(View *view)
 }
 
 function void
-SetCursor(View *view, int64_t pos, Range inner = {}, Range outer = {})
+SwitchBuffer(View *view, BufferID buffer)
+{
+    view->next_buffer = buffer;
+}
+
+function void
+SetCursor(View *view, int64_t pos, Range inner, Range outer)
 {
     Cursor *cursor = GetCursor(view);
     SetCursor(cursor, pos, inner, outer);
@@ -153,7 +134,7 @@ MoveCursorRelative(View *view, Cursor *cursor, V2i delta)
 }
 
 function void
-SaveJump(View *view, BufferID buffer_id, int64_t pos, String desc = {})
+SaveJump(View *view, BufferID buffer_id, int64_t pos, String desc)
 {
     Buffer *buffer = GetBuffer(buffer_id);
     int64_t this_line = GetLineNumber(buffer, pos);
@@ -258,6 +239,14 @@ UndoOnce(View *view)
     return result;
 }
 
+function void
+JumpToLocation(View *view, BufferID buffer, int64_t pos)
+{
+    view->next_buffer = buffer;
+    Cursor *cursor = GetCursor(view->id, buffer);
+    SetCursor(cursor, pos);
+}
+
 function Range
 RedoOnce(View *view)
 {
@@ -294,10 +283,27 @@ RedoOnce(View *view)
     return result;
 }
 
-function void
-JumpToLocation(View *view, BufferID buffer, int64_t pos)
+function ViewIterator
+IterateViews(void)
 {
-    view->next_buffer = buffer;
-    Cursor *cursor = GetCursor(view->id, buffer);
-    SetCursor(cursor, pos);
+    ViewIterator result = {};
+    result.index = 1;
+    result.view  = GetView(editor->used_view_ids[result.index]);
+    return result;
+}
+
+function bool
+IsValid(ViewIterator *iter)
+{
+    return (iter->index < editor->view_count);
+}
+
+function void
+Next(ViewIterator *iter)
+{
+    iter->index += 1;
+    if (iter->index < editor->view_count)
+    {
+        iter->view = GetView(editor->used_view_ids[iter->index]);
+    }
 }

@@ -58,8 +58,26 @@ GetJump(View *view, uint32_t index)
     return &view->jump_buffer[index % ArrayCount(view->jump_buffer)];
 }
 
-function View *GetView(ViewID id);
 function View *OpenNewView(BufferID buffer);
+function void DestroyView(ViewID id);
+function ViewID DuplicateView(ViewID id);
+
+function View *GetView(ViewID id);
+function Buffer *GetBuffer(View *view);
+function void SwitchBuffer(View *view, BufferID buffer);
+
+function void SetCursor(View *view, int64_t pos, Range inner = {}, Range outer = {});
+function void MoveCursorRelative(View *view, V2i delta);
+function void MoveCursorRelative(View *view, Cursor *cursor, V2i delta);
+
+function void SaveJump(View *view, BufferID buffer_id, int64_t pos, String desc = {});
+function Jump *NextJump(View *view);
+function Jump PreviousJump(View *view);
+function void JumpToLocation(View *view, BufferID buffer, int64_t pos);
+
+function Range UndoOnce(View *view);
+function Range RedoOnce(View *view);
+
 function View *GetActiveView(void);
 
 struct ViewIterator

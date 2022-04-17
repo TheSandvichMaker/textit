@@ -256,6 +256,39 @@ AreEqual(const String &a, const String &b, StringMatchFlags flags = 0)
     return result;
 }
 
+function bool
+PathsAreEqual(String a, String b, StringMatchFlags flags = StringMatch_CaseInsensitive)
+{
+    bool result = false;
+
+    if (a.size == b.size)
+    {
+        result = true;
+        for (size_t i = 0; i < a.size; ++i)
+        {
+            char c1 = a.data[i];
+            char c2 = b.data[i];
+
+            if (flags & StringMatch_CaseInsensitive)
+            {
+                c1 = ToLowerAscii(c1);
+                c2 = ToLowerAscii(c2);
+            }
+
+            if (c1 == '\\') c1 = '/';
+            if (c2 == '\\') c2 = '/';
+
+            if (c1 != c2)
+            {
+                result = false;
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
 function String
 SplitExtension(String string, String *right)
 {
@@ -524,6 +557,28 @@ SplitWord(String string, String *rhs = nullptr)
 }
 
 function String
+SplitAround(String string, size_t pos, String *rhs = nullptr)
+{
+    pos = Min(pos, string.size);
+    String result = MakeString(pos, string.data);
+    if (rhs)
+    {
+        size_t remainder = string.size - pos;
+        if (remainder)
+        {
+            rhs->data = string.data + pos + 1;
+            rhs->size = remainder - 1;
+        }
+        else
+        {
+            rhs->data = nullptr;
+            rhs->size = 0;
+        }
+    }
+    return result;
+}
+
+function String
 SplitAroundChar(String string, uint8_t c, String *rhs = nullptr)
 {
     size_t i;
@@ -729,6 +784,12 @@ PushString(Arena *arena, String string)
 }
 
 function String
+PushTempString(String string)
+{
+    return PushString(platform->GetTempArena(), string);
+}
+
+function String
 PushStringSpace(Arena *arena, int64_t size)
 {
     String result = {};
@@ -855,6 +916,27 @@ GuessLineEndKind(String string)
         result = LineEnd_CRLF;
     }
     return result;
+}
+
+function String
+Substring(String str, size_t start, size_t end = SIZE_MAX)
+{
+    start = Min(str.size, start);
+    end   = Min(str.size, end);
+    return MakeString(end - start, str.data + start);
+}
+
+function bool
+IsPathSeparator(uint8_t c)
+{
+    return c == '/' || c == '\\';
+}
+
+function String
+CombinePath(Arena *arena, String a, String b)
+{
+    bool need_separator = !(IsPathSeparator(PeekEnd(a)) || IsPathSeparator(Peek(b, 0)));
+    return PushStringF(arena, "%.*s%s%.*s", StringExpand(a), need_separator ? "/" : "", StringExpand(b));
 }
 
 //
@@ -1113,12 +1195,4 @@ function String
 PushFlattenedTempString(StringList *list, String separator = {}, StringSeparatorFlags flags = 0)
 {
     return PushFlattenedString(list, platform->GetTempArena(), separator, flags);
-}
-
-function String
-Substring(String str, size_t start, size_t end = SIZE_MAX)
-{
-    start = Min(str.size, start);
-    end   = Min(str.size, end);
-    return MakeString(end - start, str.data + start);
 }

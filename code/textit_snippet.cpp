@@ -62,6 +62,7 @@ AddSubstitution(StringList *list, String string)
 {
     Arena *temp = platform->GetTempArena();
 
+#if 0
     if (MatchPrefix(string, "core_config"_str))
     {
         string = Advance(string, sizeof("core_config") - 1);
@@ -71,16 +72,7 @@ AddSubstitution(StringList *list, String string)
             const MemberInfo *member = FindMember<CoreConfig>(variable);
             if (member)
             {
-                if (member->type == "String"_id)
-                {
-                    String value;
-                    ReadMemberAs<String>(core_config, member, &value);
-                    PushString(list, temp, value);
-                }
-                else
-                {
-                    PushString(list, temp, "!!TODO - unsupported type!!"_str);
-                }
+                PushString(list, temp, FormatMember(member, GetMemberPointer(core_config, member)));
             }
             else
             {
@@ -92,6 +84,35 @@ AddSubstitution(StringList *list, String string)
     {
         PushString(list, temp, "!!ERROR - unknown query!!"_str);
     }
+#else
+    size_t colon_at = Find(string, ':');
+    if (colon_at != string.size)
+    {
+        String rhs;
+        String lhs = SplitAround(string, colon_at, &rhs);
+
+        if (AreEqual(lhs, "config"_str))
+        {
+            String value;
+            if (ConfigReadString(rhs, &value))
+            {
+                PushString(list, temp, value);
+            }
+            else
+            {
+                PushStringF(list, temp, "<config variable '%.*s' not found>", StringExpand(rhs));
+            }
+        }
+        else
+        {
+            PushStringF(list, temp, "<unknown scope '%.*s'>", StringExpand(lhs));
+        }
+    }
+    else
+    {
+        PushStringF(list, temp, "<unknown expansion '%.*s'>", StringExpand(string));
+    }
+#endif
 }
 
 function String

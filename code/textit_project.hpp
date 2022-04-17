@@ -19,6 +19,8 @@ struct Project
     int associated_buffer_count;
     ProjectFlags flags;
 
+    uint64_t last_config_write_time;
+
     String root;
 
     size_t tag_table_size;
@@ -31,6 +33,7 @@ function void RemoveProjectAssociation(Buffer *buffer);
 function Project *CreateProject(String search_start);
 function void DestroyProject(Project *project);
 
+function Project *GetActiveProject();
 function Buffer *FindOrOpenBuffer(Project *project, String name);
 
 struct ProjectIterator

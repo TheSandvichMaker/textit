@@ -71,6 +71,28 @@ operator ""_str16(const wchar_t *data, size_t size)
     return result;
 }
 
+function String16
+MakeString16(size_t size, wchar_t *text)
+{
+    String16 result;
+    result.size = size;
+    result.data = text;
+    return result;
+}
+
+function String16
+MakeString16(wchar_t *text)
+{
+    String16 result;
+    result.size = 0;
+    result.data = text;
+    for (wchar_t *c = text; *c; c++)
+    {
+        result.size++;
+    }
+    return result;
+}
+
 struct StringContainer
 {
     size_t capacity;

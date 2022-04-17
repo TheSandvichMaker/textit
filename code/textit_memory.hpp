@@ -1,6 +1,34 @@
 #ifndef TEXTIT_MEMORY_HPP
 #define TEXTIT_MEMORY_HPP
 
+#define ALLOCATOR_REALLOC(name) void *name(void *udata, void *data, size_t size)
+typedef ALLOCATOR_REALLOC(AllocatorReAlloc);
+
+struct Allocator
+{
+    AllocatorReAlloc *realloc;
+    void *udata;
+};
+
+#define AllocatorAlloc(alloc, size)         (alloc)->realloc((alloc)->udata, nullptr, size)
+#define AllocatorReAlloc(alloc, data, size) (alloc)->realloc((alloc)->udata, data, size)
+#define AllocatorFree(alloc, data)          (alloc)->realloc((alloc)->udata, data, 0)
+
+function
+ALLOCATOR_REALLOC(HeapReAlloc)
+{
+    return platform->HeapReAlloc((Heap *)udata, data, size);
+}
+
+function Allocator
+MakeAllocator(Heap *heap)
+{
+    Allocator result = {};
+    result.realloc = HeapReAlloc;
+    result.udata   = heap;
+    return result;
+}
+
 #define DEFAULT_ARENA_ALIGN    16
 #define DEFAULT_ARENA_CAPACITY Gigabytes(8)
 
@@ -116,6 +144,11 @@ CheckArena(Arena *arena)
 function void *
 PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
 {
+    if (!size)
+    {
+        return nullptr;
+    }
+
     if (!arena->capacity)
     {
         SimpleAssert(!arena->base);
@@ -152,6 +185,24 @@ PushSize_(Arena *arena, size_t size, size_t align, bool clear, const char *tag)
         ZeroSize(size, result);
     }
 
+    return result;
+}
+
+function
+ALLOCATOR_REALLOC(ArenaReAlloc)
+{
+    (void)data;
+
+    void *result = PushSize((Arena *)udata, size);
+    return result;
+}
+
+function Allocator
+MakeAllocator(Arena *arena)
+{
+    Allocator result = {};
+    result.realloc = ArenaReAlloc;
+    result.udata   = arena;
     return result;
 }
 
@@ -249,16 +300,6 @@ struct ScopedMemory
     operator TemporaryMemory *() { return &temp; }
     operator Arena *() { return temp.arena; }
 };
-
-template <typename T>
-function Array<T>
-PushArrayContainer(Arena *arena, size_t capacity)
-{
-    Array<T> result = {};
-    result.capacity = capacity;
-    result.data = PushArray(arena, capacity, T);
-    return result;
-}
 
 template <typename T>
 struct VirtualArray
@@ -366,5 +407,57 @@ struct VirtualArray
         return result;
     }
 };
+
+template <typename T>
+struct Array
+{
+    uint32_t count;
+    uint32_t capacity;
+    T *data;
+
+    Allocator alloc;
+
+    T *begin() { return data; }
+    T *end() { return data + count; }
+};
+
+template <typename T>
+void EnsureSpace(Array<T> &arr, uint32_t count)
+{
+    if (arr.count + count > arr.capacity)
+    {
+        uint32_t new_capacity = Max(8, 2*arr.capacity);
+        arr.data = (T *)AllocatorReAlloc(&arr.alloc, arr.data, sizeof(T)*new_capacity);
+        arr.capacity = new_capacity;
+    }
+}
+
+template <typename T>
+void Add(Array<T> &arr, const T &item)
+{
+    EnsureSpace(arr, 1);
+    arr.data[arr.count++] = item;
+}
+
+template <typename T>
+T *Add(Array<T> &arr)
+{
+    EnsureSpace(arr, 1);
+    return &arr.data[arr.count++];
+}
+
+template <typename T>
+void Reset(Array<T> &arr)
+{
+    arr.count = 0;
+}
+template <typename T>
+void Free(Array<T> &arr)
+{
+    AllocatorFree(&arr.alloc, arr.data);
+    arr.data = nullptr;
+    arr.count = 0;
+    arr.capacity = 0;
+}
 
 #endif /* TEXTIT_MEMORY_HPP */

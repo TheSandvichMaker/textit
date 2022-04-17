@@ -273,62 +273,6 @@ HashCoordinate(V2i p)
     return HashIntegers((uint64_t)p.x, (uint64_t)p.y).u64[0];
 }
 
-template <typename T>
-struct Array
-{
-    size_t capacity;
-    size_t count;
-    T *data;
-
-    T &
-    operator [](size_t i)
-    {
-        AssertSlow(i < count);
-        return data[i];
-    }
-};
-
-template <typename T>
-function T *
-begin(Array<T> &array)
-{
-    return array.data;
-}
-
-template <typename T>
-function T *
-end(Array<T> &array)
-{
-    return array.data + array.count;
-}
-
-template <typename T>
-function void
-Push(Array<T> *array_init, T item)
-{
-    Array<T> &array = *array_init;
-    AssertSlow(array.count < array.capacity);
-    array[array.count++] = item;
-}
-
-template <typename T>
-function T
-RemoveOrdered(Array<T> *array_init, size_t remove_index)
-{
-    Array<T> &array = *array_init;
-    AssertSlow(remove_index < array.count);
-
-    T result = array[remove_index];
-
-    array.count -= 1;
-    for (size_t i = remove_index; i < array.count; ++i)
-    {
-        array[i] = array[i + 1];
-    }
-
-    return result;
-}
-
 function int32_t
 SafeTruncateI64(int64_t value)
 {

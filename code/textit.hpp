@@ -17,6 +17,7 @@
 #include "textit_math.hpp"
 #include "textit_random.hpp"
 #include "textit_resources.hpp"
+#include "textit_config.hpp"
 #include "textit_image.hpp"
 #include "textit_command.hpp"
 #include "textit_theme.hpp"
@@ -25,7 +26,6 @@
 #include "textit_tokens.hpp"
 #include "textit_language.hpp"
 #include "textit_text_storage.hpp"
-#include "textit_line_index.hpp"
 #include "textit_buffer.hpp"
 #include "textit_tokenizer.hpp"
 #include "textit_tags.hpp"
@@ -37,6 +37,7 @@
 #include "textit_snippet.hpp"
 #include "textit_command_line.hpp"
 #include "textit_auto_indent.hpp"
+#include "textit_completion_menu.hpp"
 
 #include "textit_language_cpp.hpp"
 
@@ -117,6 +118,9 @@ struct EditorState
     StringMatchFlags search_flags;
     bool show_search_highlight;
 
+    uint8_t echo_storage[1024];
+    StringContainer echo;
+
     IndentRules default_indent_rules;
 
     Project *active_project;
@@ -162,6 +166,10 @@ struct EditorState
     Command *last_change;
     bool clutch;
 
+    CompletionMenu completion;
+
+    uint64_t last_user_config_write_time;
+
     struct
     {
         int delay;
@@ -184,5 +192,7 @@ function void SetEditorFont(String name, int size, PlatformFontQuality quality);
 
 function void SplitWindow(Window *window, WindowSplitKind split);
 function void SetDebugDelay(int milliseconds, int frame_count);
+
+function void EchoString(String str);
 
 #endif /* TEXTIT_HPP */

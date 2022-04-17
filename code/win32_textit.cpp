@@ -1473,6 +1473,16 @@ Win32_GetLastWriteTime(wchar_t *path)
     return thanks.QuadPart;
 }
 
+function uint64_t
+Win32_GetLastFileWriteTimeUtf8(String path)
+{
+    ScopedMemory temp;
+
+    String16 path_utf16 = Win32_Utf8ToUtf16(temp, path);
+    uint64_t result = Win32_GetLastWriteTime(path_utf16.data);
+    return result;
+}
+
 static int dll_generation;
 function bool
 Win32_LoadAppCode(Win32AppCode *old_code)
@@ -2134,6 +2144,54 @@ Win32_LoadDefaultFonts()
     }
 }
 
+static String
+Win32_GetExeDirectory()
+{
+    return win32_state.exe_folder_utf8;
+}
+
+static Heap *
+Win32_CreateHeap(size_t initial_size, size_t max_size)
+{
+    Heap *result = (Heap *)HeapCreate(HEAP_NO_SERIALIZE, initial_size, max_size);
+    return result;
+};
+
+static void
+Win32_DestroyHeap(Heap *heap)
+{
+    BOOL result = HeapDestroy((HANDLE)heap);
+    Assert(result);
+}
+
+static void *
+Win32_HeapAlloc(Heap *heap, size_t size)
+{
+    void *result = HeapAlloc((HANDLE)heap, NULL, size);
+    return result;
+}
+
+static size_t
+Win32_HeapGetAllocSize(Heap *heap, void *data)
+{
+    size_t result = HeapSize((HANDLE)heap, NULL, data);
+    return result;
+}
+
+static void *
+Win32_HeapReAlloc(Heap *heap, void *data, size_t size)
+{
+    void *result = HeapReAlloc((HANDLE)heap, NULL, data, size);
+    return result;
+}
+
+static void
+Win32_HeapFree(Heap *heap, void *data)
+{
+    BOOL result = HeapFree((HANDLE)heap, NULL, data);
+    Assert(result);
+}
+
 static DWORD WINAPI
 Win32_AppThread(LPVOID userdata)
 {
@@ -2146,6 +2204,8 @@ Win32_AppThread(LPVOID userdata)
 
     win32_state.exe_folder = FindExeFolderLikeAMonkeyInAMonkeySuit();
     win32_state.dll_path   = FormatWString(&win32_state.arena, L"\\\\?\\%s\\textit.dll", win32_state.exe_folder);
+
+    win32_state.exe_folder_utf8 = Win32_Utf16ToUtf8(&win32_state.arena, MakeString16(win32_state.exe_folder));
 
 #if TEXTIT_BUILD_DLL
     Win32AppCode *app_code = &win32_state.app_code;
@@ -2418,6 +2478,13 @@ main(int, char **)
     platform->DecommitMemory         = Win32_Decommit;
     platform->DeallocateMemory       = Win32_Deallocate;
 
+    platform->CreateHeap             = Win32_CreateHeap;
+    platform->DestroyHeap            = Win32_DestroyHeap;
+    platform->HeapAlloc              = Win32_HeapAlloc;
+    platform->HeapGetAllocSize       = Win32_HeapGetAllocSize;
+    platform->HeapReAlloc            = Win32_HeapReAlloc;
+    platform->HeapFree               = Win32_HeapFree;
+
     platform->RegisterFontFile       = Win32_RegisterFontFile;
     platform->MakeAsciiFont          = Win32_MakeAsciiFont;
 
@@ -2438,12 +2505,14 @@ main(int, char **)
     platform->AddJob                 = Win32_AddJob;
     platform->WaitForJobs            = Win32_WaitForJobs;
 
+    platform->GetExeDirectory        = Win32_GetExeDirectory;
     platform->SetWorkingDirectory    = Win32_SetWorkingDirectory;
     platform->PushFullPath           = Win32_PushFullPath;
     platform->ReadFile               = Win32_ReadFile;
     platform->ReadFileInto           = Win32_ReadFileInto;
     platform->WriteFile              = Win32_WriteFile;
     platform->GetFileSize            = Win32_GetFileSize;
+    platform->GetLastFileWriteTime   = Win32_GetLastFileWriteTimeUtf8;
 
     platform->FindFiles              = Win32_FindFiles;
     platform->FileIteratorIsValid    = Win32_FileIteratorIsValid;

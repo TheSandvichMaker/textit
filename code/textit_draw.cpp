@@ -704,6 +704,11 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
+    {
+        ScopedRenderLayer layer(Layer_OverlayForeground);
+        DrawText(MakeV2i(bounds.min.x + 128, bounds.max.y - 1), editor->echo.as_string, COLOR_WHITE, COLOR_BLACK);
+    }
+
 	/*
     {
         ScopedRenderLayer layer(Layer_OverlayForeground);
@@ -830,7 +835,9 @@ DrawCommandLines()
     PushLayer(Layer_OverlayForeground);
 
     int cursor_at = cl->cursor;
-    String text = MakeString(cl->count, cl->text); if (cl->prediction_selected_index != -1)
+    String text = MakeString(cl->count, cl->text); 
+
+    if (cl->prediction_selected_index != -1)
     {
         text = GetPrediction(cl, cl->prediction_selected_index)->text;
         cursor_at = (int)text.size;

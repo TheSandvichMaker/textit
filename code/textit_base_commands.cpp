@@ -481,6 +481,30 @@ COMMAND_PROC(Set,
     };
 }
 
+COMMAND_PROC(Echo,
+             "Echo a config value"_str)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Echo"_str;
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+
+        String value;
+        if (ConfigReadString(string, &value))
+        {
+            EchoString(value);
+        }
+        else
+        {
+            EchoString("None"_str);
+        }
+
+        return true;
+    };
+}
+
 COMMAND_PROC(SetLanguage,
              "Set the language for the active buffer"_str)
 {
@@ -2353,6 +2377,34 @@ COMMAND_PROC(SaveAllChangedBuffers,
     }
 }
 
+COMMAND_PROC(OpenUserConfig,
+             "Open the currently active user config"_str)
+{
+    Project *project = GetActiveProject();
+    View *view = GetActiveView();
+    Buffer *buffer = FindOrOpenBuffer(project, config_registry->user->path);
+    if (buffer)
+    {
+        SwitchBuffer(view, buffer->id);
+    }
+}
+
+COMMAND_PROC(OpenProjectConfig,
+             "Open the currently active project config"_str)
+{
+    Config *config = GetConfig(ConfigAccess_ProjWeak);
+    if (config)
+    {
+        Project *project = GetActiveProject();
+        Buffer  *buffer  = FindOrOpenBuffer(project, config->path);
+        if (buffer)
+        {
+            View *view = GetActiveView();
+            SwitchBuffer(view, buffer->id);
+        }
+    }
+}
+
 COMMAND_PROC(OpenNewLineBelow)
 {
     View *view = GetActiveView();
@@ -2373,7 +2425,7 @@ COMMAND_PROC(TryCompleteOrTab)
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
     Cursor *cursor = GetCursor(view);
-    
+
     if (TryApplySnippet(buffer, cursor->pos))
     {
         // we did a snippet

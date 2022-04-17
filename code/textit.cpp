@@ -10,7 +10,6 @@
 #include "textit_text_storage.cpp"
 #include "textit_tokens.cpp"
 #include "textit_language.cpp"
-#include "textit_line_index.cpp"
 #include "textit_buffer.cpp"
 #include "textit_tokenizer.cpp"
 #include "textit_tags.cpp"
@@ -25,7 +24,9 @@
 #include "textit_base_commands.cpp"
 #include "textit_draw.cpp"
 #include "textit_command_line.cpp"
+#include "textit_completion_menu.cpp"
 
+#include "textit_language_textit.cpp"
 #include "textit_language_cpp.cpp"
 #include "textit_language_lua.cpp"
 
@@ -56,6 +57,12 @@
 //
 // nakst how2uniscribe: https://gist.github.com/nakst/ab7ae09ed943100ea13707fa4f42b548
 //
+
+function void
+EchoString(String string)
+{
+    Replace(&editor->echo, string);
+}
 
 function void
 SetDebugDelay(int milliseconds, int frame_count)
@@ -214,6 +221,25 @@ ExecuteCommand(View *view, Command *command)
             SaveJump(view, view->buffer, prev_pos);
         }
     }
+}
+
+function bool
+HandleUiEvent(PlatformEvent *event)
+{
+    bool result = false;
+
+    if (editor->command_line_count > 0)
+    {
+        editor->clutch = false;
+        result = true;
+        HandleCommandLineEvent(editor->command_lines[editor->command_line_count - 1], event);
+    }
+    else if (editor->completion.count > 0)
+    {
+        result = HandleCompletionMenuEvent(&editor->completion, event);
+    }
+
+    return result;
 }
 
 function bool
@@ -392,6 +418,39 @@ SetEditorFont(String name, int size, PlatformFontQuality quality)
     platform->window_resize_snap_h = (int32_t)editor->font_metrics.y;
 }
 
+function void
+UpdateFontFromConfig()
+{
+    String  font         = "Consolas"_str;
+    String  font_quality = "Subpixel"_str;
+    int64_t font_size    = 15;
+
+    ConfigReadString("font"_str, &font);
+    ConfigReadString("font_quality"_str, &font_quality);
+    ConfigReadI64("font_size"_str, &font_size);
+
+    PlatformFontQuality quality = PlatformFontQuality_SubpixelAA;
+    if (AreEqual(font_quality, "subpixel"_str, StringMatch_CaseInsensitive))
+    {
+        quality = PlatformFontQuality_SubpixelAA;
+    }
+    else if (AreEqual(font_quality, "greyscale"_str, StringMatch_CaseInsensitive))
+    {
+        quality = PlatformFontQuality_GreyscaleAA;
+    }
+    else if (AreEqual(font_quality, "raster"_str, StringMatch_CaseInsensitive))
+    {
+        quality = PlatformFontQuality_Raster;
+    }
+
+    if (!AreEqual(font, editor->font_name.as_string) ||
+        quality != editor->font_quality ||
+        font_size != editor->font_size)
+    {
+        SetEditorFont(font, (int)font_size, quality);
+    }
+}
+
 void
 AppUpdateAndRender(Platform *platform_)
 {
@@ -411,10 +470,6 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
-        SetEditorFont(core_config->font_name, 15, PlatformFontQuality_SubpixelAA);
-
-        InitializeRenderState(&editor->transient_arena, &platform->backbuffer.bitmap);
-
         LoadDefaultThemes();
         LoadDefaultBindings();
         LoadDefaultIndentRules(&editor->default_indent_rules);
@@ -441,6 +496,16 @@ AppUpdateAndRender(Platform *platform_)
         editor->active_window = &editor->root_window;
 
         editor->search = MakeStringContainer(ArrayCount(editor->search_storage), editor->search_storage);
+        editor->echo = MakeStringContainer(ArrayCount(editor->echo_storage), editor->echo_storage);
+
+        InitConfigs();
+
+        ConfigWriteString("user"_str, "<no user set>"_str, ConfigAccess_Root);
+        ConfigWriteString("font"_str, "Consolas"_str, ConfigAccess_Root);
+        ConfigWriteString("font_size"_str, "15"_str, ConfigAccess_Root);
+
+        UpdateFontFromConfig();
+        InitializeRenderState(&editor->transient_arena, &platform->backbuffer.bitmap);
 
         AddSnippet({ 
             "Separator comment"_str,
@@ -451,7 +516,7 @@ AppUpdateAndRender(Platform *platform_)
         AddSnippet({ 
             "TODO with user"_str,
             "//!"_str, 
-            "// TODO({core_config:user}): "_str,
+            "// TODO({config:user}): "_str,
         });
 
         platform->PushTickEvent();
@@ -470,6 +535,9 @@ AppUpdateAndRender(Platform *platform_)
         }
     }
 
+    HotReloadConfigs();
+    UpdateFontFromConfig();
+
     BeginRender();
 
     bool handled_any_events = false;
@@ -477,6 +545,20 @@ AppUpdateAndRender(Platform *platform_)
     if (editor->mouse_down)
     {
         OnMouseHeld();
+    }
+
+    {
+        View *view = GetActiveView();
+        Buffer *buffer = GetActiveBuffer();
+        Cursor *cursor = GetCursor(view, buffer);
+        Snippet *snip = TryFindSnippet(buffer, cursor->pos);
+        if (snip)
+        {
+            CompletionEntry entry = {};
+            entry.range  = MakeRange(cursor->pos - snip->desc.query.size, snip->desc.query.size);
+            entry.string = snip->desc.replacement;
+            AddEntry(&editor->completion, entry);
+        }
     }
 
     int events_handled = 0;
@@ -494,12 +576,10 @@ AppUpdateAndRender(Platform *platform_)
 
         events_handled += 1;
 
-        if (editor->command_line_count > 0)
-        {
-            editor->clutch = false;
-            handled_any_events |= HandleCommandLineEvent(editor->command_lines[editor->command_line_count - 1], &event);
-        }
-        else
+        bool handled_ui = HandleUiEvent(&event);
+        handled_any_events |= handled_ui;
+
+        if (!handled_ui)
         {
             handled_any_events |= HandleViewEvent(editor->active_window->view, &event);
             if (editor->command_line_count > 0)
