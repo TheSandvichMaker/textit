@@ -56,6 +56,17 @@ MakeString(size_t size, uint8_t *text)
     return result;
 }
 
+function String
+MakeString(uint8_t *start, uint8_t *one_past_end)
+{
+	Assert(start <= one_past_end);
+	
+	String result;
+	result.data = start;
+	result.size = one_past_end - start;
+	return result;
+}
+
 struct String16
 {
     size_t size;

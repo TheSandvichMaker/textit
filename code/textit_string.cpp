@@ -1039,6 +1039,14 @@ ToUpper(String string)
     }
 }
 
+function String
+EscapeString(Arena *arena, String string)
+{
+    // TODO: implement
+    String result = PushString(arena, string);
+    return result;
+}
+
 //
 // StringList
 //

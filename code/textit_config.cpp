@@ -144,28 +144,178 @@ HotReloadConfigs()
     }
 }
 
+function bool
+IsLegalConfigIdent(uint8_t c)
+{
+	return !IsWhitespaceAscii(c) && 
+        c != '#' && 
+        c != ';' && 
+        c != '=' && 
+        c != '"' &&
+        c != '[' &&
+        c != ']';
+}
+
 function void
 ReadConfigFromString(Config *config, String string)
 {
     Release(&config->arena);
     ZeroArray(ArrayCount(config->table), &config->table[0]);
 
-    while (string.size)
+    ScopedMemory temp;
+
+    size_t at = 0;
+    size_t end = string.size;
+
+    String section = {};
+
+    while (at < end)
     {
-        String line = TrimSpaces(SplitLine(string, &string));
+        // skip leading whitespace
 
-        if (!line.size || line[0] == '#')
-            continue;
+        while (IsWhitespaceAscii(string[at]))
+            at++;
 
-        String key = SplitWord(line, &line);
-        String value = TrimSpaces(SplitAround(line, '#', &line));
-
-        if (value.size >= 2 && value[0] == '"' && value[value.size - 1] == '"')
+        if (string[at] == '#' || string[at] == ';')
         {
-            value = Substring(value, 1, value.size - 1);
+            // skip comments
+
+            while (string[at] && !IsVerticalWhitespaceAscii(string[at]))
+                at++;
+        }
+        else
+        {
+            // parse section
+
+            if (string[at] == '[')
+            {
+                at++;
+
+                size_t section_start = at;
+
+                while (IsLegalConfigIdent(string[at]))
+                    at++;
+
+                if (string[at] == ']')
+                {
+                    size_t section_end = at;
+
+                    section = Substring(string, section_start, section_end);
+
+                    if (AreEqual(section, "--"_str))
+                    {
+                        section = {};
+                    }
+
+                    at++;
+
+                    while (IsWhitespaceAscii(string[at]))
+                        at++;
+                }
+                else
+                {
+                    // TODO: report error
+                }
+            }
+
+            // parse key
+
+            size_t key_start = at;
+
+            while (IsLegalConfigIdent(string[at]))
+                at++;
+
+            size_t key_end = at;
+
+            String key = Substring(string, key_start, key_end);
+            if (key.size > 0)
+            {
+                // skip leading whitespace
+
+                while (IsHorizontalWhitespaceAscii(string[at]))
+                    at++;
+
+                // handle assign operator
+
+                if (string[at] == '=')
+                {
+                    at++;
+                    
+                    while (IsWhitespaceAscii(string[at]))
+                        at++;
+                }
+
+                // parse value
+
+                size_t value_start = at;
+
+                String value = {};
+
+                if (string[at] == '"')
+                {
+                    // parse string
+
+                    at++;
+                    value_start = at;
+
+                    while (string[at] && string[at] != '"')
+                        at++;
+
+                    if (string[at] == '"')
+                    {
+                        size_t value_end = at;
+                        value = Substring(string, value_start, value_end);
+                        value = EscapeString(temp, value);
+
+                        at++;
+                    }
+                    else
+                    {
+                        // TODO: report error
+                    }
+                }
+                else
+                {
+                    // parse unquoted value
+
+                    while (string[at] && !IsVerticalWhitespaceAscii(string[at]))
+                        at++;
+
+                    size_t value_end = at;
+                    value = Substring(string, value_start, value_end);
+                    value = TrimSpaces(value);
+                }
+
+                if (value.size > 0)
+                {
+                    // write config entry
+
+                    if (section.size > 0)
+                    {
+                        key = PushStringF(temp, "[%.*s]/%.*s", StringExpand(section), StringExpand(key));
+                    }
+
+                    ConfigWriteStringRaw(config, key, value);
+                }
+                else
+                {
+                    // TODO: report error
+                }
+            }
+            else
+            {
+                // TODO: report error
+            }
         }
 
-        ConfigWriteStringRaw(config, key, value);
+        while (string[at] && !IsVerticalWhitespaceAscii(string[at]))
+            at++;
+
+        if (string[at] == '\r')
+            at++;
+
+        if (string[at] == '\n')
+            at++;
     }
 }
 
