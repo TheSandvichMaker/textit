@@ -742,6 +742,15 @@ ApplyPositionDelta(int64_t pos, int64_t delta_pos, int64_t delta)
     return pos;
 }
 
+function Range
+FixBufferRangeAfterEdit(Range range, int64_t edit_pos, int64_t edit_delta)
+{
+    Range result;
+    result.start = ApplyPositionDelta(range.start, edit_pos, edit_delta);
+    result.end   = ApplyPositionDelta(range.end  , edit_pos, edit_delta);
+    return result;
+}
+
 function void
 OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
 {
@@ -831,7 +840,7 @@ BufferReplaceRangeNoUndoHistory(Buffer *buffer, Range range, String text)
         LineData line_data;
         tokenize_pos = TokenizeLine(buffer, tokenize_pos, prev_line_data->end_tokenize_state, &line_data);
 
-        LineIndexNode *node = InsertLine(buffer, MakeRange(this_line_start, tokenize_pos), &line_data);
+        LineIndexNode *node = InsertLine(buffer, MakeRange(this_line_start, tokenize_pos), line_data);
         prev_line_data = &node->data;
 
         next_retokenize_line += 1;
@@ -909,6 +918,57 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
 
     int64_t result = BufferReplaceRangeNoUndoHistory(buffer, range, text);
     return result;
+}
+
+function void 
+DoBulkEdit(Buffer *buffer, size_t count, BulkEdit *edits)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        edits[i].range = SanitizeRange(edits[i].range);
+    }
+
+    Sort(count, edits, +[](const BulkEdit &a, const BulkEdit &b) {
+        return a.range.start < b.range.start;
+    });
+
+    // Merge overlapping ranges
+    size_t dst = 0;
+    size_t src = 1;
+    while (src < count)
+    {
+        Range a = edits[dst].range;
+        Range b = edits[src].range;
+
+        if (edits[src].string.size == 0 && edits[dst].string.size == 0 && RangesOverlap(a, b))
+        {
+            edits[dst].range = Union(a, b);
+        }
+        else
+        {
+            dst++;
+        }
+        src++;
+    }
+    count = dst + 1;
+
+    // Do the edit
+    BeginUndoBatch(buffer);
+    for (size_t edit_index = 0; edit_index < count; edit_index++)
+    {
+        int64_t edit_pos = edits[edit_index].range.start;
+        int64_t edit_delta = edits[edit_index].range.start - edits[edit_index].range.end + edits[edit_index].string.size;
+
+        // replace text
+        BufferReplaceRange(buffer, edits[edit_index].range, edits[edit_index].string);
+
+        // SPEED: Quadratic!
+        for (size_t adjust_index = edit_index + 1; adjust_index < count; adjust_index++)
+        {
+            edits[adjust_index].range = FixBufferRangeAfterEdit(edits[adjust_index].range, edit_pos, edit_delta);
+        }
+    }
+    EndUndoBatch(buffer);
 }
 
 function Range
@@ -1495,7 +1555,7 @@ GetFirstRecord(LineIndexNode *root)
 }
 
 function LineIndexNode *
-InsertLine(Buffer *buffer, Range range, LineData *data)
+InsertLine(Buffer *buffer, Range range, const LineData &data)
 {
     PlatformHighResTime start = platform->GetTime();
 
@@ -1507,7 +1567,7 @@ InsertLine(Buffer *buffer, Range range, LineData *data)
     LineIndexNode *record = AllocateLineIndexNode(buffer, LineIndexNode_Record);
     record->span      = RangeSize(range);
     record->line_span = 1;
-    CopyStruct(data, &record->data);
+    record->data = data;
 
     if (LineIndexNode *split_node = InsertEntry(buffer, buffer->line_index_root, range.start, record))
     {

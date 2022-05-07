@@ -101,6 +101,9 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
 {
     bool handled_any_events = false;
 
+    int64_t viewport_height = GetHeight(render_state->viewport);
+    int64_t max_visible_predictions = viewport_height - 1;
+
     auto AcceptPrediction = [](CommandLine *cl)
     {
         if (cl->prediction_selected_index == -1) return;
@@ -200,8 +203,9 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
 
                 case PlatformInputCode_Control:
                 {
-                    AcceptPrediction(cl);
+                    // AcceptPrediction(cl);
                     cl->highlight_numbers = true;
+                    handled_event = false;
                 } break;
 
                 case PlatformInputCode_Escape:
@@ -238,6 +242,8 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
                         handled_event = false;
                         break;
                     }
+
+                    selection += cl->scroll_offset;
 
                     if (cl->no_quickselect && !event->ctrl_down)
                     {
@@ -289,8 +295,14 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
                 case PlatformInputCode_Down:
                 case PlatformInputCode_Tab:
                 {
+                    if (event->repeat)
+                    {
+                        cl->actively_scrolling = true;
+                    }
+
                     bool going_down = ((event->input_code == PlatformInputCode_Down) ||
                                        (event->input_code == PlatformInputCode_Tab && event->shift_down));
+                    int move_amount = (event->ctrl_down ? (int)max_visible_predictions : 1);
                     if (cl->prediction_count == 1)
                     {
                         cl->prediction_selected_index = 0;
@@ -301,18 +313,36 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
                         cl->cycling_predictions = true;
                         if (going_down)
                         {
-                            cl->prediction_selected_index--;
+                            bool was_at_zero = (cl->prediction_selected_index == 0);
+
+                            cl->prediction_selected_index -= move_amount;
                             if (cl->prediction_selected_index < 0)
                             {
-                                cl->prediction_selected_index = cl->prediction_count - 1;
+                                if (was_at_zero && !cl->actively_scrolling)
+                                {
+                                    cl->prediction_selected_index = cl->prediction_count - 1;
+                                }
+                                else
+                                {
+                                    cl->prediction_selected_index = 0;
+                                }
                             }
                         }
                         else
                         {
-                            cl->prediction_selected_index++;
+                            bool was_at_max = (cl->prediction_selected_index == cl->prediction_count - 1);
+
+                            cl->prediction_selected_index += move_amount;
                             if (cl->prediction_selected_index >= cl->prediction_count)
                             {
-                                cl->prediction_selected_index = 0;
+                                if (was_at_max && !cl->actively_scrolling)
+                                {
+                                    cl->prediction_selected_index = 0;
+                                }
+                                else
+                                {
+                                    cl->prediction_selected_index = cl->prediction_count - 1;
+                                }
                             }
                         }
                     }
@@ -378,9 +408,23 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
         {
             switch (event->input_code)
             {
+                case PlatformInputCode_Up:
+                case PlatformInputCode_Down:
+                case PlatformInputCode_Tab:
+                {
+                    cl->actively_scrolling = false;
+                    handled_event = false;
+                } break;
+
                 case PlatformInputCode_Control:
                 {
                     cl->highlight_numbers = false;
+                    handled_event = false;
+                } break;
+
+                default:
+                {
+                    handled_event = false;
                 } break;
             }
         }
@@ -403,8 +447,10 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
 
                 String cl_string = TrimSpaces(MakeString(cl->count, cl->text));
 
+                ScopedMemory temp;
+
                 SortKey *sort_keys = cl->sort_keys;
-                SortKey temp_sort_keys[35];
+                SortKey *temp_sort_keys = PushArray(temp, cl->prediction_count, SortKey);
                 for (int i = 0; i < cl->prediction_count; i += 1)
                 {
                     Prediction *prediction = &cl->predictions[i];
@@ -415,7 +461,7 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
                     if (!AreEqual(cl_string, prediction->preview_text, StringMatch_CaseInsensitive) &&
                         !AreEqual(cl_string, prediction->text,         StringMatch_CaseInsensitive))
                     {
-                        sort_keys[i].key += 100;
+                        sort_keys[i].key += 1000;
                     }
                     sort_keys[i].index = i;
                 }
@@ -442,6 +488,23 @@ HandleCommandLineEvent(CommandLine *cl, PlatformEvent *event)
         }
 
         handled_any_events |= handled_event;
+    }
+
+    if (cl->prediction_selected_index != -1)
+    {
+        if (cl->prediction_selected_index + 3 - cl->scroll_offset >= max_visible_predictions)
+        {
+            cl->scroll_offset += (int)(cl->prediction_selected_index + 3 - cl->scroll_offset - max_visible_predictions);
+        }
+
+        if (cl->prediction_selected_index < cl->scroll_offset + 1)
+        {
+            cl->scroll_offset -= (int)(cl->scroll_offset + 1 - cl->prediction_selected_index);
+            if (cl->scroll_offset < 0)
+            {
+                cl->scroll_offset = 0;
+            }
+        }
     }
 
     editor->changed_command_line = false;

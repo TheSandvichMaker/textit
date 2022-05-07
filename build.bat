@@ -39,14 +39,20 @@ if "%TEXTIT_USE_LLVM%" equ "1" goto build_llvm
 :build_msvc
 misc\ctime.exe -begin ctm\textit_msvc_debug.ctm
 echo COMPILER: CL
+
 cl code\textit.cpp       -DTEXTIT_BUILD_DLL=1 %FLAGS% %DEBUG_FLAGS% %MSVC_FLAGS% /Fe"textit.dll" /LD /link %LINKER_FLAGS%
+if NOT '%ERRORLEVEL%' == '0' goto build_aborted
+
 cl code\win32_textit.cpp -DTEXTIT_BUILD_DLL=1 %FLAGS% %DEBUG_FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_debug.exe" %LINKER_LIBRARIES% 
+if NOT '%ERRORLEVEL%' == '0' goto build_aborted
+
 misc\ctime.exe -end ctm\textit_msvc_debug.ctm
 echo built win32_textit_msvc_debug.exe
+
 del textit_lock.temp
 misc\ctime.exe -begin ctm\textit_msvc_release.ctm
 cl code\win32_textit.cpp code\textit.cpp %FLAGS% %RELEASE_FLAGS% %MSVC_FLAGS% /Fe"win32_textit_msvc_release.exe" /link %LINKER_FLAGS% %LINKER_LIBRARIES%
-misc\ctime.exe -end ctm\textit_msvc_release.ctm
+misc\ctime.exe -end ctm\textit_msvc_release.ctm %ERRORLEVEL%
 echo built win32_textit_msvc_release.exe
 goto build_finished
 
@@ -55,6 +61,9 @@ echo COMPILER: CLANG-CL
 clang-cl code\textit.cpp -DTEXTIT_BUILD_DLL=1 %FLAGS% %LLVM_FLAGS% /Fe"textit.dll" /LD /link %LINKER_FLAGS%
 clang-cl code\win32_textit.cpp %FLAGS% %LLVM_FLAGS% /Fe"win32_textit.exe" %LINKER_LIBRARIES% 
 goto build_finished
+
+:build_aborted
+misc\ctime.exe -end ctm\textit_msvc_debug.ctm %ERRORLEVEL%
 
 :build_finished
 

@@ -129,7 +129,7 @@ GetGlyphBitmap(Font *font, Glyph glyph)
 }
 
 function void
-ApplyMove(Buffer *buffer, Cursor *cursor, Move move)
+ApplyMove(Buffer *buffer, Cursor *cursor, const Move &move)
 {
     int direction = (move.pos >= cursor->pos ? 1 : -1);
     if (editor->clutch)
@@ -164,52 +164,45 @@ ExecuteCommand(View *view, Command *command)
     }
     else
     {
-        for (Cursor *cursor = IterateCursors(view->id, view->buffer);
-             cursor;
-             cursor = cursor->next)
+        ScopedMemory temp;
+        Cursors cursors = GetCursors(temp, view, GetBuffer(view));
+
+        switch (command->kind)
         {
-            editor->override_cursor = cursor;
-            switch (command->kind)
+            case Command_Text:
             {
-                case Command_Text:
+                INVALID_CODE_PATH;
+            } break;
+
+            case Command_Movement:
+            {
+                command->movement(cursors);
+                editor->last_movement = command; 
+            } break;
+
+            case Command_Change:
+            {
+                command->change(cursors);
+
+                if (editor->last_movement)
                 {
-                    INVALID_CODE_PATH;
-                } break;
+                    Assert(editor->last_movement->kind == Command_Movement);
 
-                case Command_Movement:
-                {
-                    Move move = command->movement();
-                    ApplyMove(GetBuffer(view), cursor, move);
-
-                    editor->last_movement = command; 
-                } break;
-
-                case Command_Change:
-                {
-                    Selection selection;
-                    selection.inner = SanitizeRange(cursor->selection.inner);
-                    selection.outer = SanitizeRange(cursor->selection.outer);
-                    command->change(selection);
-
-                    if (editor->last_movement)
+                    if (editor->last_movement->flags & Movement_NoAutoRepeat)
                     {
-                        Assert(editor->last_movement->kind == Command_Movement);
-
-                        if (editor->last_movement->flags & Movement_NoAutoRepeat)
+                        for (Cursor *cursor: cursors)
                         {
                             cursor->selection = MakeSelection(cursor->pos);
                         }
-                        else if (editor->next_edit_mode == EditMode_Command)
-                        {
-                            Move next_move = editor->last_movement->movement();
-                            ApplyMove(GetBuffer(view), cursor, next_move);
-                        }
                     }
-                } break;
-            }
+                    else if (editor->next_edit_mode == EditMode_Command)
+                    {
+                        editor->last_movement->movement(cursors);
+                    }
+                }
+            } break;
         }
     }
-    editor->override_cursor = nullptr;
 
     if (command->flags & Command_Jump)
     {
@@ -252,17 +245,13 @@ HandleViewEvent(ViewID view_id, PlatformEvent *event)
 
     BindingMap *bindings = &editor->bindings[editor->edit_mode];
 
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
+
     if ((event->type == PlatformEvent_Text) && bindings->text_command)
     {
         String text = GetText(event);
-        for (Cursor *cursor = IterateCursors(view->id, buffer->id);
-             cursor;
-             cursor = cursor->next)
-        {
-            editor->override_cursor = cursor;
-            bindings->text_command->text(text);
-        }
-        editor->override_cursor = nullptr;
+        bindings->text_command->text(cursors, text);
     }
     else if (MatchFilter(event->type, PlatformEventFilter_KeyDown))
     {

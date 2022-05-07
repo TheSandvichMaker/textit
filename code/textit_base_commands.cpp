@@ -691,6 +691,40 @@ COMMAND_PROC(FilesMenu,
     };
 }
 
+COMMAND_PROC(TagsMenu)
+{
+    CommandLine *cl = BeginCommandLine();
+    cl->name = "Tags"_str;
+
+    cl->GatherPredictions = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+
+        auto AddOption = [string, cl](String option_name, uint8_t quickselect_char, String command_name)
+        {
+            if (FindSubstring(option_name, string, StringMatch_CaseInsensitive) != option_name.size)
+            {
+                Prediction pred = {};
+                pred.text             = option_name;
+                pred.quickselect_char = quickselect_char;
+                pred.userdata         = FindCommand(command_name);
+                AddPrediction(cl, pred);
+            }
+        };
+
+        AddOption("Tag Browser"_str, 'A', "Tags"_str);
+    };
+
+    cl->AcceptEntry = [](CommandLine *cl)
+    {
+        String string = GetCommandString(cl);
+        Prediction *pred = GetPrediction(cl);
+        Command *command = (Command *)pred->userdata;
+        ExecuteCommand(GetActiveView(), command);
+        return true;
+    };
+}
+
 COMMAND_PROC(QuickActionMenu,
              "Open the quick action menu"_str)
 {
@@ -714,6 +748,7 @@ COMMAND_PROC(QuickActionMenu,
         };
 
         AddOption("Files"_str, 'F', "FilesMenu"_str);
+		AddOption("Tags"_str, 'T', "TagsMenu"_str);
     };
 
     cl->AcceptEntry = [](CommandLine *cl)
@@ -1065,36 +1100,41 @@ MOVEMENT_PROC(RepeatLastSearch, Movement_NoAutoRepeat)
 {
     View   *view   = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
     editor->show_search_highlight = true;
+
     String search = editor->search.as_string;
 
-    Range range = FindNextOccurrence(buffer, cursor->pos + 1, search, editor->search_flags);
+    for (Cursor *cursor: cursors)
+    {
+        Range range = FindNextOccurrence(buffer, cursor->pos + 1, search, editor->search_flags);
 
-    Move move = {};
-    move.pos = range.start;
-    move.selection.inner = range;
-    move.selection.outer = range;
-    return move;
+        Move move = {};
+        move.pos = range.start;
+        move.selection.inner = range;
+        move.selection.outer = range;
+        ApplyMove(buffer, cursor, move);
+    }
 }
 
 MOVEMENT_PROC(RepeatLastSearchBackward, Movement_NoAutoRepeat)
 {
     View   *view   = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
     editor->show_search_highlight = true;
     String search = editor->search.as_string;
 
-    Range range = FindPreviousOccurrence(buffer, cursor->pos - 1, search, editor->search_flags);
+    for (Cursor *cursor: cursors)
+    {
+        Range range = FindPreviousOccurrence(buffer, cursor->pos - 1, search, editor->search_flags);
 
-    Move move = {};
-    move.pos = range.start;
-    move.selection.inner = range;
-    move.selection.outer = range;
-    return move;
+        Move move = {};
+        move.pos = range.start;
+        move.selection.inner = range;
+        move.selection.outer = range;
+        ApplyMove(buffer, cursor, move);
+    }
 }
 
 COMMAND_PROC(GoToDefinitionUnderCursor,
@@ -1362,183 +1402,198 @@ MOVEMENT_PROC(MoveLeft)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    Range line_range = EncloseLine(buffer, pos);
-    pos = ClampToRange(pos - 1, line_range);
+    for (Cursor *cursor: cursors)
+    {
+        int64_t pos = cursor->pos;
+        Range line_range = EncloseLine(buffer, pos);
+        pos = ClampToRange(pos - 1, line_range);
 
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos);
-    cursor->sticky_col = loc.col;
+        BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos);
+        cursor->sticky_col = loc.col;
 
-    return MakeMove(pos);
+        ApplyMove(buffer, cursor, MakeMove(pos));
+    }
 }
 
 MOVEMENT_PROC(MoveRight)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    Range line_range = EncloseLine(buffer, pos);
-    pos = ClampToRange(pos + 1, line_range);
+    for (Cursor *cursor: cursors)
+    {
+        int64_t pos = cursor->pos;
+        Range line_range = EncloseLine(buffer, pos);
+        pos = ClampToRange(pos + 1, line_range);
 
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos);
-    cursor->sticky_col = loc.col;
+        BufferLocation loc = CalculateBufferLocationFromPos(buffer, pos);
+        cursor->sticky_col = loc.col;
 
-    return MakeMove(pos);
+        ApplyMove(buffer, cursor, MakeMove(pos));
+    }
 }
 
 MOVEMENT_PROC(MoveLeftIdentifier)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    Selection selection = ScanWordBackward(buffer, pos);
+    for (Cursor *cursor: cursors)
+    {
+        int64_t pos = cursor->pos;
+        Selection selection = ScanWordBackward(buffer, pos);
 
-    Move result = {};
-    result.pos = selection.outer.end;
-    result.selection = selection;
+        Move result = {};
+        result.pos = selection.outer.end;
+        result.selection = selection;
 
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.pos);
-    cursor->sticky_col = loc.col;
+        BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.pos);
+        cursor->sticky_col = loc.col;
 
-    return result;
+        ApplyMove(buffer, cursor, result);
+    }
 }
 
 MOVEMENT_PROC(MoveRightIdentifier)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    Selection selection = ScanWordForward(buffer, pos);
+    for (Cursor *cursor: cursors)
+    {
+        int64_t pos = cursor->pos;
+        Selection selection = ScanWordForward(buffer, pos);
 
-    Move result = {};
-    result.pos = selection.outer.end;
-    result.selection = selection;
+        Move result = {};
+        result.pos = selection.outer.end;
+        result.selection = selection;
 
-    BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.pos);
-    cursor->sticky_col = loc.col;
+        BufferLocation loc = CalculateBufferLocationFromPos(buffer, result.pos);
+        cursor->sticky_col = loc.col;
 
-    return result;
+        ApplyMove(buffer, cursor, result);
+    }
 }
 
 MOVEMENT_PROC(MoveLineStart)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    cursor->sticky_col = 0;
+    for (Cursor *cursor: cursors)
+    {
+        cursor->sticky_col = 0;
 
-    int64_t pos = cursor->pos;
-    Range line_range = EncloseLine(buffer, pos, true);
-    return MakeMove(MakeRange(pos, line_range.start));
+        int64_t pos = cursor->pos;
+        Range line_range = EncloseLine(buffer, pos, true);
+        ApplyMove(buffer, cursor, MakeMove(MakeRange(pos, line_range.start)));
+    }
 }
 
 MOVEMENT_PROC(MoveLineEnd)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    cursor->sticky_col = 9999;
+    for (Cursor *cursor: cursors)
+    {
+        cursor->sticky_col = 9999;
 
-    int64_t pos = cursor->pos;
+        int64_t pos = cursor->pos;
 
-    int64_t inner, outer;
-    FindLineEnd(buffer, pos, &inner, &outer);
+        int64_t inner, outer;
+        FindLineEnd(buffer, pos, &inner, &outer);
 
-    Move move = {};
-    move.selection.inner.start = pos;
-    move.selection.outer.start = pos;
-    move.selection.inner.end   = inner;
-    move.selection.outer.end   = outer;
-    move.pos                   = inner;
+        Move move = {};
+        move.selection.inner.start = pos;
+        move.selection.outer.start = pos;
+        move.selection.inner.end   = inner;
+        move.selection.outer.end   = inner;
+        move.pos                   = inner;
 
-    return move;
+        ApplyMove(buffer, cursor, move);
+    }
 }
 
 MOVEMENT_PROC(EncloseLine)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    Range line_range = EncloseLine(buffer, pos, true);
-    return MakeMove(line_range);
+    for (Cursor *cursor: cursors)
+    {
+        int64_t pos = cursor->pos;
+        Range line_range = EncloseLine(buffer, pos, true);
+        ApplyMove(buffer, cursor, MakeMove(line_range));
+    }
 }
 
 MOVEMENT_PROC(EncloseNextScope)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    Range result = MakeRange(pos);
-
-    TokenIterator it = IterateTokens(buffer, pos);
-
-    TokenKind opening_kind = Token_None;
-    TokenKind closing_kind = Token_None;
-    bool seek_forward = true;
-    int depth = 0;
-    while (IsValid(&it))
+    for (Cursor *cursor: cursors)
     {
-        Token t = Next(&it);
-        if ((t.kind == Token_LeftParen) ||
-            (t.kind == Token_LeftScope) ||
-            (t.kind == Token_RightParen) ||
-            (t.kind == Token_RightScope))
-        {
-            opening_kind = t.kind;
-            if (opening_kind == Token_LeftParen)  { seek_forward = true;  closing_kind = Token_RightParen; }
-            if (opening_kind == Token_LeftScope)  { seek_forward = true;  closing_kind = Token_RightScope; }
-            if (opening_kind == Token_RightParen) { seek_forward = false; closing_kind = Token_LeftParen; Prev(&it); }
-            if (opening_kind == Token_RightScope) { seek_forward = false; closing_kind = Token_LeftScope; Prev(&it); }
+        int64_t pos = cursor->pos;
+        Range result = MakeRange(pos);
 
-            depth = 1;
-            break;
-        }
-    }
-    if (opening_kind)
-    {
+        TokenIterator it = IterateTokens(buffer, pos);
+
+        TokenKind opening_kind = Token_None;
+        TokenKind closing_kind = Token_None;
+        bool seek_forward = true;
+        int depth = 0;
         while (IsValid(&it))
         {
-            Token t = (seek_forward ? Next(&it) : Prev(&it));
-            if (t.kind == opening_kind)
+            Token t = Next(&it);
+            if ((t.kind == Token_LeftParen) ||
+                (t.kind == Token_LeftScope) ||
+                (t.kind == Token_RightParen) ||
+                (t.kind == Token_RightScope))
             {
-                depth += 1;
+                opening_kind = t.kind;
+                if (opening_kind == Token_LeftParen)  { seek_forward = true;  closing_kind = Token_RightParen; }
+                if (opening_kind == Token_LeftScope)  { seek_forward = true;  closing_kind = Token_RightScope; }
+                if (opening_kind == Token_RightParen) { seek_forward = false; closing_kind = Token_LeftParen; Prev(&it); }
+                if (opening_kind == Token_RightScope) { seek_forward = false; closing_kind = Token_LeftScope; Prev(&it); }
+
+                depth = 1;
+                break;
             }
-            else if (t.kind == closing_kind)
+        }
+        if (opening_kind)
+        {
+            while (IsValid(&it))
             {
-                depth -= 1;
-                if (depth <= 0)
+                Token t = (seek_forward ? Next(&it) : Prev(&it));
+                if (t.kind == opening_kind)
                 {
-                    result.end = (seek_forward ? t.pos + t.length : t.pos);
-                    break;
+                    depth += 1;
+                }
+                else if (t.kind == closing_kind)
+                {
+                    depth -= 1;
+                    if (depth <= 0)
+                    {
+                        result.end = (seek_forward ? t.pos + t.length : t.pos);
+                        break;
+                    }
                 }
             }
         }
-    }
 
-    return MakeMove(result);
+        ApplyMove(buffer, cursor, MakeMove(result));
+    }
 }
 
 function Move
-SelectSurroundingNest(View *view,
+SelectSurroundingNest(View *view, Cursor *cursor,
                       TokenKind open_nest, TokenKind close_nest,
                       bool line_selection)
 {
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
     Move result = {};
     result.pos       = cursor->pos;
@@ -1631,163 +1686,181 @@ SelectSurroundingNest(View *view,
 MOVEMENT_PROC(EncloseSurroundingScope, Movement_NoAutoRepeat)
 {
     View *view = GetActiveView();
-    return SelectSurroundingNest(view, Token_LeftScope, Token_RightScope, true);
+    Buffer *buffer = GetBuffer(view);
+    for (Cursor *cursor: cursors)
+    {
+        Move move = SelectSurroundingNest(view, cursor, Token_LeftScope, Token_RightScope, true);
+        ApplyMove(buffer, cursor, move);
+    }
 }
 
 MOVEMENT_PROC(EncloseSurroundingParen, Movement_NoAutoRepeat)
 {
     View *view = GetActiveView();
-    return SelectSurroundingNest(view, Token_LeftParen, Token_RightParen, false);
+    Buffer *buffer = GetBuffer(view);
+    for (Cursor *cursor: cursors)
+    {
+        Move move = SelectSurroundingNest(view, cursor, Token_LeftParen, Token_RightParen, false);
+        ApplyMove(buffer, cursor, move);
+    }
 }
 
 MOVEMENT_PROC(EncloseParameter, Movement_NoAutoRepeat)
 {
     View   *view   = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    Move result = {};
-    result.pos             = cursor->pos;
-    result.selection.inner = cursor->selection.inner;
-    result.selection.outer = cursor->selection.outer;
-    
-    int64_t pos = cursor->pos;
-
-    TokenLocator alternative_start = {};
-    TokenKind end_kind      = 0;
-    int64_t   end_pos       = -1;
-    int64_t   inner_end_pos = -1;
-
-    NestHelper nests = {};
-    TokenIterator it = IterateTokens(buffer, pos);
-
-    TokenKind open_token = 0;
-
-    while (IsValid(&it) || IsValid(alternative_start))
+    for (Cursor *cursor: cursors)
     {
-        if (!IsValid(&it) && IsValid(alternative_start))
-        {
-            Clear(&nests);
-            Rewind(&it, alternative_start);
-            alternative_start = {};
-        }
+        Move result = {};
+        result.pos             = cursor->pos;
+        result.selection.inner = cursor->selection.inner;
+        result.selection.outer = cursor->selection.outer;
+        
+        int64_t pos = cursor->pos;
 
-        Token t = Next(&it);
-        if (!t.kind) break;
+        TokenLocator alternative_start = {};
+        TokenKind end_kind      = 0;
+        int64_t   end_pos       = -1;
+        int64_t   inner_end_pos = -1;
 
-        if (!IsValid(alternative_start) &&
-            t.kind == Token_LeftParen)
-        {
-            alternative_start = LocateNext(&it);
-        }
+        NestHelper nests = {};
+        TokenIterator it = IterateTokens(buffer, pos);
 
-        if (IsInNest(&nests, t.kind, Direction_Forward))
-        {
-            continue;
-        }
+        TokenKind open_token = 0;
 
-        if (t.kind == Token_RightParen ||
-            t.kind == Token_RightScope ||
-            t.kind == ';' ||
-            t.kind == ',')
+        while (IsValid(&it) || IsValid(alternative_start))
         {
-            end_kind      = t.kind;
-            inner_end_pos = t.pos;
-            end_pos       = t.pos;
-            if (t.kind == ',' ||
-                t.kind == ';')
+            if (!IsValid(&it) && IsValid(alternative_start))
             {
-                end_pos = t.pos + t.length;
-
-                Token next = PeekNext(&it);
-                if (next)
-                {
-                    end_pos = next.pos;
-                }
+                Clear(&nests);
+                Rewind(&it, alternative_start);
+                alternative_start = {};
             }
-            else
+
+            Token t = Next(&it);
+            if (!t.kind) break;
+
+            if (!IsValid(alternative_start) &&
+                t.kind == Token_LeftParen)
             {
-                open_token = GetOtherNestTokenKind(t.kind);
+                alternative_start = LocateNext(&it);
             }
-            break;
-        }
-    }
 
-    if (end_pos >= 0)
-    {
-        Prev(&it); // skip the end token we were on
-        while (IsValid(&it))
-        {
-            Token t = Prev(&it);
-            if (!t) break;
-
-            if (IsInNest(&nests, t.kind, Direction_Backward))
+            if (IsInNest(&nests, t.kind, Direction_Forward))
             {
                 continue;
             }
 
-            if ((!open_token &&
-                 (t.kind == Token_LeftParen   ||
-                  t.kind == Token_LeftScope)) ||
-                t.kind == open_token          ||
-                t.kind == ',' ||
-                t.kind == ';')
+            if (t.kind == Token_RightParen ||
+                t.kind == Token_RightScope ||
+                t.kind == ';' ||
+                t.kind == ',')
             {
-                int64_t inner_start_pos = t.pos + t.length;
-
-                Token next = PeekNext(&it);
-                if (next)
+                end_kind      = t.kind;
+                inner_end_pos = t.pos;
+                end_pos       = t.pos;
+                if (t.kind == ',' ||
+                    t.kind == ';')
                 {
-                    inner_start_pos = next.pos;
-                }
+                    end_pos = t.pos + t.length;
 
-                int64_t start_pos = inner_start_pos;
-                if ((t.kind == ',' || t.kind == ';') && end_kind != t.kind)
+                    Token next = PeekNext(&it);
+                    if (next)
+                    {
+                        end_pos = next.pos;
+                    }
+                }
+                else
                 {
-                    start_pos = t.pos;
+                    open_token = GetOtherNestTokenKind(t.kind);
                 }
-
-                result.selection.inner.start = inner_start_pos;
-                result.selection.inner.end   = inner_end_pos;
-                result.selection.outer.start = start_pos;
-                result.selection.outer.end   = end_pos;
-
-                result.pos = result.selection.outer.end;
-
                 break;
             }
         }
-    }
 
-    return result;
+        if (end_pos >= 0)
+        {
+            Prev(&it); // skip the end token we were on
+            while (IsValid(&it))
+            {
+                Token t = Prev(&it);
+                if (!t) break;
+
+                if (IsInNest(&nests, t.kind, Direction_Backward))
+                {
+                    continue;
+                }
+
+                if ((!open_token &&
+                     (t.kind == Token_LeftParen   ||
+                      t.kind == Token_LeftScope)) ||
+                    t.kind == open_token          ||
+                    t.kind == ',' ||
+                    t.kind == ';')
+                {
+                    int64_t inner_start_pos = t.pos + t.length;
+
+                    Token next = PeekNext(&it);
+                    if (next)
+                    {
+                        inner_start_pos = next.pos;
+                    }
+
+                    int64_t start_pos = inner_start_pos;
+                    if ((t.kind == ',' || t.kind == ';') && end_kind != t.kind)
+                    {
+                        start_pos = t.pos;
+                    }
+
+                    result.selection.inner.start = inner_start_pos;
+                    result.selection.inner.end   = inner_end_pos;
+                    result.selection.outer.start = start_pos;
+                    result.selection.outer.end   = end_pos;
+
+                    result.pos = result.selection.outer.end;
+
+                    break;
+                }
+            }
+        }
+
+        ApplyMove(buffer, cursor, result);
+    }
 }
 
 MOVEMENT_PROC(MoveDown)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t line = GetLineNumber(buffer, cursor->pos);
+    for (Cursor *cursor: cursors)
+    {
+        int64_t line = GetLineNumber(buffer, cursor->pos);
 
-    Move move = {};
-    move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, 1)).pos;
-    GetLineRanges(buffer, line, &move.selection.inner, &move.selection.outer);
-    return move;
+        Move move = {};
+        move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, 1)).pos;
+        GetLineRanges(buffer, line, &move.selection.inner, &move.selection.outer);
+
+        ApplyMove(buffer, cursor, move);
+    }
 }
 
 MOVEMENT_PROC(MoveUp)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t line = GetLineNumber(buffer, cursor->pos);
+    for (Cursor *cursor: cursors)
+    {
+        int64_t line = GetLineNumber(buffer, cursor->pos);
 
-    Move move = {};
-    move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, -1)).pos;
-    GetLineRanges(buffer, line, &move.selection.inner, &move.selection.outer);
-    return move;
+        Move move = {};
+        move.pos = CalculateRelativeMove(buffer, cursor, MakeV2i(0, -1)).pos;
+        GetLineRanges(buffer, line, &move.selection.inner, &move.selection.outer);
+
+        ApplyMove(buffer, cursor, move);
+    }
 }
 
 COMMAND_PROC(PageUp)
@@ -1822,10 +1895,15 @@ COMMAND_PROC(BackspaceChar)
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
 
-    for (Cursor *cursor = IterateCursors(view);
-         cursor;
-         cursor = cursor->next)
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
+
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
     {
+        Cursor *cursor = cursors[i];
+
         int64_t pos = cursor->pos;
         int64_t newline_length = PeekNewlineBackward(buffer, pos - 1);
         int64_t to_delete = 1;
@@ -1862,63 +1940,107 @@ COMMAND_PROC(BackspaceChar)
             }
         }
 
-        pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos - to_delete, to_delete), ""_str);
-        SetCursor(cursor, pos);
+        edits[i].range = MakeRangeStartLength(pos - to_delete, to_delete);
+        edits[i].string = ""_str;
+
+        SetCursor(cursor, edits[i].range.start);
     }
+
+    DoBulkEdit(buffer, cursors.count, edits);
 }
 
 COMMAND_PROC(BackspaceWord)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    int64_t start_pos = pos;
-    int64_t end_pos = ScanWordBackward(buffer, pos).inner.end;
-    int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
-    SetCursor(view, final_pos);
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
+
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+
+        int64_t pos = cursor->pos;
+        int64_t start_pos = ScanWordBackward(buffer, pos).inner.end;
+        int64_t end_pos = pos;
+
+        edits[i].range = MakeRange(start_pos, end_pos);
+        edits[i].string = ""_str;
+
+        SetCursor(cursor, edits[i].range.start);
+    }
+
+    DoBulkEdit(buffer, cursors.count, edits);
 }
 
 COMMAND_PROC(DeleteChar)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
-    int64_t newline_length = PeekNewline(buffer, pos);
-    int64_t to_delete = 1;
-    if (newline_length)
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
+
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
     {
-        to_delete = newline_length;
+        Cursor *cursor = cursors[i];
+
+        int64_t pos = cursor->pos;
+        int64_t newline_length = PeekNewline(buffer, pos);
+        int64_t to_delete = 1;
+        if (newline_length)
+        {
+            to_delete = newline_length;
+        }
+        edits[i].range = MakeRangeStartLength(pos, to_delete);
+        edits[i].string = ""_str;
     }
-    pos = BufferReplaceRange(buffer, MakeRangeStartLength(pos, to_delete), ""_str);
-    SetCursor(view, pos);
+
+    DoBulkEdit(buffer, cursors.count, edits);
 }
 
 COMMAND_PROC(DeleteWord)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    int64_t pos = cursor->pos;
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
 
-    int64_t start_pos = pos;
-    int64_t end_pos = ScanWordEndForward(buffer, pos);
-    int64_t final_pos = BufferReplaceRange(buffer, MakeRange(start_pos, end_pos), StringLiteral(""));
-    SetCursor(view, final_pos);
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+
+        int64_t pos = cursor->pos;
+
+        int64_t start_pos = pos;
+        int64_t end_pos = ScanWordEndForward(buffer, pos);
+
+        edits[i].range = MakeRange(start_pos, end_pos);
+        edits[i].string = ""_str;
+    }
+
+    DoBulkEdit(buffer, cursors.count, edits);
 }
 
 COMMAND_PROC(UndoOnce)
 {
     View *view = GetActiveView();
 
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view);
+
     Range result = UndoOnce(view);
-    if (result.start >= 0)
+    if (cursors.count == 1 && result.start >= 0)
     {
-        SetCursor(view, result.start, result);
+        SetCursor(cursors[0], result.start, result);
     }
 }
 
@@ -1926,10 +2048,13 @@ COMMAND_PROC(RedoOnce)
 {
     View *view = GetActiveView();
 
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view);
+
     Range result = RedoOnce(view);
-    if (result.start >= 0)
+    if (cursors.count == 1 && result.start >= 0)
     {
-        SetCursor(view, result.start, result);
+        SetCursor(cursors[0], result.start, result);
     }
 }
 
@@ -2068,32 +2193,72 @@ CHANGE_PROC(DeleteSelection)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    BufferReplaceRange(buffer, selection.outer, ""_str);
+
+    ScopedMemory temp;
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        edits[i].range  = cursors[i]->selection.outer;
+        edits[i].string = ""_str;
+    }
+
+    DoBulkEdit(buffer, cursors.count, edits);
 }
 
 CHANGE_PROC(DeleteInnerSelection)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    BufferReplaceRange(buffer, selection.inner, ""_str);
+
+    ScopedMemory temp;
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        edits[i].range  = cursors[i]->selection.inner;
+        edits[i].string = ""_str;
+    }
+
+    DoBulkEdit(buffer, cursors.count, edits);
 }
 
 CHANGE_PROC(ChangeSelection)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    cursor->pos = selection.inner.start;
+    ScopedMemory temp;
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
 
-    Range line_range = GetLineRange(buffer, selection.inner);
+    Selection selection_envelope;
+    selection_envelope.inner = InvertedInfinityRange();
+    selection_envelope.outer = InvertedInfinityRange();
 
-    BeginUndoBatch(GetActiveBuffer());
-    BufferReplaceRange(buffer, selection.inner, ""_str);
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+        cursor->pos = cursor->selection.inner.start;
+
+        edits[i].range = cursor->selection.inner;
+        edits[i].string = ""_str;
+
+        selection_envelope = Union(selection_envelope, cursor->selection);
+    }
+
+    DoBulkEdit(buffer, cursors.count, edits);
+
+    Range line_range = GetLineRange(buffer, selection_envelope.inner);
     if (line_range.start != line_range.end)
     {
-        AutoIndentLineAt(buffer, cursor->pos);
+        for (size_t i = 0; i < cursors.count; i++)
+        {
+            Cursor *cursor = cursors[i];
+            // TODO: This is probably a bit bullshit.
+            AutoIndentLineAt(buffer, cursor->pos);
+        }
     }
+
     CMD_EnterTextMode();
 }
 
@@ -2101,47 +2266,85 @@ CHANGE_PROC(ChangeOuterSelection)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    cursor->pos = selection.outer.start;
+    ScopedMemory temp;
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
 
-    Range line_range = GetLineRange(buffer, selection.outer);
+    Selection selection_envelope;
+    selection_envelope.inner = InvertedInfinityRange();
+    selection_envelope.outer = InvertedInfinityRange();
 
-    BeginUndoBatch(GetActiveBuffer());
-    BufferReplaceRange(buffer, selection.outer, ""_str);
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+        cursor->pos = cursor->selection.outer.start;
+
+        edits[i].range = cursor->selection.outer;
+        edits[i].string = ""_str;
+
+        selection_envelope = Union(selection_envelope, cursor->selection);
+    }
+
+    DoBulkEdit(buffer, cursors.count, edits);
+
+    Range line_range = GetLineRange(buffer, selection_envelope.outer);
     if (line_range.start != line_range.end)
     {
-        AutoIndentLineAt(buffer, cursor->pos);
+        for (size_t i = 0; i < cursors.count; i++)
+        {
+            Cursor *cursor = cursors[i];
+            // TODO: This is probably a bit bullshit.
+            AutoIndentLineAt(buffer, cursor->pos);
+        }
     }
+
     CMD_EnterTextMode();
 }
 
 CHANGE_PROC(ToUppercase)
 {
     Buffer *buffer = GetActiveBuffer();
-    String string = PushBufferRange(platform->GetTempArena(), buffer, selection.inner);
-    for (size_t i = 0; i < string.size; i += 1)
+
+    ScopedMemory temp;
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
     {
-        string.data[i] = ToUpperAscii(string.data[i]);
+        Cursor *cursor = cursors[i];
+
+        String string = PushBufferRange(temp, buffer, cursor->selection.inner);
+        ToUpper(string);
+
+        edits[i].range  = cursor->selection.inner;
+        edits[i].string = string;
     }
-    BufferReplaceRange(buffer, selection.inner, string);
+
+    DoBulkEdit(buffer, cursors.count, edits);
 }
 
 COMMAND_PROC(RepeatLastCommand)
 {
-    // dummy command
+    // dummy command do not implement
 }
 
 COMMAND_PROC(Copy)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
-
-    Range range = SanitizeRange(cursor->selection.outer);
 
     ScopedMemory temp;
-    String string = PushBufferRange(temp, buffer, range);
+    Cursors cursors = GetCursors(temp, view, buffer);
+
+    StringList strings = MakeStringList(temp);
+
+    for (Cursor *cursor: cursors)
+    {
+        String string = PushBufferRange(temp, buffer, SanitizeRange(cursor->selection.outer));
+        PushNoCopy(&strings, string);
+    }
+
+    String eol = LineEndString(buffer->line_end);
+    String string = FlattenString(&strings, eol);
 
     platform->WriteClipboard(string);
 }
@@ -2150,26 +2353,56 @@ COMMAND_PROC(PasteBefore)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    String string = platform->ReadClipboard(platform->GetTempArena());
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
 
-    int64_t insert_pos = cursor->pos;
-    int64_t pos = BufferReplaceRange(buffer, MakeRange(insert_pos), string);
-    SetCursor(view, pos);
+    String string = platform->ReadClipboard(temp);
+
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+        edits[i].range = MakeRange(cursor->pos);
+        edits[i].string = string;
+    }
+
+    DoBulkEdit(buffer, cursors.count, edits);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+        SetCursor(cursor, edits[i].range.start, edits[i].range, edits[i].range);
+    }
 }
 
 COMMAND_PROC(PasteAfter)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    String string = platform->ReadClipboard(platform->GetTempArena());
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
 
-    int64_t insert_pos = cursor->pos + 1;
-    int64_t pos = BufferReplaceRange(buffer, MakeRange(insert_pos), string);
-    SetCursor(view, pos);
+    String string = platform->ReadClipboard(temp);
+
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+        edits[i].range = MakeRange(cursor->pos + 1);
+        edits[i].string = string;
+    }
+
+    DoBulkEdit(buffer, cursors.count, edits);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+        SetCursor(cursor, edits[i].range.start, edits[i].range, edits[i].range);
+    }
 }
 
 CHANGE_PROC(PasteReplaceSelection)
@@ -2177,25 +2410,47 @@ CHANGE_PROC(PasteReplaceSelection)
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
 
-    Arena *arena = platform->GetTempArena();
-    ScopedMemory temp_memory(arena);
+    ScopedMemory temp;
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
 
-    String replaced_string = PushBufferRange(arena, buffer, selection.outer);
-    String string = platform->ReadClipboard(arena);
+    String paste = platform->ReadClipboard(temp);
 
-    int64_t pos = BufferReplaceRange(buffer, selection.outer, string);
-    SetCursor(view, pos);
+    StringList replaced_strings = MakeStringList(temp);
+
+    for (size_t i = 0; i < cursors.count; i++)
+    {
+        Cursor *cursor = cursors[i];
+
+        String replaced_string = PushBufferRange(temp, buffer, cursor->selection.outer);
+        PushNoCopy(&replaced_strings, replaced_string);
+
+        edits[i].range = cursor->selection.outer;
+        edits[i].string = replaced_string;
+
+        SetCursor(cursor, edits[i].range.start);
+    }
+
+    // TODO: Don't just put newlines inbetween them. Be smarter, somehow.
+    String eol = LineEndString(buffer->line_end);
+    String replaced_string = FlattenString(&replaced_strings, eol);
 
     platform->WriteClipboard(replaced_string);
 }
 
 COMMAND_PROC(UnalignCursors, "Remove excess whitespace between the cursors and their previous tokens"_str)
 {
-    View   *view   = GetActiveView();
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
 
-    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
+
+    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+    for (size_t i = 0; i < cursors.count; i++)
     {
+        Cursor *cursor = cursors[i];
+
         uint8_t at_cursor = ReadBufferByte(buffer, cursor->pos);
 
         size_t space_to_leave = 1;
@@ -2213,18 +2468,25 @@ COMMAND_PROC(UnalignCursors, "Remove excess whitespace between the cursors and t
 
         String space_string = " "_str;
         space_string.size = space_to_leave;
-        BufferReplaceRange(buffer, MakeRange(start, end), space_string);
+
+        edits[i].range = MakeRange(start, end);
+        edits[i].string = space_string;
     }
+
+    DoBulkEdit(buffer, cursors.count, edits);
 }
 
 COMMAND_PROC(AlignCursors, "Insert whitespaces before all the cursors so that they line up vertically"_str)
 {
-    View   *view   = GetActiveView();
+    View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
+
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
 
     bool all_cursors_have_same_alignment = true;
     int64_t align_col = -1;
-    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    for (Cursor *cursor: cursors)
     {
         // TODO: Handle tabs vs spaces?
         BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
@@ -2238,22 +2500,29 @@ COMMAND_PROC(AlignCursors, "Insert whitespaces before all the cursors so that th
     if (all_cursors_have_same_alignment)
     {
         CMD_UnalignCursors();
-        return;
     }
-
-    ScopedMemory temp;
-    String padding_string = PushStringSpace(temp, align_col);
-    for (size_t i = 0; i < padding_string.size; i += 1) padding_string.data[i] = ' ';
-
-    BeginUndoBatch(buffer);
-    for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
+    else
     {
-        BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
-        int64_t padding = align_col - loc.col;
-        Assert(padding >= 0);
-        BufferReplaceRange(buffer, MakeRange(cursor->pos), MakeString((size_t)padding, padding_string.data));
+        String padding_string = PushStringSpace(temp, align_col);
+        Fill(&padding_string, ' ');
+
+        BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+
+        for (size_t i = 0; i < cursors.count; i++)
+        {
+            Cursor *cursor = cursors[i];
+
+            BufferLocation loc = CalculateBufferLocationFromPos(buffer, cursor->pos);
+            int64_t padding = align_col - loc.col;
+
+            Assert(padding >= 0);
+
+            edits[i].range = MakeRange(cursor->pos);
+            edits[i].string = Substring(padding_string, 0, padding);
+        }
+
+        DoBulkEdit(buffer, cursors.count, edits);
     }
-    EndUndoBatch(buffer);
 }
 
 TEXT_COMMAND_PROC(WriteText)
@@ -2270,87 +2539,92 @@ TEXT_COMMAND_PROC(WriteText)
     bool        indent_with_tabs = core_config->indent_with_tabs;
     LineEndKind line_end_kind    = buffer->line_end;
 
-    Cursor *cursor = GetCursor(view);
-    int64_t insert_pos = cursor->pos;
-
-    bool newline            = false;
-    bool should_auto_indent = false;
-    for (size_t i = 0; i < size; i += 1)
+    // TODO: Bulk edit
+    for (Cursor *cursor: cursors)
     {
-        uint8_t c = data[i];
+        Clear(&buf);
 
-        if (c == '\n')
+        int64_t insert_pos = cursor->pos;
+
+        bool newline            = false;
+        bool should_auto_indent = false;
+        for (size_t i = 0; i < size; i += 1)
         {
-            newline            = true;
-            should_auto_indent = true;
-        }
+            uint8_t c = data[i];
 
-        if (!indent_with_tabs && c == '\t')
-        {
-            int left = (int)GetSizeLeft(&buf);
-
-            int64_t line_start = FindLineStart(buffer, insert_pos);
-            int64_t col = insert_pos - line_start;
-            int64_t target_col = RoundUpNextTabStop(col, indent_width);
-
-            int64_t spaces = target_col - col;
-            Assert(spaces < left);
-
-            AppendFill(&buf, spaces, ' ');
-        }
-        else if (newline && line_end_kind == LineEnd_CRLF)
-        {
-            Assert(CanFitAppend(&buf, "\r\n"_str));
-            Append(&buf, "\r\n"_str);
-        }
-        else
-        {
-            Assert(GetSizeLeft(&buf) > 0);
-            if (c == '\n' ||
-                c == '\t' ||
-                (c >= ' ' && c <= '~') ||
-                c >= 128)
+            if (c == '\n')
             {
-                Append(&buf, c);
-            }
-        }
-    }
-
-    if (buf.size > 0)
-    {
-        if (newline && core_config->auto_line_comments)
-        {
-            LineInfo info;
-            FindLineInfoByPos(buffer, insert_pos, &info);
-
-            TokenIterator it = IterateLineTokens(&info);
-            Token t = it.token;
-
-            if (IsInRange(info.range, t.pos) && t.kind == Token_LineComment)
-            {
-                String line_comment_string = GetOperatorAsString(buffer->language, Token_LineComment);
-                Append(&buf, line_comment_string);
-                Append(&buf, ' ');
-            }
-        }
-
-        BufferReplaceRange(buffer, MakeRange(insert_pos), buf.as_string);
-        
-        if (!should_auto_indent)
-        {
-            IndentRules *indent_rules = buffer->indent_rules;
-
-            Token t = GetTokenAt(buffer, insert_pos);
-            IndentRule rule = indent_rules->table[t.kind];
-            if (rule & IndentRule_RequiresReindent)
-            {
+                newline            = true;
                 should_auto_indent = true;
             }
+
+            if (!indent_with_tabs && c == '\t')
+            {
+                int left = (int)GetSizeLeft(&buf);
+
+                int64_t line_start = FindLineStart(buffer, insert_pos);
+                int64_t col = insert_pos - line_start;
+                int64_t target_col = RoundUpNextTabStop(col, indent_width);
+
+                int64_t spaces = target_col - col;
+                Assert(spaces < left);
+
+                AppendFill(&buf, spaces, ' ');
+            }
+            else if (newline && line_end_kind == LineEnd_CRLF)
+            {
+                Assert(CanFitAppend(&buf, "\r\n"_str));
+                Append(&buf, "\r\n"_str);
+            }
+            else
+            {
+                Assert(GetSizeLeft(&buf) > 0);
+                if (c == '\n' ||
+                    c == '\t' ||
+                    (c >= ' ' && c <= '~') ||
+                    c >= 128)
+                {
+                    Append(&buf, c);
+                }
+            }
         }
 
-        if (should_auto_indent)
+        if (buf.size > 0)
         {
-            AutoIndentLineAt(buffer, cursor->pos);
+            if (newline && core_config->auto_line_comments)
+            {
+                LineInfo info;
+                FindLineInfoByPos(buffer, insert_pos, &info);
+
+                TokenIterator it = IterateLineTokens(&info);
+                Token t = it.token;
+
+                if (IsInRange(info.range, t.pos) && t.kind == Token_LineComment)
+                {
+                    String line_comment_string = GetOperatorAsString(buffer->language, Token_LineComment);
+                    Append(&buf, line_comment_string);
+                    Append(&buf, ' ');
+                }
+            }
+
+            BufferReplaceRange(buffer, MakeRange(insert_pos), buf.as_string);
+            
+            if (!should_auto_indent)
+            {
+                IndentRules *indent_rules = buffer->indent_rules;
+
+                Token t = GetTokenAt(buffer, insert_pos);
+                IndentRule rule = indent_rules->table[t.kind];
+                if (rule & IndentRule_RequiresReindent)
+                {
+                    should_auto_indent = true;
+                }
+            }
+
+            if (should_auto_indent)
+            {
+                AutoIndentLineAt(buffer, cursor->pos);
+            }
         }
     }
 }
@@ -2409,15 +2683,22 @@ COMMAND_PROC(OpenNewLineBelow)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
     CMD_EnterTextMode();
 
-    int64_t insert_pos;
-    FindLineEnd(buffer, cursor->pos, &insert_pos);
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
 
-    SetCursor(cursor, insert_pos);
-    CMD_WriteText("\n"_str); // NOTE: CRLF line endings are correctly expanded in WriteText
+    // TODO: Bulk edit?
+    for (Cursor *cursor: cursors)
+    {
+        int64_t insert_pos;
+        FindLineEnd(buffer, cursor->pos, &insert_pos);
+
+        SetCursor(cursor, insert_pos);
+    }
+
+    CMD_WriteText(cursors, "\n"_str); // NOTE: CRLF line endings are correctly expanded in WriteText
 }
 
 COMMAND_PROC(TryCompleteOrTab)
@@ -2432,7 +2713,10 @@ COMMAND_PROC(TryCompleteOrTab)
     }
     else
     {
-        CMD_WriteText("\t"_str);
+        ScopedMemory temp;
+        Cursors cursors = GetCursors(temp, view, buffer);
+
+        CMD_WriteText(cursors, "\t"_str);
     }
 }
 

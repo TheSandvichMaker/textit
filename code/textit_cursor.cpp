@@ -5,9 +5,9 @@ GetCursorSlot(ViewID view, BufferID buffer, bool make_if_missing)
     key.view   = view;
     key.buffer = buffer;
     uint64_t hash = HashIntegers(key.value).u64[0];
-    uint64_t slot = hash % ArrayCount(editor->cursor_hash);
+    uint64_t slot = hash % ArrayCount(cursor_table->cursor_hash);
 
-    CursorHashEntry *entry = editor->cursor_hash[slot];
+    CursorHashEntry *entry = cursor_table->cursor_hash[slot];
 
     while (entry &&
            (entry->key.value != key.value))
@@ -17,25 +17,25 @@ GetCursorSlot(ViewID view, BufferID buffer, bool make_if_missing)
 
     if (!entry && make_if_missing)
     {
-        if (!editor->first_free_cursor_hash_entry)
+        if (!cursor_table->first_free_cursor_hash_entry)
         {
-            editor->first_free_cursor_hash_entry = PushStructNoClear(&editor->transient_arena, CursorHashEntry);
-            editor->first_free_cursor_hash_entry->next_in_hash = nullptr;
+            cursor_table->first_free_cursor_hash_entry = PushStructNoClear(&editor->transient_arena, CursorHashEntry);
+            cursor_table->first_free_cursor_hash_entry->next_in_hash = nullptr;
         }
-        entry = editor->first_free_cursor_hash_entry;
-        editor->first_free_cursor_hash_entry = entry->next_in_hash;
+        entry = cursor_table->first_free_cursor_hash_entry;
+        cursor_table->first_free_cursor_hash_entry = entry->next_in_hash;
 
-        entry->next_in_hash = editor->cursor_hash[slot];
-        editor->cursor_hash[slot] = entry;
+        entry->next_in_hash = cursor_table->cursor_hash[slot];
+        cursor_table->cursor_hash[slot] = entry;
 
         entry->key = key;
 
-        if (!editor->first_free_cursor)
+        if (!cursor_table->first_free_cursor)
         {
-            editor->first_free_cursor = PushStructNoClear(&editor->transient_arena, Cursor);
-            editor->first_free_cursor->next = nullptr;
+            cursor_table->first_free_cursor = PushStructNoClear(&editor->transient_arena, Cursor);
+            cursor_table->first_free_cursor->next = nullptr;
         }
-        entry->cursor = SllStackPop(editor->first_free_cursor);
+        entry->cursor = SllStackPop(cursor_table->first_free_cursor);
         ZeroStruct(entry->cursor);
     }
 
@@ -47,12 +47,12 @@ CreateCursor(View *view)
 {
     Buffer *buffer = GetBuffer(view);
 
-    if (!editor->first_free_cursor)
+    if (!cursor_table->first_free_cursor)
     {
-        editor->first_free_cursor = PushStructNoClear(&editor->transient_arena, Cursor);
-        editor->first_free_cursor->next = nullptr;
+        cursor_table->first_free_cursor = PushStructNoClear(&editor->transient_arena, Cursor);
+        cursor_table->first_free_cursor->next = nullptr;
     }
-    Cursor *result = SllStackPop(editor->first_free_cursor);
+    Cursor *result = SllStackPop(cursor_table->first_free_cursor);
     ZeroStruct(result);
 
     Cursor **slot = GetCursorSlot(view->id, buffer->id, true);
@@ -65,17 +65,13 @@ CreateCursor(View *view)
 function void
 FreeCursor(Cursor *cursor)
 {
-    cursor->next = editor->first_free_cursor;
-    editor->first_free_cursor = cursor;
+    cursor->next = cursor_table->first_free_cursor;
+    cursor_table->first_free_cursor = cursor;
 }
 
 function Cursor *
 GetCursor(ViewID view, BufferID buffer)
 {
-    if (editor->override_cursor)
-    {
-        return editor->override_cursor;
-    }
     return *GetCursorSlot(view, buffer, true);
 }
 
@@ -96,11 +92,30 @@ IterateCursors(ViewID view, BufferID buffer)
 function Cursor *
 GetCursor(View *view, Buffer *buffer)
 {
-    if (editor->override_cursor)
-    {
-        return editor->override_cursor;
-    }
     return GetCursor(view->id, (buffer ? buffer->id : view->buffer));
+}
+
+function Cursors
+GetCursors(Arena *arena, View *view, Buffer *buffer)
+{
+    Cursor *cursor = GetCursor(view, buffer);
+
+    size_t count = 0;
+    for (Cursor *c = cursor; c; c = c->next) count++;
+
+    Cursors result = {};
+    result.cursors = PushArray(arena, count, Cursor *);
+
+    for (Cursor *c = cursor; c; c = c->next)
+    {
+        result.cursors[result.count++] = c;
+    }
+
+    Sort(result.count, result.cursors, +[](Cursor *const &a, Cursor *const &b) {
+        return a->pos < b->pos;
+    });
+
+    return result;
 }
 
 function void
@@ -110,17 +125,17 @@ DestroyCursors(ViewID view, BufferID buffer)
     key.view   = view;
     key.buffer = buffer;
     uint64_t hash = HashIntegers(key.value).u64[0];
-    uint64_t slot = hash % ArrayCount(editor->cursor_hash);
+    uint64_t slot = hash % ArrayCount(cursor_table->cursor_hash);
 
-    CursorHashEntry *entry = editor->cursor_hash[slot];
+    CursorHashEntry *entry = cursor_table->cursor_hash[slot];
     while (entry)
     {
-        editor->cursor_hash[slot] = entry->next_in_hash;
+        cursor_table->cursor_hash[slot] = entry->next_in_hash;
 
-        entry->next_free = editor->first_free_cursor_hash_entry;
-        editor->first_free_cursor_hash_entry = entry;
+        entry->next_free = cursor_table->first_free_cursor_hash_entry;
+        cursor_table->first_free_cursor_hash_entry = entry;
 
-        entry = editor->cursor_hash[slot];
+        entry = cursor_table->cursor_hash[slot];
     }
 }
 
@@ -153,3 +168,44 @@ SetSelection(Cursor *cursor, Range inner, Range outer)
     cursor->selection.inner = inner;
     cursor->selection.outer = outer;
 } 
+
+function void
+OrganizeCursorsAfterEdit(View *view, Buffer *buffer)
+{
+    (void)view;
+    (void)buffer;
+#if 0
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
+
+    // Merge overlapping cursors
+    size_t dst = 0;
+    size_t src = 1;
+    while (src < cursors.count)
+    {
+        Cursor *a = cursors[dst];
+        Cursor *b = cursors[src];
+
+        if (RangesOverlap(a->selection.inner, b->selection.inner))
+        {
+            a->selection.inner = Union(a->selection.inner, b->selection.inner);
+            a->selection.outer = Union(a->selection.outer, b->selection.outer);
+        }
+        else
+        {
+            dst++;
+        }
+        src++;
+    }
+    size_t count = dst + 1;
+
+    Cursor **slot = GetCursorSlot(view->id, buffer->id, false);
+
+    // clear cursors
+    Cursor **at = slot;
+    while (*at)
+    {
+        *at = (*at)->next;
+    }
+#endif
+}

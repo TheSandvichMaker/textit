@@ -10,6 +10,12 @@ struct Tags;
 struct Tag;
 struct Cursor;
 
+struct BulkEdit
+{
+    Range range;
+    String string;
+};
+
 struct UndoNode
 {
     UndoNode *parent;
@@ -140,6 +146,7 @@ function BufferLocation CalculateRelativeMove             (Buffer *buffer, Curso
 function void           MergeUndoHistory                  (Buffer *buffer, int64_t first_ordinal, int64_t last_ordinal);
 function void           BeginUndoBatch                    (Buffer *buffer);
 function void           EndUndoBatch                      (Buffer *buffer);
+function Range FixBufferRangeAfterEdit(Range range, int64_t edit_pos, int64_t edit_delta);
 
 function String         PushBufferRange                   (Arena *arena, Buffer *buffer, Range range);
 function String         PushBufferRange                   (StringContainer *container, Buffer *buffer, Range range);
@@ -148,6 +155,7 @@ function String         PushTokenString                   (StringContainer *cont
 
 function int64_t        BufferReplaceRangeNoUndoHistory   (Buffer *buffer, Range range, String text);
 function int64_t        BufferReplaceRange                (Buffer *buffer, Range range, String text);
+function void           DoBulkEdit                        (Buffer *buffer, size_t count, BulkEdit *edits);
 
 function Range          FindNextOccurrence                (Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0);
 function Range          FindPreviousOccurrence            (Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0);
@@ -242,7 +250,7 @@ struct LineIndexNode
     };
 };
 
-function LineIndexNode *InsertLine(Buffer *buffer, Range range, LineData *data);
+function LineIndexNode *InsertLine(Buffer *buffer, Range range, const LineData &data);
 function void RemoveLinesFromIndex(Buffer *buffer, Range line_range);
 function void MergeLines(Buffer *buffer, Range range);
 function void ClearLineIndex(Buffer *buffer);

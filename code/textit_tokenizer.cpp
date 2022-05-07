@@ -454,7 +454,7 @@ TokenizeBuffer(Buffer *buffer)
         int64_t line_start = at;
         at = TokenizeLine(buffer, at, prev_line_data->end_tokenize_state, &line_data);
 
-        LineIndexNode *node = InsertLine(buffer, MakeRange(line_start, at), &line_data);
+        LineIndexNode *node = InsertLine(buffer, MakeRange(line_start, at), line_data);
         prev_line_data = &node->data;
     }
 

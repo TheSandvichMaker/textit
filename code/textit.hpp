@@ -41,8 +41,6 @@
 
 #include "textit_language_cpp.hpp"
 
-#define CURSOR_HASH_SIZE 512
-
 enum InputMode
 {
     InputMode_Editor,
@@ -141,11 +139,6 @@ struct EditorState
 
     View *null_view;
 
-    Cursor *override_cursor;
-    Cursor *first_free_cursor;
-    CursorHashEntry *first_free_cursor_hash_entry;
-    CursorHashEntry *cursor_hash[CURSOR_HASH_SIZE];
-
     LineData *first_free_line_data;
     LineIndexNode *first_free_line_index_node;
 
@@ -186,6 +179,7 @@ struct EditorState
 };
 static EditorState *editor;
 
+function void ApplyMove(Buffer *buffer, Cursor *cursor, const Move &move);
 function void ExecuteCommand(View *view, Command *command);
 
 function void SetEditorFont(String name, int size, PlatformFontQuality quality);

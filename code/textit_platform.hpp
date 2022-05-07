@@ -412,7 +412,7 @@ struct PlatformEvent
 
     bool pressed;
     bool released;
-    bool repeat;
+    int repeat;
     PlatformInputCode input_code;
 
     PlatformHighResTime timestamp;

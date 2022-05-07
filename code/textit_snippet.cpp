@@ -60,8 +60,6 @@ TryFindSnippet(Buffer *buffer, int64_t pos)
 function void
 AddSubstitution(StringList *list, String string)
 {
-    Arena *temp = platform->GetTempArena();
-
 #if 0
     if (MatchPrefix(string, "core_config"_str))
     {
@@ -96,21 +94,21 @@ AddSubstitution(StringList *list, String string)
             String value;
             if (ConfigReadString(rhs, &value))
             {
-                PushString(list, temp, value);
+                Push(list, value);
             }
             else
             {
-                PushStringF(list, temp, "<config variable '%.*s' not found>", StringExpand(rhs));
+                PushF(list, "<config variable '%.*s' not found>", StringExpand(rhs));
             }
         }
         else
         {
-            PushStringF(list, temp, "<unknown scope '%.*s'>", StringExpand(lhs));
+            PushF(list, "<unknown scope '%.*s'>", StringExpand(lhs));
         }
     }
     else
     {
-        PushStringF(list, temp, "<unknown expansion '%.*s'>", StringExpand(string));
+        PushF(list, "<unknown expansion '%.*s'>", StringExpand(string));
     }
 #endif
 }
@@ -119,8 +117,7 @@ function String
 DoSnippetStringSubstitutions(String str)
 {
     ScopedMemory temp;
-
-    StringList list = {};
+    StringList list = MakeStringList(temp);
 
     size_t start = 0;
     size_t end   = 0;
@@ -130,7 +127,7 @@ DoSnippetStringSubstitutions(String str)
         {
             if (start != end)
             {
-                PushString(&list, temp, Substring(str, start, end));
+                Push(&list, Substring(str, start, end));
             }
             end++;
             start = end;
@@ -158,10 +155,10 @@ DoSnippetStringSubstitutions(String str)
 
     if (start != end)
     {
-        PushString(&list, temp, Substring(str, start, end));
+        Push(&list, Substring(str, start, end));
     }
 
-    String result = PushFlattenedString(&list, temp);
+    String result = FlattenString(&list);
     return result;
 }
 

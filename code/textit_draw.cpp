@@ -55,7 +55,7 @@ DrawText(V2i p, String line, Color foreground, Color background, size_t max = 0)
 function int64_t
 DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
 {
-    Arena *arena = platform->GetTempArena();
+    ScopedMemory temp;
 
     Buffer *buffer = GetBuffer(view);
     Project *project = buffer->project;
@@ -127,8 +127,8 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
     TokenIterator token_it = IterateLineTokens(&info);
 
     int nest_highlight_count = 0;
-    Range *nest_highlights = PushArrayNoClear(arena, 64, Range);
-	Range *nest_preambles  = PushArrayNoClear(arena, 64, Range);
+    Range *nest_highlights = PushArrayNoClear(temp, 64, Range);
+	Range *nest_preambles  = PushArrayNoClear(temp, 64, Range);
 
     for (Cursor *cursor = IterateCursors(view); cursor; cursor = cursor->next)
     {
@@ -162,7 +162,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         }
     }
 
-    MergeSort(nest_highlight_count, nest_highlights, +[](Range *a, Range *b) { return a->start >= b->start; });
+    Sort(nest_highlight_count, nest_highlights, +[](const Range &a, const Range &b) { return a.start >= b.start; });
 
     int64_t pos = line_it.range.start;
     view->visible_range.start = pos;
@@ -280,9 +280,9 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                                                 // but maybe it should be moved outside of the actual drawing function
                         }
 
-                        ScopedMemory temp;
+                        ScopedMemory tag_temp;
                         // TODO: Bit excessive
-                        for (Tag *tag = PushTagsWithName(temp, project, token_name); tag; tag = tag->next)
+                        for (Tag *tag = PushTagsWithName(tag_temp, project, token_name); tag; tag = tag->next)
                         {
                             if (tag->related_token_kind == token.kind)
                             {
@@ -753,6 +753,7 @@ DrawCommandLines()
 
     Color text_foreground           = GetThemeColor("command_line_foreground"_id);
     Color text_background           = GetThemeColor("command_line_background"_id);
+    Color text_background_2         = GetThemeColor("command_line_background_2"_id);
     Color color_name                = GetThemeColor("command_line_name"_id);
     Color color_option              = GetThemeColor("command_line_option"_id);
     Color color_selected            = GetThemeColor("command_line_option_selected"_id);
@@ -764,22 +765,28 @@ DrawCommandLines()
 
     V2i text_p = p;
 
-    Arena *arena = platform->GetTempArena();
+    ScopedMemory temp;
+    StringList name_list = MakeStringList(temp);
 
-    StringList name_list = {};
     for (int i = 0; i < editor->command_line_count; i += 1)
     {
         CommandLine *cl = editor->command_lines[i];
-        PushString(&name_list, arena, cl->name);
+        Push(&name_list, cl->name);
     }
-    String names = PushFlattenedString(&name_list, arena, " > "_str, StringSeparator_AfterLast);
+    String names = FlattenString(&name_list, " > "_str, StringSeparator_AfterLast);
 
     text_p = DrawText(text_p, names, color_name, text_background);
 
     CommandLine *cl = editor->command_lines[editor->command_line_count - 1];
 
+    int64_t height = GetHeight(render_state->viewport);
+    int64_t max_visible_predictions = height - 1;
+    bool prediction_overflow = cl->prediction_count - cl->scroll_offset > max_visible_predictions;
+
+    int64_t offset_visible_predictions = Min(cl->prediction_count - cl->scroll_offset, max_visible_predictions);
+
     int64_t total_width  = 0;
-    int64_t total_height = cl->prediction_count + cl->prediction_overflow;
+    int64_t total_height = offset_visible_predictions;
 
     if (cl->highlight_numbers)
     {
@@ -792,14 +799,22 @@ DrawCommandLines()
     {
         active_prediction = GetPrediction(cl, 0);
 
-        int prediction_offset = 1;
-        for (int i = 0; i < cl->prediction_count; i += 1)
+        int y_offset = 1;
+		for (int y = 0; y < offset_visible_predictions - prediction_overflow; y += 1)
         {
-            Prediction *prediction = GetPrediction(cl, i);
+            int prediction_index = y + cl->scroll_offset;
+
+            Color bg = overlay_background;
+            if (prediction_index == 0 || prediction_index == cl->prediction_count - 1)
+            {
+                bg = text_background_2;
+            }
+
+            Prediction *prediction = GetPrediction(cl, prediction_index);
             String text = prediction->preview_text;
 
             Color color = GetThemeColor(prediction->color ? prediction->color : "command_line_option"_id);
-            if (i == cl->prediction_selected_index)
+            if (prediction_index == cl->prediction_selected_index)
             {
                 active_prediction = prediction;
                 color = color_selected;
@@ -807,24 +822,24 @@ DrawCommandLines()
 
             if (prediction->quickselect_char)
             {
-                DrawText(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", prediction->quickselect_char), color_numbers, overlay_background);
+                DrawText(p + MakeV2i(0, -y_offset), PushTempStringF("%c ", prediction->quickselect_char), color_numbers, overlay_background);
             }
-            else if (i < 9 + 26)
+            else if (y < 9 + 26)
             {
-                int c = (i < 9 ? '1' + i : 'A' + i - 9);
-                DrawText(p + MakeV2i(0, -prediction_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
+                int c = (y < 9 ? '1' + y : 'A' + y - 9);
+                DrawText(p + MakeV2i(0, -y_offset), PushTempStringF("%c ", c), color_numbers, overlay_background);
             }
 
-            DrawText(p + MakeV2i(2, -prediction_offset), text, color, overlay_background);
+            DrawText(p + MakeV2i(2, -y_offset), text, color, bg);
 
             total_width = Max(total_width, 2 + (int64_t)text.size);
 
-            prediction_offset += 1;
+            y_offset += 1;
         }
         
-        if (cl->prediction_overflow)
+		if (prediction_overflow)
         {
-            DrawText(p + MakeV2i(2, -prediction_offset), "... and more"_str, color_option, overlay_background);
+            DrawText(p + MakeV2i(2, -y_offset), "... and more"_str, color_option, overlay_background);
         }
     }
 

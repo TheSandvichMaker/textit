@@ -407,6 +407,15 @@ TrimSpaces(String string)
     return result;
 }
 
+function void
+Fill(String *string, uint8_t c)
+{
+    for (size_t i = 0; i < string->size; i++)
+    {
+        string->data[i] = c;
+    }
+}
+
 static const struct CharToDigitValues
 {
     uint8_t values[256] = {};
@@ -1021,9 +1030,26 @@ Clear(StringContainer *container)
     container->size = 0;
 }
 
+function void
+ToUpper(String string)
+{
+    for (size_t i = 0; i < string.size; i++)
+    {
+        string.data[i] = ToUpperAscii(string.data[i]);
+    }
+}
+
 //
 // StringList
 //
+
+function StringList
+MakeStringList(Arena *arena)
+{
+    StringList result = {};
+    result.arena = arena;
+    return result;
+}
 
 function bool
 IsEmpty(StringList *list)
@@ -1050,49 +1076,40 @@ AddNode(StringList *list, StringNode *node)
 }
 
 function void
-PushStringNoCopy(StringList *list, Arena *arena, String string)
+PushNoCopy(StringList *list, String string)
 {
-    StringNode *node = PushStruct(arena, StringNode);
+    StringNode *node = PushStruct(list->arena, StringNode);
     node->string = string;
     AddNode(list, node);
 }
 
 function void
-PushString(StringList *list, Arena *arena, String string)
+Push(StringList *list, String string)
 {
-    StringNode *node = PushStruct(arena, StringNode);
-    node->string = PushString(arena, string);
+    StringNode *node = PushStruct(list->arena, StringNode);
+    node->string = PushString(list->arena, string);
     AddNode(list, node);
 }
 
 function void
-PushStringFV(StringList *list, Arena *arena, const char *fmt, va_list args)
+PushFV(StringList *list, const char *fmt, va_list args)
 {
-    StringNode *node = PushStruct(arena, StringNode);
-    node->string = PushStringFV(arena, fmt, args);
+    StringNode *node = PushStruct(list->arena, StringNode);
+    node->string = PushStringFV(list->arena, fmt, args);
     AddNode(list, node);
 }
 
 function void
-PushStringF(StringList *list, Arena *arena, const char *fmt, ...)
+PushF(StringList *list, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    PushStringFV(list, arena, fmt, args);
+    PushFV(list, fmt, args);
     va_end(args);
 }
 
 function void
-PushTempStringF(StringList *list, const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    PushStringFV(list, platform->GetTempArena(), fmt, args);
-    va_end(args);
-}
-
-function void
-InsertSeparators(StringList *list, Arena *arena, String separator, StringSeparatorFlags flags = 0)
+InsertSeparators(StringList *list, String separator, StringSeparatorFlags flags = 0)
 {
     // I hate inserting in the middle of linked lists with tail pointers,
     // maybe that's just because I've never thought about how to really do
@@ -1106,7 +1123,7 @@ InsertSeparators(StringList *list, Arena *arena, String separator, StringSeparat
 
     if (separator_before_first)
     {
-        PushString(&new_list, arena, separator);
+        Push(&new_list, separator);
     }
 
     for (StringNode *node = list->first;
@@ -1118,7 +1135,7 @@ InsertSeparators(StringList *list, Arena *arena, String separator, StringSeparat
         AddNode(&new_list, node);
         if (next_node)
         {
-            PushString(&new_list, arena, separator);
+            Push(&new_list, separator);
         }
 
         node = next_node;
@@ -1126,14 +1143,14 @@ InsertSeparators(StringList *list, Arena *arena, String separator, StringSeparat
 
     if (separator_after_last)
     {
-        PushString(&new_list, arena, separator);
+        Push(&new_list, separator);
     }
 
     *list = new_list;
 }
 
 function String
-PushFlattenedString(StringList *list, Arena *arena, String separator = {}, StringSeparatorFlags flags = 0)
+FlattenStringOnArena(StringList *list, Arena *arena, String separator = {}, StringSeparatorFlags flags = 0)
 {
     size_t total_size = list->total_size;
 
@@ -1192,7 +1209,7 @@ PushFlattenedString(StringList *list, Arena *arena, String separator = {}, Strin
 }
 
 function String
-PushFlattenedTempString(StringList *list, String separator = {}, StringSeparatorFlags flags = 0)
+FlattenString(StringList *list, String separator = {}, StringSeparatorFlags flags = 0)
 {
-    return PushFlattenedString(list, platform->GetTempArena(), separator, flags);
+    return FlattenStringOnArena(list, list->arena, separator, flags);
 }

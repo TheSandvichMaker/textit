@@ -1,6 +1,6 @@
 template <typename T>
 function void
-MergeSortInternal(uint32_t count, T *a, T *b, bool (*comparator)(T *a, T *b))
+MergeSortInternal(size_t count, T *a, T *b, SortComparator<T> comparator)
 {
     if (count <= 1)
     {
@@ -8,8 +8,8 @@ MergeSortInternal(uint32_t count, T *a, T *b, bool (*comparator)(T *a, T *b))
     }
     else
     {
-        uint32_t count_l = count / 2;
-        uint32_t count_r = count - count_l;
+        size_t count_l = count / 2;
+        size_t count_r = count - count_l;
         
         MergeSortInternal(count_l, b, a, comparator);
         MergeSortInternal(count_r, b + count_l, a + count_l, comparator);
@@ -24,7 +24,7 @@ MergeSortInternal(uint32_t count, T *a, T *b, bool (*comparator)(T *a, T *b))
         for (size_t i = 0; i < count; ++i)
         {
             if ((l < middle) &&
-                ((r >= end) || comparator(l, r)))
+                ((r >= end) || comparator(*l, *r)))
             {
                 *out++ = *l++;
             }
@@ -38,7 +38,7 @@ MergeSortInternal(uint32_t count, T *a, T *b, bool (*comparator)(T *a, T *b))
 
 template <typename T>
 function void
-MergeSort(uint32_t count, T *a, bool (*comparator)(T *a, T *b))
+MergeSort(size_t count, T *a, SortComparator<T> comparator)
 {
     ScopedMemory temp;
     T *b = PushArrayNoClear(temp, count, T);
@@ -47,8 +47,15 @@ MergeSort(uint32_t count, T *a, bool (*comparator)(T *a, T *b))
     MergeSortInternal(count, a, b, comparator);
 }
 
+template <typename T>
 function void
-RadixSort(uint32_t count, uint32_t *data, uint32_t *temp)
+Sort(size_t count, T *a, SortComparator<T> comparator)
+{
+    MergeSort(count, a, comparator);
+}
+
+function void
+RadixSort(size_t count, uint32_t *data, uint32_t *temp)
 {
     uint32_t *source = data;
     uint32_t *dest   = temp;
@@ -85,7 +92,7 @@ RadixSort(uint32_t count, uint32_t *data, uint32_t *temp)
 }
 
 function void
-RadixSort(uint32_t count, SortKey *data, SortKey *temp)
+RadixSort(size_t count, SortKey *data, SortKey *temp)
 {
     SortKey *source = data;
     SortKey *dest   = temp;

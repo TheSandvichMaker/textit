@@ -290,12 +290,19 @@ Win32_Utf16ToUtf8(Arena *arena, wchar_t *string, int size = -1)
     String result = {};
 
     result.size = (size_t)WideCharToMultiByte(CP_UTF8, 0, string, size, nullptr, 0, nullptr, nullptr);
-    result.data = PushArrayNoClear(arena, result.size, uint8_t);
+    result.data = PushArrayNoClear(arena, result.size + 1, uint8_t);
+
     if (result.data)
     {
         if (!WideCharToMultiByte(CP_UTF8, 0, string, size, (char *)result.data, (int)result.size, nullptr, nullptr))
         {
             Win32_DisplayLastError();
+        }
+
+        if (size == -1)
+        {
+            // null terminated string means we need to reduce the size by 1 because it'll include the null character
+            result.size -= 1;
         }
 
         result.data[result.size] = 0;
@@ -2581,6 +2588,8 @@ main(int, char **)
 
     Win32_PushTickEvent();
 
+    int key_repeats[PlatformInputCode_COUNT] = {};
+
     MSG message;
     while (g_running && GetMessageW(&message, 0, 0, 0))
     {
@@ -2613,12 +2622,17 @@ main(int, char **)
                 bool ctrl_down = !!(GetKeyState(VK_CONTROL) & 0xFF00);
                 bool shift_down = !!(GetKeyState(VK_SHIFT) & 0xFF00);
 
+                if (!pressed)
+                {
+                    key_repeats[vk_code] = 0;
+                }
+
                 if (!Win32_HandleSpecialKeys(window, vk_code, pressed, alt_down))
                 {
                     PlatformEvent event = {};
                     event.type = (pressed ? PlatformEvent_KeyDown : PlatformEvent_KeyUp);
                     event.pressed = pressed;
-                    // TODO: event.repeat
+                    event.repeat = key_repeats[vk_code];
                     event.alt_down = alt_down;
                     event.ctrl_down = ctrl_down;
                     event.shift_down = shift_down;
@@ -2627,6 +2641,8 @@ main(int, char **)
 
                     TranslateMessage(&message);
                 }
+
+                key_repeats[vk_code] += pressed;
             } break;
 
             case WM_LBUTTONDOWN:

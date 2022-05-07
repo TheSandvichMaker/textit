@@ -21,6 +21,8 @@ MakePrediction(String text, StringID color = "command_line_option"_id, uint8_t q
     return result;
 }
 
+#define MAX_PREDICTIONS 8192
+
 struct CommandLine
 {
     Arena *arena;
@@ -48,9 +50,11 @@ struct CommandLine
     int prediction_index;
     int prediction_selected_index;
     int prediction_count;
+    bool actively_scrolling;
+    int scroll_offset;
     bool prediction_overflow;
-    Prediction predictions[35];
-    SortKey sort_keys[35];
+    Prediction predictions[MAX_PREDICTIONS];
+    SortKey sort_keys[MAX_PREDICTIONS];
 
     void (*GatherPredictions)(CommandLine *cl);
     String (*OnText)(CommandLine *cl, String text);

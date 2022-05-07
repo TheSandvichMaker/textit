@@ -4,11 +4,25 @@
 #define MAX_COMMAND_COUNT 1024
 
 struct EditorState;
+struct Cursor;
+struct Cursors;
 
 struct Selection
 {
     Range inner;
     Range outer;
+};
+
+struct Selections
+{
+    size_t count;
+    Selection *selections;
+
+    Selection &operator[](size_t i)
+    {
+        Assert(i < count);
+        return selections[i];
+    }
 };
 
 function Selection
@@ -35,6 +49,15 @@ MakeSelection(Range inner, Range outer = {})
     result.inner = inner;
     result.outer = outer;
 
+    return result;
+}
+
+function Selection
+Union(const Selection &a, const Selection &b)
+{
+    Selection result;
+    result.inner = Union(a.inner, b.inner);
+    result.outer = Union(a.outer, b.outer);
     return result;
 }
 
@@ -73,28 +96,28 @@ MakeMove(int64_t pos)
 }
 
 typedef void (*CommandProc)(void);
-#define COMMAND_PROC(name, ...)                                                                                                              \
-    static void Paste(CMD_, name)(void);                                                                                                     \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), (void *)&Paste(CMD_, name), ##__VA_ARGS__);           \
+#define COMMAND_PROC(name, ...)                                                                                                             \
+    static void Paste(CMD_, name)(void);                                                                                                    \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Basic, StringLiteral(#name), (void *)&Paste(CMD_, name), ##__VA_ARGS__);          \
     static void Paste(CMD_, name)(void)
 
-typedef void (*TextCommandProc)(String text);
-#define TEXT_COMMAND_PROC(name)                                                                                                              \
-    static void Paste(CMD_, name)(String text);                                                                                              \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), (void *)&Paste(CMD_, name));                           \
-    static void Paste(CMD_, name)(String text)
+typedef void (*TextCommandProc)(const Cursors &cursors, String text);
+#define TEXT_COMMAND_PROC(name)                                                                                                             \
+    static void Paste(CMD_, name)(const Cursors &cursors, String text);                                                                     \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Text, StringLiteral(#name), (void *)&Paste(CMD_, name));                          \
+    static void Paste(CMD_, name)(const Cursors &cursors, String text)
 
-typedef Move (*MovementProc)(void);
+typedef void (*MovementProc)(const Cursors &cursors);
 #define MOVEMENT_PROC(name, ...)                                                                                                            \
-    static Move Paste(MOV_, name)(void);                                                                                                    \
+    static void Paste(MOV_, name)(const Cursors &cursors);                                                                                  \
     CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Movement, StringLiteral(#name), (void *)&Paste(MOV_, name), ""_str, __VA_ARGS__); \
-    static Move Paste(MOV_, name)(void)
+    static void Paste(MOV_, name)(const Cursors &cursors)
 
-typedef void (*ChangeProc)(Selection selection);
-#define CHANGE_PROC(name)                                                                                                                    \
-    static void Paste(CHG_, name)(Selection selection);                                                                                      \
-    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), (void *)&Paste(CHG_, name));                         \
-    static void Paste(CHG_, name)(Selection selection)
+typedef void (*ChangeProc)(const Cursors &cursors);
+#define CHANGE_PROC(name)                                                                                                                   \
+    static void Paste(CHG_, name)(const Cursors &cursors);                                                                                  \
+    CommandRegisterHelper Paste(CMDHELPER_, name)(Command_Change, StringLiteral(#name), (void *)&Paste(CHG_, name));                        \
+    static void Paste(CHG_, name)(const Cursors &cursors)
 
 enum_flags(int, CommandFlags)
 {

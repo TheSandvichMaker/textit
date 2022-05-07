@@ -136,6 +136,7 @@ LoadDefaultDarkTheme()
 
     SetThemeColor(theme, "command_line_foreground"_id, MakeColor(235, 235, 225));
     SetThemeColor(theme, "command_line_background"_id, MakeColor(6, 10, 16));
+    SetThemeColor(theme, "command_line_background_2"_id, MakeColor(12, 20, 32));
     SetThemeColor(theme, "command_line_name"_id, MakeColor(192, 128, 128));
     SetThemeColor(theme, "command_line_option"_id, MakeColor(164, 164, 164));
     SetThemeColor(theme, "command_line_option_selected"_id, MakeColor(192, 128, 128));

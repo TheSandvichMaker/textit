@@ -124,6 +124,7 @@ struct StringNode
 
 struct StringList
 {
+    Arena *arena;
     StringNode *first;
     StringNode *last;
     size_t total_size;
@@ -201,6 +202,15 @@ MakeRangeStartLength(int64_t start, int64_t length)
     return MakeRange(start, start + length);
 }
 
+function Range
+InvertedInfinityRange()
+{
+    Range result;
+    result.start = INT64_MAX;
+    result.end   = INT64_MIN;
+    return result;
+}
+
 function int64_t
 ClampToRange(int64_t value, Range bounds)
 {
@@ -247,6 +257,15 @@ function bool
 IsInRange(Range range, int64_t pos)
 {
     return pos >= range.start && pos < range.end;
+}
+
+function bool
+RangesOverlap(Range a, Range b)
+{
+    return !(b.start >= a.end ||
+             a.start >= b.end ||
+             a.end <= b.start ||
+             b.end <= a.start);
 }
 
 // NOTE: These colors are in BGRA byte order
