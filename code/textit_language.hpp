@@ -3,6 +3,7 @@
 
 struct Buffer;
 struct Tokenizer;
+struct Tag;
 
 union KeywordSlot
 {
@@ -22,6 +23,16 @@ struct OperatorSlot
     TokenSubKind  sub_kind;
 };
 
+struct CustomAutocompleteResult
+{
+    String text;
+    int64_t pos;
+};
+
+typedef void (*TokenizeHook)(Tokenizer *tok, Token *t);
+typedef void (*ParseTagsHook)(Buffer *buffer);
+typedef CustomAutocompleteResult (*CustomAutocompleteHook)(Arena *arena, Tag *tag, String text);
+
 struct LanguageSpec
 {
     LanguageSpec *next;
@@ -32,8 +43,10 @@ struct LanguageSpec
     String associated_extensions[16];
 
     size_t tokenize_userdata_size;
-    void (*Tokenize)(Tokenizer *tok, Token *t); // tokenizes one token
-    void (*ParseTags)(Buffer *buffer);
+
+    TokenizeHook Tokenize;
+    ParseTagsHook ParseTags;
+    CustomAutocompleteHook CustomAutocomplete;
 
     StringID    sub_token_kind_to_theme_id[256];
     StringID    sub_tag_kind_to_theme_id[256];
@@ -45,6 +58,7 @@ struct LanguageSpec
 };
 
 function void TokenizeBasic(Tokenizer *tok, Token *t);
+function CustomAutocompleteResult CustomAutocompleteBasic(Arena *arena, Tag *, String text);
 
 struct LanguageRegistry
 {
@@ -57,6 +71,7 @@ struct LanguageRegistry
 
         null_language.name = "none"_str;
         null_language.Tokenize = TokenizeBasic;
+        null_language.CustomAutocomplete = CustomAutocompleteBasic;
         SllStackPush(first_language, &null_language);
     }
 };
@@ -64,7 +79,7 @@ GLOBAL_STATE(LanguageRegistry, language_registry);
 
 struct LanguageRegisterHelper
 {
-    LanguageSpec lang;
+    LanguageSpec lang = language_registry->null_language;
     LanguageRegisterHelper(String name, void (*register_proc)(LanguageSpec *))
     {
         register_proc(&lang);

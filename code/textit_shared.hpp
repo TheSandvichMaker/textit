@@ -120,6 +120,16 @@ CopySize(size_t size, const void *source_init, void *dest_init)
 #define CopyStruct(source, dest) CopySize(sizeof(*(source)), source, dest)
 #define CopyArray(Count, Source, Dest) CopySize(sizeof(*(Source))*Count, Source, Dest)
 
+template <typename T>
+function void
+MoveArray(T *source_start, T *source_end, T *dest)
+{
+    if (source_start > source_end)
+        source_start = source_end;
+
+    memmove(dest, source_start, sizeof(T)*(source_end - source_start));
+}
+
 struct HashResult
 {
     union

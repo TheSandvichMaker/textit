@@ -84,6 +84,8 @@ struct EditorState
     Arena transient_arena;
     Arena undo_scratch;
 
+    Heap *heap;
+
     Arena command_arena;
 
     Theme *first_theme;

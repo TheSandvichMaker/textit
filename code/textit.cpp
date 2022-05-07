@@ -372,6 +372,49 @@ DestroyFont(PlatformFontHandle *handle)
     if (*handle) { platform->DestroyFont(*handle); *handle = NULL; }
 }
 
+function String
+StringFromFontQuality(PlatformFontQuality quality)
+{
+    String result = "Subpixel"_str;
+    switch (quality)
+    {
+        case PlatformFontQuality_SubpixelAA:
+        {
+            result = "Subpixel"_str;
+        } break;
+
+        case PlatformFontQuality_GreyscaleAA:
+        {
+            result = "Greyscale"_str;
+        } break;
+
+        case PlatformFontQuality_Raster:
+        {
+            result = "Raster"_str;
+        } break;
+    }
+    return result;
+}
+
+function PlatformFontQuality
+FontQualityFromString(String font_quality)
+{
+    PlatformFontQuality quality = PlatformFontQuality_SubpixelAA;
+    if (AreEqual(font_quality, "subpixel"_str, StringMatch_CaseInsensitive))
+    {
+        quality = PlatformFontQuality_SubpixelAA;
+    }
+    else if (AreEqual(font_quality, "greyscale"_str, StringMatch_CaseInsensitive))
+    {
+        quality = PlatformFontQuality_GreyscaleAA;
+    }
+    else if (AreEqual(font_quality, "raster"_str, StringMatch_CaseInsensitive))
+    {
+        quality = PlatformFontQuality_Raster;
+    }
+    return quality;
+}
+
 function void
 SetEditorFont(String name, int size, PlatformFontQuality quality)
 {
@@ -405,6 +448,10 @@ SetEditorFont(String name, int size, PlatformFontQuality quality)
 
     platform->window_resize_snap_w = (int32_t)editor->font_metrics.x;
     platform->window_resize_snap_h = (int32_t)editor->font_metrics.y;
+
+    ConfigWriteString("[font]/name"_str, name);
+    ConfigWriteString("[font]/quality"_str, StringFromFontQuality(quality));
+    ConfigWriteI32("[font]/size"_str, size);
 }
 
 function void
@@ -414,23 +461,11 @@ UpdateFontFromConfig()
     String  font_quality = "Subpixel"_str;
     int64_t font_size    = 15;
 
-    ConfigReadString("font"_str, &font);
-    ConfigReadString("font_quality"_str, &font_quality);
-    ConfigReadI64("font_size"_str, &font_size);
+    ConfigReadString("[font]/name"_str, &font);
+    ConfigReadString("[font]/quality"_str, &font_quality);
+    ConfigReadI64("[font]/size"_str, &font_size);
 
-    PlatformFontQuality quality = PlatformFontQuality_SubpixelAA;
-    if (AreEqual(font_quality, "subpixel"_str, StringMatch_CaseInsensitive))
-    {
-        quality = PlatformFontQuality_SubpixelAA;
-    }
-    else if (AreEqual(font_quality, "greyscale"_str, StringMatch_CaseInsensitive))
-    {
-        quality = PlatformFontQuality_GreyscaleAA;
-    }
-    else if (AreEqual(font_quality, "raster"_str, StringMatch_CaseInsensitive))
-    {
-        quality = PlatformFontQuality_Raster;
-    }
+    PlatformFontQuality quality = FontQualityFromString(font_quality);;
 
     if (!AreEqual(font, editor->font_name.as_string) ||
         quality != editor->font_quality ||
@@ -459,6 +494,8 @@ AppUpdateAndRender(Platform *platform_)
 
     if (!platform->app_initialized)
     {
+        editor->heap = platform->CreateHeap(Kilobytes(4), 0);
+
         LoadDefaultThemes();
         LoadDefaultBindings();
         LoadDefaultIndentRules(&editor->default_indent_rules);
@@ -489,9 +526,11 @@ AppUpdateAndRender(Platform *platform_)
 
         InitConfigs();
 
-        ConfigWriteString("user"_str, "<no user set>"_str, ConfigAccess_Root);
-        ConfigWriteString("font"_str, "Consolas"_str, ConfigAccess_Root);
-        ConfigWriteString("font_size"_str, "15"_str, ConfigAccess_Root);
+        ConfigWriteString("[user]/name"_str, "<no user set>"_str, ConfigAccess_Root);
+        ConfigWriteString("[font]/name"_str, "Consolas"_str, ConfigAccess_Root);
+        ConfigWriteString("[font]/size"_str, "15"_str, ConfigAccess_Root);
+
+        ConfigWriteString("[completion]/max_items"_str, "16"_str, ConfigAccess_Root);
 
         UpdateFontFromConfig();
         InitializeRenderState(&editor->transient_arena, &platform->backbuffer.bitmap);
@@ -536,20 +575,6 @@ AppUpdateAndRender(Platform *platform_)
         OnMouseHeld();
     }
 
-    {
-        View *view = GetActiveView();
-        Buffer *buffer = GetActiveBuffer();
-        Cursor *cursor = GetCursor(view, buffer);
-        Snippet *snip = TryFindSnippet(buffer, cursor->pos);
-        if (snip)
-        {
-            CompletionEntry entry = {};
-            entry.range  = MakeRange(cursor->pos - snip->desc.query.size, snip->desc.query.size);
-            entry.string = snip->desc.replacement;
-            AddEntry(&editor->completion, entry);
-        }
-    }
-
     int events_handled = 0;
 
     PlatformEvent event;
@@ -578,6 +603,24 @@ AppUpdateAndRender(Platform *platform_)
                 if (cl->GatherPredictions) cl->GatherPredictions(cl);
             }
         }
+    }
+
+    // Reset(&editor->completion);
+
+    if (editor->next_edit_mode == EditMode_Text)
+    {
+        View *view = GetActiveView();
+        Buffer *buffer = GetActiveBuffer();
+        Cursor *cursor = GetCursor(view, buffer);
+        Snippet *snip = TryFindSnippet(buffer, cursor->pos);
+        if (snip)
+        {
+            CompletionEntry entry = {};
+            entry.desc   = snip->desc.description;
+            entry.string = DoSnippetStringSubstitutions(platform->GetTempArena(), snip->desc.replacement);
+            AddEntry(&editor->completion, entry);
+        }
+        // FindCompletionCandidatesAt(buffer, cursor->pos);
     }
 
     for (BufferIterator it = IterateBuffers(); IsValid(&it); Next(&it))

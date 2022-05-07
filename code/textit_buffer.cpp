@@ -921,21 +921,21 @@ BufferReplaceRange(Buffer *buffer, Range range, String text)
 }
 
 function void 
-DoBulkEdit(Buffer *buffer, size_t count, BulkEdit *edits)
+DoBulkEdit(Buffer *buffer, Slice<BulkEdit> edits)
 {
-    for (size_t i = 0; i < count; i++)
+    for (BulkEdit &edit: edits)
     {
-        edits[i].range = SanitizeRange(edits[i].range);
+        edit.range = SanitizeRange(edit.range);
     }
 
-    Sort(count, edits, +[](const BulkEdit &a, const BulkEdit &b) {
+    Sort(edits.count, edits.data, +[](const BulkEdit &a, const BulkEdit &b) {
         return a.range.start < b.range.start;
     });
 
     // Merge overlapping ranges
     size_t dst = 0;
     size_t src = 1;
-    while (src < count)
+    while (src < edits.count)
     {
         Range a = edits[dst].range;
         Range b = edits[src].range;
@@ -950,11 +950,11 @@ DoBulkEdit(Buffer *buffer, size_t count, BulkEdit *edits)
         }
         src++;
     }
-    count = dst + 1;
+    edits.count = dst + 1;
 
     // Do the edit
     BeginUndoBatch(buffer);
-    for (size_t edit_index = 0; edit_index < count; edit_index++)
+    for (size_t edit_index = 0; edit_index < edits.count; edit_index++)
     {
         int64_t edit_pos = edits[edit_index].range.start;
         int64_t edit_delta = edits[edit_index].range.start - edits[edit_index].range.end + edits[edit_index].string.size;
@@ -963,7 +963,7 @@ DoBulkEdit(Buffer *buffer, size_t count, BulkEdit *edits)
         BufferReplaceRange(buffer, edits[edit_index].range, edits[edit_index].string);
 
         // SPEED: Quadratic!
-        for (size_t adjust_index = edit_index + 1; adjust_index < count; adjust_index++)
+        for (size_t adjust_index = edit_index + 1; adjust_index < edits.count; adjust_index++)
         {
             edits[adjust_index].range = FixBufferRangeAfterEdit(edits[adjust_index].range, edit_pos, edit_delta);
         }

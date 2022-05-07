@@ -155,7 +155,7 @@ function String         PushTokenString                   (StringContainer *cont
 
 function int64_t        BufferReplaceRangeNoUndoHistory   (Buffer *buffer, Range range, String text);
 function int64_t        BufferReplaceRange                (Buffer *buffer, Range range, String text);
-function void           DoBulkEdit                        (Buffer *buffer, size_t count, BulkEdit *edits);
+function void           DoBulkEdit                        (Buffer *buffer, Slice<BulkEdit> edits);
 
 function Range          FindNextOccurrence                (Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0);
 function Range          FindPreviousOccurrence            (Buffer *buffer, int64_t pos, String query, StringMatchFlags flags = 0);

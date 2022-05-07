@@ -60,29 +60,6 @@ TryFindSnippet(Buffer *buffer, int64_t pos)
 function void
 AddSubstitution(StringList *list, String string)
 {
-#if 0
-    if (MatchPrefix(string, "core_config"_str))
-    {
-        string = Advance(string, sizeof("core_config") - 1);
-        if (string[0] == ':')
-        {
-            String variable = Substring(string, 1);
-            const MemberInfo *member = FindMember<CoreConfig>(variable);
-            if (member)
-            {
-                PushString(list, temp, FormatMember(member, GetMemberPointer(core_config, member)));
-            }
-            else
-            {
-                PushString(list, temp, "!!ERROR - unknown config variable!!"_str);
-            }
-        }
-    }
-    else
-    {
-        PushString(list, temp, "!!ERROR - unknown query!!"_str);
-    }
-#else
     size_t colon_at = Find(string, ':');
     if (colon_at != string.size)
     {
@@ -110,13 +87,13 @@ AddSubstitution(StringList *list, String string)
     {
         PushF(list, "<unknown expansion '%.*s'>", StringExpand(string));
     }
-#endif
 }
 
 function String
-DoSnippetStringSubstitutions(String str)
+DoSnippetStringSubstitutions(Arena *arena, String str)
 {
-    ScopedMemory temp;
+    Arena *temp = platform->GetTempArena();
+
     StringList list = MakeStringList(temp);
 
     size_t start = 0;
@@ -158,8 +135,16 @@ DoSnippetStringSubstitutions(String str)
         Push(&list, Substring(str, start, end));
     }
 
-    String result = FlattenString(&list);
+    String result = FlattenStringOnArena(&list, arena);
     return result;
+}
+
+function void
+ApplySnippet(Buffer *buffer, Snippet *snip, int64_t pos)
+{
+    ScopedMemory temp;
+    String replacement = DoSnippetStringSubstitutions(temp, snip->desc.replacement);
+    BufferReplaceRange(buffer, MakeRange(pos - snip->desc.query.size, pos), replacement);
 }
 
 function bool
@@ -170,7 +155,8 @@ TryApplySnippet(Buffer *buffer, int64_t pos)
     Snippet *snip = TryFindSnippet(buffer, pos);
     if (snip)
     {
-        String replacement = DoSnippetStringSubstitutions(snip->desc.replacement);
+        ScopedMemory temp;
+        String replacement = DoSnippetStringSubstitutions(temp, snip->desc.replacement);
         BufferReplaceRange(buffer, MakeRange(pos - snip->desc.query.size, pos), replacement);
         result = true;
     }

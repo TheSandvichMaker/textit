@@ -104,14 +104,14 @@ GetCursors(Arena *arena, View *view, Buffer *buffer)
     for (Cursor *c = cursor; c; c = c->next) count++;
 
     Cursors result = {};
-    result.cursors = PushArray(arena, count, Cursor *);
+    result.data = PushArray(arena, count, Cursor *);
 
     for (Cursor *c = cursor; c; c = c->next)
     {
-        result.cursors[result.count++] = c;
+        result.data[result.count++] = c;
     }
 
-    Sort(result.count, result.cursors, +[](Cursor *const &a, Cursor *const &b) {
+    Sort(result.count, result.data, +[](Cursor *const &a, Cursor *const &b) {
         return a->pos < b->pos;
     });
 

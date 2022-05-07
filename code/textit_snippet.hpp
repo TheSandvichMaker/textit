@@ -27,6 +27,7 @@ function void AddSnippet(const SnippetDesc &desc);
 function Snippet *FindSnippet(String query);
 function Snippet *TryFindSnippet(Buffer *buffer, int64_t pos);
 function void DoSnippetStringSubstitutions(Buffer *buffer, Range range, Snippet *snippet);
+function void ApplySnippet(Buffer *buffer, Snippet *snip, int64_t pos);
 function bool TryApplySnippet(Buffer *buffer, int64_t pos);
 
 #endif /* TEXTIT_SNIPPET_HPP */

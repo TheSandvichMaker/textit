@@ -155,3 +155,13 @@ GetOperatorAsString(LanguageSpec *spec, TokenKind kind, TokenSubKind sub_kind = 
     }
     return result;
 }
+
+function CustomAutocompleteResult 
+CustomAutocompleteBasic(Arena *arena, Tag *, String text)
+{
+    CustomAutocompleteResult result;
+    result.text = PushStringF(arena, "%.*s ", StringExpand(text));
+    result.pos  = (int64_t)text.size + 1;
+    return result;
+};
+

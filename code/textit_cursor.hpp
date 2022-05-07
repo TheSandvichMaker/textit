@@ -12,6 +12,7 @@ struct Cursor
     Selection selection;
 };
 
+#if 0
 struct Cursors
 {
     size_t count;
@@ -26,6 +27,8 @@ struct Cursors
     Cursor **begin() const { return cursors; }
     Cursor **end() const { return cursors + count; }
 };
+#else
+#endif
 
 function void SetCursor(Cursor *cursor, int64_t pos, Range inner = {}, Range outer = {});
 function void SetSelection(Cursor *cursor, Range inner, Range outer = {});

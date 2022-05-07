@@ -588,6 +588,10 @@ DrawView(View *view, bool is_active_window)
     Color filebar_text_foreground  = GetThemeColor("filebar_text_foreground"_id);
     Color filebar_text_highlighted = GetThemeColor("filebar_text_highlighted"_id);
 
+    Color text_completion_foreground          = GetThemeColor("command_line_option"_id);
+    Color text_completion_foreground_selected = GetThemeColor("command_line_option_selected"_id);
+    Color text_completion_background          = GetThemeColor("command_line_background"_id);
+
     uint64_t filebar_text_background_id = "filebar_text_inactive"_id;
     if (is_active_window)
     {
@@ -667,10 +671,31 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
-    if (Snippet *snip = TryFindSnippet(buffer, cursor->pos))
+    if (editor->completion.active)
     {
-        ScopedRenderLayer layer(Layer_OverlayForeground);
-        DrawText(cursor->visual_pos + MakeV2i(0, 1), PushTempStringF("Snippet: %.*s", StringExpand(snip->desc.description)), text_foreground, text_background_popup);
+        int64_t completion_max_width = 0;
+        for (size_t i = 0; i < editor->completion.count; i++)
+        {
+            CompletionEntry *entry = &editor->completion.entries[i];
+
+            completion_max_width = Max(completion_max_width, entry->desc.size);
+
+            Color foreground = editor->completion.at_index == i ? text_completion_foreground_selected : text_completion_foreground;
+
+            ScopedRenderLayer layer(Layer_OverlayForeground);
+            DrawText(cursor->visual_pos + MakeV2i(0, i + 1), PushTempStringF("%.*s", StringExpand(entry->desc)), foreground, text_completion_background);
+        }
+
+        if (editor->completion.overflow)
+        {
+            ScopedRenderLayer layer(Layer_OverlayForeground);
+            DrawText(cursor->visual_pos + MakeV2i(0, editor->completion.count + 1), "..."_str, text_completion_foreground, text_completion_background);
+        }
+
+        {
+            ScopedRenderLayer layer(Layer_OverlayBackground);
+            PushRect(MakeRect2iMinDim(cursor->visual_pos + MakeV2i(0, 1), MakeV2i(completion_max_width, editor->completion.count + editor->completion.overflow)), text_completion_background);
+        }
     }
 
     if (core_config->debug_show_line_index)
@@ -753,7 +778,7 @@ DrawCommandLines()
 
     Color text_foreground           = GetThemeColor("command_line_foreground"_id);
     Color text_background           = GetThemeColor("command_line_background"_id);
-    Color text_background_2         = GetThemeColor("command_line_background_2"_id);
+    Color text_background_2         = GetThemeColor("command_line_background"_id);
     Color color_name                = GetThemeColor("command_line_name"_id);
     Color color_option              = GetThemeColor("command_line_option"_id);
     Color color_selected            = GetThemeColor("command_line_option_selected"_id);

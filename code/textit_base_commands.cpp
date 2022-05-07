@@ -1273,9 +1273,10 @@ COMMAND_PROC(NextJump)
 COMMAND_PROC(PreviousJump)
 {
     View *view = GetActiveView();
-    if (view->jump_at + 1 > view->jump_top)
+    if (view->jump_at >= view->jump_top)
     {
         SaveJump(view, view->buffer, GetCursor(view)->pos);
+        view->jump_at -= 1;
     }
     Jump jump = PreviousJump(view);
     JumpToLocation(view, jump.buffer, jump.pos);
@@ -1898,7 +1899,7 @@ COMMAND_PROC(BackspaceChar)
     ScopedMemory temp;
     Cursors cursors = GetCursors(temp, view, buffer);
 
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -1946,7 +1947,7 @@ COMMAND_PROC(BackspaceChar)
         SetCursor(cursor, edits[i].range.start);
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 }
 
 COMMAND_PROC(BackspaceWord)
@@ -1957,7 +1958,7 @@ COMMAND_PROC(BackspaceWord)
     ScopedMemory temp;
     Cursors cursors = GetCursors(temp, view, buffer);
 
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -1973,7 +1974,7 @@ COMMAND_PROC(BackspaceWord)
         SetCursor(cursor, edits[i].range.start);
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 }
 
 COMMAND_PROC(DeleteChar)
@@ -1984,7 +1985,7 @@ COMMAND_PROC(DeleteChar)
     ScopedMemory temp;
     Cursors cursors = GetCursors(temp, view, buffer);
 
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2001,7 +2002,7 @@ COMMAND_PROC(DeleteChar)
         edits[i].string = ""_str;
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 }
 
 COMMAND_PROC(DeleteWord)
@@ -2012,7 +2013,7 @@ COMMAND_PROC(DeleteWord)
     ScopedMemory temp;
     Cursors cursors = GetCursors(temp, view, buffer);
 
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2027,7 +2028,7 @@ COMMAND_PROC(DeleteWord)
         edits[i].string = ""_str;
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 }
 
 COMMAND_PROC(UndoOnce)
@@ -2195,7 +2196,7 @@ CHANGE_PROC(DeleteSelection)
     Buffer *buffer = GetBuffer(view);
 
     ScopedMemory temp;
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2203,7 +2204,7 @@ CHANGE_PROC(DeleteSelection)
         edits[i].string = ""_str;
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 }
 
 CHANGE_PROC(DeleteInnerSelection)
@@ -2212,7 +2213,7 @@ CHANGE_PROC(DeleteInnerSelection)
     Buffer *buffer = GetBuffer(view);
 
     ScopedMemory temp;
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2220,7 +2221,7 @@ CHANGE_PROC(DeleteInnerSelection)
         edits[i].string = ""_str;
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 }
 
 CHANGE_PROC(ChangeSelection)
@@ -2229,7 +2230,7 @@ CHANGE_PROC(ChangeSelection)
     Buffer *buffer = GetBuffer(view);
 
     ScopedMemory temp;
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     Selection selection_envelope;
     selection_envelope.inner = InvertedInfinityRange();
@@ -2246,7 +2247,7 @@ CHANGE_PROC(ChangeSelection)
         selection_envelope = Union(selection_envelope, cursor->selection);
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 
     Range line_range = GetLineRange(buffer, selection_envelope.inner);
     if (line_range.start != line_range.end)
@@ -2268,7 +2269,7 @@ CHANGE_PROC(ChangeOuterSelection)
     Buffer *buffer = GetBuffer(view);
 
     ScopedMemory temp;
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     Selection selection_envelope;
     selection_envelope.inner = InvertedInfinityRange();
@@ -2285,7 +2286,7 @@ CHANGE_PROC(ChangeOuterSelection)
         selection_envelope = Union(selection_envelope, cursor->selection);
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 
     Range line_range = GetLineRange(buffer, selection_envelope.outer);
     if (line_range.start != line_range.end)
@@ -2306,7 +2307,7 @@ CHANGE_PROC(ToUppercase)
     Buffer *buffer = GetActiveBuffer();
 
     ScopedMemory temp;
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2319,7 +2320,7 @@ CHANGE_PROC(ToUppercase)
         edits[i].string = string;
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 }
 
 COMMAND_PROC(RepeatLastCommand)
@@ -2359,7 +2360,7 @@ COMMAND_PROC(PasteBefore)
 
     String string = platform->ReadClipboard(temp);
 
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2368,7 +2369,7 @@ COMMAND_PROC(PasteBefore)
         edits[i].string = string;
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2387,7 +2388,7 @@ COMMAND_PROC(PasteAfter)
 
     String string = platform->ReadClipboard(temp);
 
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2396,7 +2397,7 @@ COMMAND_PROC(PasteAfter)
         edits[i].string = string;
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2411,7 +2412,7 @@ CHANGE_PROC(PasteReplaceSelection)
     Buffer *buffer = GetBuffer(view);
 
     ScopedMemory temp;
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     String paste = platform->ReadClipboard(temp);
 
@@ -2425,7 +2426,7 @@ CHANGE_PROC(PasteReplaceSelection)
         PushNoCopy(&replaced_strings, replaced_string);
 
         edits[i].range = cursor->selection.outer;
-        edits[i].string = replaced_string;
+        edits[i].string = ""_str;
 
         SetCursor(cursor, edits[i].range.start);
     }
@@ -2433,6 +2434,8 @@ CHANGE_PROC(PasteReplaceSelection)
     // TODO: Don't just put newlines inbetween them. Be smarter, somehow.
     String eol = LineEndString(buffer->line_end);
     String replaced_string = FlattenString(&replaced_strings, eol);
+
+    DoBulkEdit(buffer, edits);
 
     platform->WriteClipboard(replaced_string);
 }
@@ -2445,7 +2448,7 @@ COMMAND_PROC(UnalignCursors, "Remove excess whitespace between the cursors and t
     ScopedMemory temp;
     Cursors cursors = GetCursors(temp, view, buffer);
 
-    BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+    Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
     for (size_t i = 0; i < cursors.count; i++)
     {
@@ -2473,7 +2476,7 @@ COMMAND_PROC(UnalignCursors, "Remove excess whitespace between the cursors and t
         edits[i].string = space_string;
     }
 
-    DoBulkEdit(buffer, cursors.count, edits);
+    DoBulkEdit(buffer, edits);
 }
 
 COMMAND_PROC(AlignCursors, "Insert whitespaces before all the cursors so that they line up vertically"_str)
@@ -2506,7 +2509,7 @@ COMMAND_PROC(AlignCursors, "Insert whitespaces before all the cursors so that th
         String padding_string = PushStringSpace(temp, align_col);
         Fill(&padding_string, ' ');
 
-        BulkEdit *edits = PushArray(temp, cursors.count, BulkEdit);
+        Slice<BulkEdit> edits = PushSlice(temp, cursors.count, BulkEdit);
 
         for (size_t i = 0; i < cursors.count; i++)
         {
@@ -2521,7 +2524,7 @@ COMMAND_PROC(AlignCursors, "Insert whitespaces before all the cursors so that th
             edits[i].string = Substring(padding_string, 0, padding);
         }
 
-        DoBulkEdit(buffer, cursors.count, edits);
+        DoBulkEdit(buffer, edits);
     }
 }
 
@@ -2705,17 +2708,20 @@ COMMAND_PROC(TryCompleteOrTab)
 {
     View *view = GetActiveView();
     Buffer *buffer = GetBuffer(view);
-    Cursor *cursor = GetCursor(view);
 
-    if (TryApplySnippet(buffer, cursor->pos))
+    ScopedMemory temp;
+    Cursors cursors = GetCursors(temp, view, buffer);
+
+    if (TryApplySnippet(buffer, cursors[0]->pos))
     {
         // we did a snippet
     }
-    else
+    else if (TriggerCompletion(&editor->completion))
     {
-        ScopedMemory temp;
-        Cursors cursors = GetCursors(temp, view, buffer);
-
+        // we're completin'
+    } 
+    else 
+    {
         CMD_WriteText(cursors, "\t"_str);
     }
 }

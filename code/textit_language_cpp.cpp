@@ -609,6 +609,26 @@ ParseTagsCpp(Buffer *buffer)
     }
 }
 
+function CustomAutocompleteResult
+CustomAutocompleteCpp(Arena *arena, Tag *tag, String text)
+{
+    CustomAutocompleteResult result = { text, (int64_t)text.size };
+
+    if (tag->sub_kind == Tag_C_Function ||
+        tag->sub_kind == Tag_C_FunctionMacro)
+    {
+        result.text = PushStringF(arena, "%.*s(", StringExpand(text));
+        result.pos  = (int64_t)text.size + 1;
+    }
+    else
+    {
+        result.text = PushStringF(arena, "%.*s ", StringExpand(text));
+        result.pos  = (int64_t)text.size + 1;
+    }
+
+    return result;
+}
+
 BEGIN_REGISTER_LANGUAGE("c++", lang)
 {
     AssociateExtension(lang, "cpp"_str);
@@ -620,6 +640,7 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     lang->tokenize_userdata_size = sizeof(TokenizerCpp);
     lang->Tokenize  = TokenizeCpp;
     lang->ParseTags = ParseTagsCpp;
+    lang->CustomAutocomplete = CustomAutocompleteCpp;
 
     AddTokenSubKind(lang, Token_C_StringSpecial, "text_string_special"_id);
 

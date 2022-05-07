@@ -5,7 +5,8 @@
 
 struct EditorState;
 struct Cursor;
-struct Cursors;
+
+using Cursors = Slice<Cursor *>;
 
 struct Selection
 {

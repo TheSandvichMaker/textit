@@ -29,6 +29,31 @@ MakeAllocator(Heap *heap)
     return result;
 }
 
+template <typename T>
+struct Slice
+{
+    size_t count;
+    T *data;
+
+    T &operator[](size_t i) const
+    {
+        Assert(i < count);
+        return data[i];
+    }
+
+    T *begin() const { return data; }
+    T *end() const { return data + count; }
+};
+
+template <typename T>
+Slice<T> MakeSlice(size_t count, T *data)
+{
+    Slice<T> result;
+    result.count = count;
+    result.data = data;
+    return result; 
+}
+
 #define DEFAULT_ARENA_ALIGN    16
 #define DEFAULT_ARENA_CAPACITY Gigabytes(8)
 
@@ -131,6 +156,11 @@ CheckArena(Arena *arena)
     (Type *)PushSize_(arena, sizeof(Type)*(Count), alignof(Type), false, LOCATION_STRING(#arena))
 #define PushAlignedArrayNoClear(arena, Count, Type, Align) \
     (Type *)PushSize_(arena, sizeof(Type)*(Count), Align, false, LOCATION_STRING(#arena))
+
+#define PushSlice(arena, count, type) (MakeSlice<type>(count, PushArray(arena, count, type)))
+#define PushAlignedSlice(arena, count, type, align) (MakeSlice<type>(count, PushAlignedArray(arena, count, type, align)))
+#define PushSliceNoClear(arena, count, type) (MakeSlice<type>(count, PushArrayNoClear(arena, count, type)))
+#define PushAlignedSliceNoClear(arena, count, type, align) (MakeSlice<type>(count, PushAlignedArrayNoClear(arena, count, type, align)))
 
 #define PushSize(arena, size) \
     PushSize_(arena, size, DEFAULT_ARENA_ALIGN, true, LOCATION_STRING(#arena))
@@ -274,6 +304,7 @@ EndTemporaryMemory(TemporaryMemory temp)
     {
         Assert(temp.used <= temp.arena->used);
         temp.arena->used = temp.used;
+        Assert(temp.arena->temp_count > 0);
         --temp.arena->temp_count;
     }
 }
@@ -295,7 +326,7 @@ struct ScopedMemory
     TemporaryMemory temp;
     ScopedMemory() { temp = BeginTemporaryMemory(platform->GetTempArena()); }
     ScopedMemory(Arena *arena) { temp = BeginTemporaryMemory(arena); }
-    ScopedMemory(TemporaryMemory temp) : temp(temp) {}
+    ScopedMemory(const ScopedMemory &other) { temp = BeginTemporaryMemory(other.temp.arena); }
     ~ScopedMemory() { EndTemporaryMemory(temp); }
     operator TemporaryMemory *() { return &temp; }
     operator Arena *() { return temp.arena; }
@@ -419,6 +450,14 @@ struct Array
 
     T *begin() { return data; }
     T *end() { return data + count; }
+
+    operator Slice<T>()
+    {
+        Slice<T> result;
+        result.count = count;
+        result.data  = data;
+        return result;
+    }
 };
 
 template <typename T>

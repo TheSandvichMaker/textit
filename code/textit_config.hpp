@@ -56,9 +56,11 @@ function Config *GetConfig(ConfigAccess access = ConfigAccess_Any);
 function bool ConfigReadStringRaw(Config *cfg, String key, String *value);
 function bool ConfigReadString(String key, String *value, ConfigAccess access = ConfigAccess_Any);
 function bool ConfigReadI64(String key, int64_t *value, ConfigAccess access = ConfigAccess_Any);
+function bool ConfigReadI32(String key, int32_t *value, ConfigAccess access = ConfigAccess_Any);
 
 function void ConfigWriteStringRaw(Config *cfg, String key, String value);
 function void ConfigWriteString(String key, String value, ConfigAccess access = ConfigAccess_Any);
 function void ConfigWriteI64(String key, int64_t value, ConfigAccess access = ConfigAccess_Any);
+function void ConfigWriteI32(String key, int32_t value, ConfigAccess access = ConfigAccess_Any);
 
 #endif /* TEXTIT_CONFIG_HPP */

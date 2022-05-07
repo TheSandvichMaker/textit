@@ -471,6 +471,24 @@ ConfigReadI64(String key, int64_t *value, ConfigAccess access)
     return result;
 }
 
+function bool
+ConfigReadI32(String key, int32_t *value, ConfigAccess access)
+{
+    bool result = false;
+
+    String str;
+    if (ConfigReadString(key, &str, access))
+    {
+        int64_t big = 0;
+        result = ParseInt(str, nullptr, &big);
+        if (big < INT32_MIN) big = INT32_MIN;
+        if (big > INT32_MAX) big = INT32_MAX;
+        *value = (int32_t)big;
+    }
+
+    return result;
+}
+
 function void
 ConfigWriteStringRaw(Config *cfg, String key, String value)
 {
@@ -513,5 +531,12 @@ function void
 ConfigWriteI64(String key, int64_t value, ConfigAccess access)
 {
     String str = PushTempStringF("%lli", value);
+    ConfigWriteString(key, str, access);
+}
+
+function void
+ConfigWriteI32(String key, int32_t value, ConfigAccess access)
+{
+    String str = PushTempStringF("%i", value);
     ConfigWriteString(key, str, access);
 }
