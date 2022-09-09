@@ -636,7 +636,10 @@ BEGIN_REGISTER_LANGUAGE("c++", lang)
     AssociateExtension(lang, "C"_str);
     AssociateExtension(lang, "cc"_str);
     AssociateExtension(lang, "h"_str);
-
+	
+	// for the time being, parse C as C++ as well
+	AssociateExtension(lang, "c"_str);
+	
     lang->tokenize_userdata_size = sizeof(TokenizerCpp);
     lang->Tokenize  = TokenizeCpp;
     lang->ParseTags = ParseTagsCpp;

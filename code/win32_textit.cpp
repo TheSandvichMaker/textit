@@ -1284,7 +1284,6 @@ D3D_Initialize(HWND window)
         swap_chain_desc.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
         swap_chain_desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
         swap_chain_desc.Flags              = 0;
-
         hr = d3d.dxgi_factory->CreateSwapChainForHwnd(d3d.device, window, &swap_chain_desc, nullptr, nullptr, &d3d.swap_chain);
         CheckHr(hr);
     }

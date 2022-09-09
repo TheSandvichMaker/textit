@@ -1,0 +1,11 @@
+# user config
+
+[user]
+name = daniel
+
+[font]
+name = Consolas
+size = 15
+
+[completion]
+max_items = 256

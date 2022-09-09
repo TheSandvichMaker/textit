@@ -453,7 +453,7 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
                 {
                     if (pos == cursor->pos)
                     {
-                        cursor->visual_pos = MakeV2i(col, row);
+                        cursor->visual_pos = bounds.min + MakeV2i(col, row);
                         if (string.size == 0)
                         {
                             background = text_foreground;
@@ -671,7 +671,7 @@ DrawView(View *view, bool is_active_window)
         }
     }
 
-    if (editor->completion.active)
+    if (is_active_window && editor->completion.active)
     {
         int64_t completion_max_width = 0;
         for (size_t i = 0; i < editor->completion.count; i++)

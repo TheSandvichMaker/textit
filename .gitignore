@@ -4,3 +4,8 @@ build/*
 ctm
 tags
 *.backup
+.vs
+*.exe
+*.dll
+*.pdb
+*.rdbg
