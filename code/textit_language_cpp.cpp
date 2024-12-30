@@ -550,8 +550,7 @@ ParseTagsCpp(Buffer *buffer)
         }
         else if (ConsumeCppType(parser)) // TODO: More robust function parsing
         {
-			Token t = {};
-            if (t = ConsumeToken(parser, Token_Function))
+            if (Token t = ConsumeToken(parser, Token_Function))
             {
                 Tag *tag = AddTag(buffer, &t);
                 tag->kind     = Tag_Declaration;

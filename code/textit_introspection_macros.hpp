@@ -12,8 +12,8 @@ struct MemberInfo
 template <typename T>
 struct Introspection;
 
-#define IntrospectedStructMember(_, Type, Name) Type Name;
-#define IntrospectedStructTypeTableEntry(StructName, Type, Name) { Paste(Stringize(Name), _str), Paste(Stringize(Type), _id), sizeof(Type), offsetof(StructName, Name) },
+#define IntrospectedStructMember(_, Type, Name, Default) Type Name = Default;
+#define IntrospectedStructTypeTableEntry(StructName, Type, Name, Default) { Paste(Stringize(Name), _str), Paste(Stringize(Type), _id), sizeof(Type), offsetof(StructName, Name) },
 #define DeclareIntrospectedStruct(X)                                                           \
     struct X { X(_, IntrospectedStructMember) };                                               \
     template <> struct Introspection<X>                                                        \

@@ -772,7 +772,7 @@ OnBufferChanged(Buffer *buffer, int64_t pos, int64_t delta)
         for (uint32_t jump_index = OldestJumpIndex(view); jump_index < view->jump_top; jump_index += 1)
         {
             Jump *jump = GetJump(view, jump_index);
-            if (jump->buffer = buffer->id)
+            if (jump->buffer == buffer->id)
             {
                 jump->pos = ApplyPositionDelta(jump->pos, pos, delta);
             }
