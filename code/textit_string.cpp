@@ -755,6 +755,14 @@ CalculateEditDistance(String s, String t)
     return GetCell(n, m);
 }
 
+String StringFromCString(const char *str)
+{
+	String result;
+	result.size = strlen(str);
+	result.data = (uint8_t *)str;
+	return result;
+}
+
 function int
 CountNewlines(String string)
 {

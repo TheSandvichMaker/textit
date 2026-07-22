@@ -1,5 +1,5 @@
-#ifndef TEXTIT_LANGUAGE_HPP_HPP
-#define TEXTIT_LANGUAGE_HPP_HPP
+#ifndef TEXTIT_LANGUAGE_CPP_HPP
+#define TEXTIT_LANGUAGE_CPP_HPP
 
 enum TokenizeState_C
 {
@@ -38,4 +38,4 @@ struct TokenizerCpp
     uint8_t string_end_char;
 };
 
-#endif /* TEXTIT_LANGUAGE_HPP_HPP */
+#endif /* TEXTIT_LANGUAGE_CPP_HPP */

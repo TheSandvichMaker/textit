@@ -24,7 +24,8 @@ FreeTag(Buffer *buffer, Tag *tag)
 function Tag **
 GetTagSlot(Project *project, Tag *tag)
 {
-    Tag **result = &project->tag_table[tag->hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
+	TagTable *table = &project->tag_table;
+    Tag **result = &table->table[tag->hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
     while (*result && *result != tag)
     {
         result = &(*result)->next_in_hash;
@@ -33,8 +34,10 @@ GetTagSlot(Project *project, Tag *tag)
 }
 
 function Tag *
-AddTagInternal(Buffer *buffer, String name)
+AddTagInternal(Buffer *buffer, String name, String nspace = {})
 {
+	(void)nspace;
+
     Tags *tags = buffer->tags;
     Project *project = buffer->project;
 
@@ -45,8 +48,11 @@ AddTagInternal(Buffer *buffer, String name)
 
     if (!project->opening)
     {
-        Tag **slot = &project->tag_table[hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
+		TagTable *table = &project->tag_table;
+
+        Tag **slot = &table->table[hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
         result->next_in_hash = *slot;
+
         *slot = result;
     }
 
@@ -58,14 +64,15 @@ AddTagInternal(Buffer *buffer, String name)
 }
 
 function Tag *
-AddTag(Buffer *buffer, Token *t)
+AddTag(Buffer *buffer, Token *t, String nspace = {})
 {
     ScopedMemory temp;
-    String name = PushTokenString(temp, buffer, t);
-    Tag *tag = AddTagInternal(buffer, name);
+	String name = PushTokenString(temp, buffer, t);
+    Tag *tag = AddTagInternal(buffer, name, nspace);
     tag->related_token_kind = t->kind;
     tag->pos                = t->pos;
     tag->length             = t->length;
+	//tag->alias_list = PushCopySlice(&buffer->arena, alias_list);
     return tag;
 }
 
@@ -99,7 +106,7 @@ PushTagsWithName(Arena *arena, Project *project, String name)
 
     Tag *result = nullptr;
 
-    Tag *tag = project->tag_table[hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
+    Tag *tag = project->tag_table.table[hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
     while (tag)
     {
         if (tag->hash == hash)

@@ -12,6 +12,11 @@ enum TagKind : uint8_t
 
 typedef uint8_t TagSubKind;
 
+struct TagMember
+{
+	// TODO
+};
+
 struct Tag
 {
     Tag *next;
@@ -29,6 +34,8 @@ struct Tag
 
     HashResult hash;
     int64_t pos;
+
+	TagMember *members;
 };
 
 struct Tags

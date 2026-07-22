@@ -2438,7 +2438,7 @@ Win32_AppThread(LPVOID userdata)
 }
 
 int
-main(int, char **)
+main(int argc, char **argv)
 // WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR command_line, int show_cmd)
 {
     // UNUSED_VARIABLE(command_line);
@@ -2447,6 +2447,9 @@ main(int, char **)
     HINSTANCE instance = NULL;
 
     platform = &platform_;
+
+	platform->argc = argc;
+	platform->argv = argv;
 
     SYSTEM_INFO system_info;
     GetSystemInfo(&system_info);

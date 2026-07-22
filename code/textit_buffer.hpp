@@ -102,6 +102,7 @@ struct Buffer : TextStorage
     Project      *project;
     LanguageSpec *inferred_language;
     LanguageSpec *language;
+	void         *custom_language_state;
     IndentRules  *indent_rules;
     Tags         *tags;
 
@@ -181,7 +182,7 @@ function void Next(BufferIterator *iter);
 
 function Buffer *DEBUG_FindWhichBufferThisMemoryBelongsTo(void *memory_init);
 
-#if TEXTIT_SLOW
+#if 0&&TEXTIT_SLOW
 #define VALIDATE_LINE_INDEX 1
 #define VALIDATE_LINE_INDEX_TREE_INTEGRITY_AGGRESSIVELY 1
 #define VALIDATE_LINE_INDEX_EXTRA_SLOW 1

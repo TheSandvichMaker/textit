@@ -1,18 +1,15 @@
-function int64_t
-CharsLeft(Tokenizer *tok)
+int64_t CharsLeft(Tokenizer *tok)
 {
     AssertSlow(tok->at <= tok->end);
     return (int64_t)(tok->end - tok->at);
 }
 
-function int64_t
-AtPos(Tokenizer *tok)
+int64_t AtPos(Tokenizer *tok)
 {
     return tok->at - tok->start;
 }
 
-function uint8_t
-Peek(Tokenizer *tok, int64_t index = 0)
+uint8_t Peek(Tokenizer *tok, int64_t index)
 {
     if (((tok->at + index) >= tok->start) &&
         ((tok->at + index) < tok->end))
@@ -25,8 +22,7 @@ Peek(Tokenizer *tok, int64_t index = 0)
     }
 }
 
-function uint8_t
-Advance(Tokenizer *tok, int64_t amount = 1)
+uint8_t Advance(Tokenizer *tok, int64_t amount)
 {
     uint8_t result = Peek(tok);
     tok->at += amount;
@@ -37,8 +33,7 @@ Advance(Tokenizer *tok, int64_t amount = 1)
     return result;
 }
 
-function bool
-Match(Tokenizer *tok, uint8_t c)
+bool Match(Tokenizer *tok, uint8_t c)
 {
     if (Peek(tok) == c)
     {
@@ -48,8 +43,7 @@ Match(Tokenizer *tok, uint8_t c)
     return false;
 }
 
-function bool
-Match(Tokenizer *tok, String seq)
+bool Match(Tokenizer *tok, String seq)
 {
     for (size_t i = 0; i < seq.size; i += 1)
     {
@@ -62,16 +56,14 @@ Match(Tokenizer *tok, String seq)
     return true;
 }
 
-function void
-Revert(Tokenizer *tok, Token *t)
+void Revert(Tokenizer *tok, Token *t)
 {
     uint8_t *new_at = tok->start + t->pos;
     Assert(new_at >= tok->start && new_at < tok->end);
     tok->at = new_at;
 }
 
-function bool
-MatchOperator(Tokenizer *tok, Token *t, uint8_t a)
+bool MatchOperator(Tokenizer *tok, Token *t, uint8_t a)
 {
     bool result = false;
 
@@ -99,8 +91,7 @@ MatchOperator(Tokenizer *tok, Token *t, uint8_t a)
     return result;
 }
 
-function void
-ParseString(Tokenizer *tok, Token *t, uint8_t end_char)
+void ParseString(Tokenizer *tok, Token *t, uint8_t end_char)
 {
     INVALID_CODE_PATH; // No longer how we do things! Replace it!
 
@@ -133,8 +124,7 @@ ParseString(Tokenizer *tok, Token *t, uint8_t end_char)
     }
 }
 
-function void
-ParseStandardToken(Tokenizer *tok, Token *t)
+void ParseStandardToken(Tokenizer *tok, Token *t)
 {
     uint8_t c = Advance(tok);
 
@@ -170,8 +160,7 @@ ParseStandardToken(Tokenizer *tok, Token *t)
     }
 }
 
-function ParseWhitespaceResult
-ParseWhitespace(Tokenizer *tok)
+ParseWhitespaceResult ParseWhitespace(Tokenizer *tok)
 {
     ParseWhitespaceResult result = ParseWhitespace_None;
 
@@ -227,8 +216,7 @@ ParseWhitespace(Tokenizer *tok)
     return result;
 }
 
-function Token *
-PushToken(Tokenizer *tok, Token *t)
+Token *PushToken(Tokenizer *tok, Token *t)
 {
     Buffer *buffer = tok->buffer;
 
@@ -257,8 +245,7 @@ PushToken(Tokenizer *tok, Token *t)
     return dest;
 }
 
-function void
-BeginToken(Tokenizer *tok, Token *t)
+void BeginToken(Tokenizer *tok, Token *t)
 {
     ZeroStruct(t);
 
@@ -270,8 +257,7 @@ BeginToken(Tokenizer *tok, Token *t)
     t->pos = tok->at - tok->start;
 }
 
-function void
-EndToken(Tokenizer *tok, Token *t)
+void EndToken(Tokenizer *tok, Token *t)
 {
     t->length = (int16_t)(tok->at - tok->start - t->pos);
 
@@ -361,14 +347,12 @@ EndToken(Tokenizer *tok, Token *t)
     }
 }
 
-function void
-TokenizeBasic(Tokenizer *tok, Token *t)
+void TokenizeBasic(Tokenizer *tok, Token *t)
 {
     ParseStandardToken(tok, t);
 }
 
-function void
-BeginTokenizeLine(Arena *arena, Tokenizer *tok, Buffer *buffer, Range range, LineTokenizeState previous_line_state)
+void BeginTokenizeLine(Arena *arena, Tokenizer *tok, Buffer *buffer, Range range, LineTokenizeState previous_line_state)
 {
     ZeroStruct(tok);
     tok->prev_token = &tok->null_token;
@@ -390,8 +374,7 @@ BeginTokenizeLine(Arena *arena, Tokenizer *tok, Buffer *buffer, Range range, Lin
     }
 }
 
-function void
-EndTokenizeLine(Tokenizer *tok, LineData *line, LineTokenizeState previous_line_state)
+void EndTokenizeLine(Tokenizer *tok, LineData *line, LineTokenizeState previous_line_state)
 {
     line->newline_col          = tok->newline_pos - tok->line_start;
     line->first_token_block    = tok->first_token_block;
@@ -406,8 +389,7 @@ EndTokenizeLine(Tokenizer *tok, LineData *line, LineTokenizeState previous_line_
     line->last_token_block     = tok->last_token_block;
 }
 
-function int64_t
-TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data)
+int64_t TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data)
 {
 	ScopedMemory temp;
 	
@@ -440,8 +422,7 @@ TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state,
     return AtPos(tok);
 }
 
-function void
-TokenizeBuffer(Buffer *buffer)
+void TokenizeBuffer(Buffer *buffer)
 {
     ClearLineIndex(buffer);
 

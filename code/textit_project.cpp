@@ -142,7 +142,7 @@ function Project *
 CreateProject(String search_start)
 {
     Project *project = PushStruct(&editor->transient_arena, Project);
-    project->tag_table = PushArray(&editor->transient_arena, PROJECT_TAG_TABLE_SIZE, Tag *);
+//    project->tag_table = PushArray(&editor->transient_arena, PROJECT_TAG_TABLE_SIZE, Tag *);
     project->root = FindProjectRoot(&editor->transient_arena, search_start);
 
     bool is_first_project = DllIsEmpty(&editor->project_sentinel);
@@ -167,7 +167,7 @@ CreateProject(String search_start)
         Tags *tags = buffer->tags;
         for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
         {
-            Tag **slot = &project->tag_table[tag->hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
+            Tag **slot = &project->tag_table.table[tag->hash.u32[0] % PROJECT_TAG_TABLE_SIZE];
             tag->next_in_hash = *slot;
             *slot = tag;
         }
@@ -243,9 +243,9 @@ AssociateProject(Buffer *buffer)
     Tags *tags = buffer->tags;
     for (Tag *tag = tags->sentinel.next; tag != &tags->sentinel; tag = tag->next)
     {
-        uint32_t slot = tag->hash.u32[0] % ArrayCount(project->tag_table);
-        tag->next_in_hash = project->tag_table[slot];
-        project->tag_table[slot] = tag;
+        uint32_t slot = tag->hash.u32[0] % ArrayCount(project->tag_table.table);
+        tag->next_in_hash = project->tag_table.table[slot];
+        project->tag_table.table[slot] = tag;
     }
 
     buffer->project = project;

@@ -84,11 +84,27 @@ struct LanguageRegisterHelper
     {
         register_proc(&lang);
         lang.name = name;
+		if (lang.Tokenize == nullptr)
+		{
+			lang.Tokenize = TokenizeBasic;
+		}
+		if (lang.CustomAutocomplete == nullptr)
+		{
+			lang.CustomAutocomplete = CustomAutocompleteBasic;
+		}
         SllStackPush(language_registry->first_language, &lang);
     }
 };
 #define BEGIN_REGISTER_LANGUAGE(name, language_parameter_name) \
     LanguageRegisterHelper Paste(register_language_helper_, __COUNTER__)(Paste(name, _str), [](LanguageSpec *language_parameter_name)
 #define END_REGISTER_LANGUAGE );
+
+struct TagParser;
+
+function void SkipComments(TagParser *parser);
+function int DecodeDigit(uint8_t c, int base = 10);
+function bool ParseNumber(Tokenizer *tok, int base = 10, int max = INT_MAX);
+function bool ParseEscapeSequence(Tokenizer *tok, Token *t);
+function bool ParsePrintfFormatter(Tokenizer *tok, Token *t);
 
 #endif /* TEXTIT_LANGUAGE_HPP */

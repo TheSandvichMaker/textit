@@ -11,6 +11,111 @@
 #include "textit_shared.hpp"
 #include "textit_introspection_macros.hpp"
 #include "textit_memory.hpp"
+
+template <typename T>
+struct TypeHash
+{
+	static uint64_t hash(const T& value)
+	{
+		uint64_t result = HashData(0, sizeof(value), &value);
+		return result;
+	}
+};
+
+template <>
+struct TypeHash<String>
+{
+	static uint64_t hash(const String& value)
+	{
+		return HashString(value);
+	}
+};
+
+template <typename V, size_t N = 1024>
+struct HashTable
+{
+	struct Element
+	{
+		Element *next;
+		uint64_t hash;
+		V value;
+	};
+
+	Element *elements[N];
+
+	Element *FindOrCreateByHash_Internal(Arena *arena, uint64_t hash, bool mem_zero, bool *was_created = nullptr)
+	{
+		uint64_t probe = hash & (N - 1);
+
+		Element **elem_at = &elements[probe];
+		for (; *elem_at; elem_at = &(*elem_at)->next);
+
+		Element *elem = *elem_at;
+		if (elem)
+		{
+			if (was_created) *was_created = false;
+		}
+		else
+		{
+			if (was_created) *was_created = true;
+			elem = PushStructNoClear(arena, Element);
+			elem->next  = nullptr;
+			elem->hash  = hash;
+			if (mem_zero)
+			{
+				memset(&elem->value, 0, sizeof(elem->value));
+			}
+			SllStackPush(*elem_at, elem);
+		}
+
+		return elem;
+	}
+
+	V *FindOrCreateByHash(Arena *arena, uint64_t hash, bool *was_created = nullptr)
+	{
+		Element *elem = FindOrCreateByHash_Internal(arena, hash, true, was_created);
+		return &elem->value;
+	}
+
+	template <typename K>
+	V *FindOrCreate(Arena *arena, const K& key, bool *was_created = nullptr)
+	{
+		uint64_t hash = TypeHash<K>::hash(key);
+		Element *elem = FindOrCreateByHash_Internal(arena, hash, true, was_created);
+		return &elem->value;
+	}
+
+	void InsertByHash(Arena *arena, uint64_t hash, const V& value)
+	{
+		Element *elem = FindOrCreateByHash_Internal(arena, hash, false);
+		elem->value = value;
+	}
+
+	template <typename K>
+	void Insert(Arena *arena, const K& key, const V& value)
+	{
+		uint64_t hash = TypeHash<K>::hash(key);
+		InsertByHash(arena, hash, value);
+	}
+
+	V *FindByHash(uint64_t hash)
+	{
+		uint64_t probe = hash & (N - 1);
+
+		Element *elem = elements[probe];
+		for (; elem; elem = elem->next);
+
+		return &elem->value
+	}
+
+	template <typename K>
+	V *Find(const K& key)
+	{
+		uint64_t hash = TypeHash<K>::hash(key);
+		return FindByHash(hash);
+	}
+};
+
 #include "textit_sort.hpp"
 #include "textit_string.hpp"
 #include "textit_global_state.hpp"
@@ -40,6 +145,7 @@
 #include "textit_completion_menu.hpp"
 
 #include "textit_language_cpp.hpp"
+#include "textit_language_odin.hpp"
 
 enum InputMode
 {

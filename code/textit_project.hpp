@@ -9,6 +9,19 @@ enum ProjectFlags_ENUM : ProjectFlags
 
 #define PROJECT_TAG_TABLE_SIZE 4096
 
+struct TagTable
+{
+	String name;
+
+	TagTable *parent;
+	TagTable *first_child;
+	TagTable *last_child;
+	TagTable *next_sibling;
+
+	size_t tag_count;
+	Tag *table[PROJECT_TAG_TABLE_SIZE];
+};
+
 struct Project
 {
     Project *next;
@@ -23,8 +36,7 @@ struct Project
 
     String root;
 
-    size_t tag_table_size;
-    Tag **tag_table;
+	TagTable tag_table;
 };
 
 function void AssociateProject(Buffer *buffer);

@@ -28,6 +28,7 @@
 
 #include "textit_language_textit.cpp"
 #include "textit_language_cpp.cpp"
+#include "textit_language_odin.cpp"
 #include "textit_language_lua.cpp"
 
 // things missing:
@@ -515,7 +516,14 @@ AppUpdateAndRender(Platform *platform_)
 
         DllInit(&editor->project_sentinel);
 
-        Buffer *scratch_buffer = OpenBufferFromFile("code/textit.cpp"_str);
+		String initial_file = "code/textit.cpp"_str;
+
+		if (platform->argc > 1)
+		{
+			initial_file = StringFromCString(platform->argv[1]);
+		}
+
+        Buffer *scratch_buffer = OpenBufferFromFile(initial_file);
         View   *scratch_view   = OpenNewView(scratch_buffer->id);
 
         editor->root_window.view = scratch_view->id;

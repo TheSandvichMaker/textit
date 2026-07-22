@@ -39,4 +39,6 @@ enum LineEndKind
     LineEnd_CRLF,
 };
 
+function String StringFromCString(const char *str);
+
 #endif /* TEXTIT_STRING_HPP */

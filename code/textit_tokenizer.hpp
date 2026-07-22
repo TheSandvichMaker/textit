@@ -56,4 +56,24 @@ struct Tokenizer
 function int64_t TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data);
 function void TokenizeBuffer(Buffer *buffer);
 
+function int64_t CharsLeft(Tokenizer *tok);
+function int64_t AtPos(Tokenizer *tok);
+function uint8_t Peek(Tokenizer *tok, int64_t index = 0);
+function uint8_t Advance(Tokenizer *tok, int64_t amount = 1);
+function bool Match(Tokenizer *tok, uint8_t c);
+function bool Match(Tokenizer *tok, String seq);
+function void Revert(Tokenizer *tok, Token *t);
+function bool MatchOperator(Tokenizer *tok, Token *t, uint8_t a);
+function void ParseString(Tokenizer *tok, Token *t, uint8_t end_char);
+function void ParseStandardToken(Tokenizer *tok, Token *t);
+function ParseWhitespaceResult ParseWhitespace(Tokenizer *tok);
+function Token *PushToken(Tokenizer *tok, Token *t);
+function void BeginToken(Tokenizer *tok, Token *t);
+function void EndToken(Tokenizer *tok, Token *t);
+function void TokenizeBasic(Tokenizer *tok, Token *t);
+function void BeginTokenizeLine(Arena *arena, Tokenizer *tok, Buffer *buffer, Range range, LineTokenizeState previous_line_state);
+function void EndTokenizeLine(Tokenizer *tok, LineData *line, LineTokenizeState previous_line_state);
+function int64_t TokenizeLine(Buffer *buffer, int64_t pos, LineTokenizeState previous_line_state, LineData *line_data);
+function void TokenizeBuffer(Buffer *buffer);
+
 #endif /* TEXTIT_TOKENIZER_HPP */

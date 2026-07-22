@@ -116,6 +116,14 @@ struct StringContainer
         };
         String as_string;
     };
+
+	operator String() { return as_string; };
+};
+
+template <size_t N>
+struct StringContainerFixed : StringContainer
+{
+	uint8_t buffer[N];
 };
 
 function StringContainer
@@ -124,6 +132,16 @@ MakeStringContainer(size_t capacity, uint8_t *storage)
     StringContainer result = {};
     result.capacity = capacity;
     result.data     = storage;
+    return result;
+}
+
+template <size_t N>
+function StringContainerFixed<N>
+MakeStringContainerFixed()
+{
+    StringContainerFixed<N> result = {};
+    result.capacity = N;
+    result.data     = result.buffer;
     return result;
 }
 
@@ -161,7 +179,7 @@ MakeRange(int64_t start, int64_t end)
 {
     Range result;
     result.start = start;
-    result.end = end;
+    result.end   = end;
     return result;
 }
 
@@ -170,7 +188,7 @@ MakeRangeInclusive(int64_t start, int64_t end)
 {
     Range result;
     result.start = start;
-    result.end = end + 1;
+    result.end   = end + 1;
     return result;
 }
 

@@ -270,6 +270,18 @@ PushNullTerminatedString(Arena *arena, size_t size, char *data)
     return result;
 }
 
+template <typename T>
+function Slice<T> PushCopySlice(Arena *arena, const Slice<T>& slice)
+{
+	if (slice.count == 0) return slice;
+
+	Slice<T> result;
+	result.count = slice.count;
+	result.data  = PushArrayNoClear(arena, slice.count, T);
+	CopyArray(slice.count, slice.data, result.data);
+	return result;
+}
+
 function char *
 PushNullTerminatedString(Arena *arena, String string)
 {

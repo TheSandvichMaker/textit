@@ -519,6 +519,9 @@ struct Platform
     bool exe_reloaded;
     void *persistent_app_data;
 
+	int argc;
+	char **argv;
+
     String window_title;
 
     float dt;

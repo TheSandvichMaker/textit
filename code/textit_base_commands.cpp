@@ -553,6 +553,14 @@ COMMAND_PROC(SetLanguage,
     };
 }
 
+COMMAND_PROC(ReparseBuffer,
+             "Reparse current buffer"_str)
+{
+    Buffer *buffer = GetActiveBuffer();
+    TokenizeBuffer(buffer);
+    ParseTags(buffer);
+}
+
 COMMAND_PROC(SetFont,
              "Set the font for the editor"_str)
 {
@@ -1040,6 +1048,11 @@ COMMAND_PROC(Search,
         view->scroll_at = data->scroll;
 
         String search = GetCommandString(cl);
+
+		// Stupid
+        ScopedMemory temp;
+		search = PushStringF(temp, "%.*s%.*s", StringExpand(search), StringExpand(text));
+
         Replace(&editor->search, search);
 
         editor->show_search_highlight = true;

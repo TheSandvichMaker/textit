@@ -117,8 +117,6 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         actual_line_height += -view->scroll_at;
     }
 
-    int64_t line = min_line;
-
     LineIndexIterator line_it = IterateLineIndexFromLine(buffer, min_line);
 
     LineInfo info;
@@ -213,11 +211,11 @@ DrawTextArea(View *view, Rect2i bounds, bool is_active_window)
         int64_t start_row = row;
 
         int64_t col = 0;
-        int64_t line_number = line + 1;
+        int64_t line_number = line_it.line + 1;
 
         if (show_line_numbers)
         {
-            DrawText(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_foreground_dimmest, base_background);
+			DrawText(top_left + MakeV2i(col, row), PushTempStringF("%-4lld", line_number), text_comment, base_background);
             col += Max(5, max_line_digits + 1);
             // prev_col = col;
         }

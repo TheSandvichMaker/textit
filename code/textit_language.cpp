@@ -165,3 +165,197 @@ CustomAutocompleteBasic(Arena *arena, Tag *, String text)
     return result;
 };
 
+int DecodeDigit(uint8_t c, int base)
+{
+    int result = -1;
+
+    c = ToLowerAscii(c);
+
+    if (c >= '0' && c <= '9')
+    {
+        int value = c - '0';
+        if (value >= 0 && value < base)
+        {
+            result = value;
+        }
+    }
+    else if (c >= 'a' && c <= 'f')
+    {
+        int value = 10 + c - 'a';
+        if (value >= 10 && value < base)
+        {
+            result = value;
+        }
+    }
+
+    return result;
+}
+
+void SkipComments(TagParser *parser)
+{
+    while (parser->it.token.flags & TokenFlag_IsComment)
+    {
+        Advance(parser);
+    }
+}
+
+bool ParseNumber(Tokenizer *tok, int base, int max)
+{
+    bool result = false;
+
+    if (DecodeDigit(Peek(tok), base) > 0)
+    {
+        result = true;
+
+        Advance(tok);
+        max -= 1;
+        while (max > 0 && CharsLeft(tok) && DecodeDigit(Peek(tok), base) != -1)
+        {
+            Advance(tok);
+            max -= 1;
+        }
+    }
+
+    return true;
+}
+
+bool ParseEscapeSequence(Tokenizer *tok, Token *t)
+{
+    bool result = false;
+
+    switch (Peek(tok))
+    {
+        case 'a':
+        case 'b':
+        case 'e':
+        case 'f':
+        case 'n':
+        case 'r':
+        case 't':
+        case 'v':
+        case '\\':
+        case '\'':
+        case '"':
+        case '\?':
+        {
+            Advance(tok);
+            result = true;
+        } break;
+
+        case 'x':
+        {
+            Advance(tok);
+            result = ParseNumber(tok, 16, 2);
+        } break;
+
+        case 'u':
+        {
+            Advance(tok);
+            result = ParseNumber(tok, 16, 4);
+        } break;
+
+        case 'U':
+        {
+            Advance(tok);
+            result = ParseNumber(tok, 16, 8);
+        } break;
+
+        case '0': case '1': case '2': case '3':
+        case '4': case '5': case '6': case '7':
+        case '8':
+        {
+            result = ParseNumber(tok, 8, 3);
+        } break;
+    }
+
+    if (result)
+    {
+        t->kind     = Token_Custom;
+        t->sub_kind = Token_C_StringSpecial;
+    }
+
+    return result;
+}
+
+bool ParsePrintfFormatter(Tokenizer *tok, Token *t)
+{
+    bool result = false;
+
+    // flags
+    Match(tok, '-');
+    Match(tok, '+');
+    Match(tok, ' ');
+    Match(tok, '#');
+    Match(tok, '0');
+
+    // width
+    if (!Match(tok, '*'))
+    {
+        ParseNumber(tok);
+    }
+
+    // precision
+    if (Match(tok, '.'))
+    {
+        if (!Match(tok, '*'))
+        {
+            ParseNumber(tok);
+        }
+    }
+
+    // length
+    switch (Peek(tok))
+    {
+        case 'h':
+        case 'l':
+        case 'j':
+        case 'z':
+        case 't':
+        case 'L':
+        {
+            Advance(tok);
+            switch (Peek(tok))
+            {
+                case 'h':
+                case 'l':
+                {
+                    Advance(tok);
+                } break;
+            }
+        } break;
+    }
+
+    // specifier
+    switch (Peek(tok))
+    {
+        case 'd':
+        case 'i':
+        case 'u':
+        case 'o':
+        case 'x':
+        case 'X':
+        case 'f':
+        case 'F':
+        case 'e':
+        case 'E':
+        case 'g':
+        case 'G':
+        case 'a':
+        case 'A':
+        case 'c':
+        case 's':
+        case 'p':
+        case 'n':
+        case '%':
+        {
+            Advance(tok);
+
+            result = true;
+            t->kind     = Token_Custom;
+            t->sub_kind = Token_C_StringSpecial;
+        } break;
+    }
+
+    return result;
+}
+
